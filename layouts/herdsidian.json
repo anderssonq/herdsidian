@@ -55,7 +55,7 @@
             }
           },
           "size": {
-            "px": 69
+            "px": 80
           }
         }
       ],
@@ -74,7 +74,7 @@
           "id": "tabs",
           "type": "block",
           "content": {
-            "mod": "tabs"
+            "mod": "herdsidian-tabs"
           },
           "size": {
             "px": 52
@@ -93,20 +93,20 @@
                 "pane": {
                   "header": {
                     "content": {
-                      "mod": "pane"
+                      "mod": "herdsidian-pane"
                     },
                     "reveal": "always",
-                    "height": 30,
+                    "height": 34,
                     "position": "top"
                   },
-                  "background": "#18181840",
+                  "background": "background",
                   "border": {
                     "width": 1,
                     "color": "#ffffff12"
                   },
                   "focus": {
                     "width": 1,
-                    "color": "#4c9df399"
+                    "color": "accent"
                   },
                   "radius": 12,
                   "gap": 8,
@@ -155,7 +155,7 @@
           "id": "status",
           "type": "block",
           "content": {
-            "mod": "workspace-status"
+            "mod": "herdsidian-status"
           },
           "size": {
             "px": 28
@@ -180,8 +180,8 @@
   ],
   "background": {
     "gradient": [
-      "#262626",
-      "#080808"
+      "chrome",
+      "canvas"
     ],
     "angle": 160
   },
@@ -191,7 +191,7 @@
   ],
   "divider": {
     "width": 1,
-    "color": "#ffffff0d"
+    "color": "#ffffff12"
   },
   "titlebar": "none",
   "traffic_lights": [
@@ -199,8 +199,6 @@
     19
   ],
   "theme": "herdsidian_carbon",
-  "terminal_opacity": 0.85,
-  "colors": {
-    "chrome": "#0e0e0e8c"
-  }
+  "terminal_opacity": 1,
+  "ui_font": ".AppleSystemUIFont"
 }

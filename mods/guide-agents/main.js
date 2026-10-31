@@ -1,18 +1,12 @@
 // Agents in grouped or priority views; parents take their most urgent sub-agent's place.
 // A viewed done agent stays in Done until left.
 
-import { View, div, image, svg } from "gpui-kit";
+import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, window, layout, nextCommand } from "herdr";
-
-function find(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
-    const found = find(child, id);
-    if (found) return found;
-  }
-  return null;
-}
+import { alpha, tokens, statusDot, PULSE } from "./tokens.js";
+import { icon } from "./ui.js";
+import { find } from "./layout.js";
 
 // The sidebar's rail goes by its width, not a flag: dragging its edge narrows it too.
 const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
@@ -23,7 +17,7 @@ function toggleSidebar() {
   if (!narrow()) setShared("sidebar.width", width);
   // Mods edited before the rail went by width still read the flag.
   setShared("sidebar.collapsed", !narrow());
-  run("layout.resize", { id: "sidebar", px: narrow() ? (shared("sidebar.width") ?? 268) : window()?.platform === "macos" ? 76 : 44 });
+  run("layout.resize", { id: "sidebar", px: narrow() ? (shared("sidebar.width") ?? 248) : window()?.platform === "macos" ? 76 : 44 });
 }
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
@@ -62,19 +56,41 @@ function duration(ms) {
   return h < 24 ? `${h}h` : `${Math.floor(h / 24)}d`;
 }
 
-// The agent's icon from the app's program table: a one-color glyph or a picture.
-function icon(p, size, color) {
-  if (!p?.icon) return null;
-  return p.tint ? svg(p.icon).size(size).flex_none().text_color(color) : image(p.icon).w(size).h(size).flex_none();
+const STATUS_TEXT = { working: "Working", blocked: "Needs your input", done: "Done", idle: "Idle" };
+
+// The status dot: a fill, or a ring for idle; working pulses.
+function dot(t, status, size, margin) {
+  const d = statusDot(t, status);
+  return div()
+    .size(size)
+    .mx(margin)
+    .flex_none()
+    .rounded(size)
+    .when(Boolean(d.fill), (el) => el.bg(d.fill))
+    .when(Boolean(d.ring), (el) => el.border(1.5).border_color(d.ring))
+    .when(d.pulse, (el) => el.loop("opacity", PULSE));
 }
 
-// The shortcut that reaches a row, as a small key cap.
-const keycap = (t, text) => div().flex_none().px(4).h(16).rounded(4).border(1).border_color(t.foreground + "14").text_size(10).text_color(t.muted).flex().items_center().child(text);
+// The agent's icon tile: the program icon centered, else the first letter of `fallback`.
+// 20 px (radius 6, 13 px icon) for main rows, 16 px (radius 5, 11 px icon) for sub-agents and the rail.
+function tile(t, p, fallback, size, bg) {
+  const big = size === 20;
+  const pic = icon(p, big ? 13 : 11, t.foreground);
+  return div().relative().size(size).flex_none().rounded(big ? 6 : 5).bg(bg).flex().items_center().justify_center()
+    .child(pic ?? div().text_size(big ? 11 : 10).font_semibold().text_color(t.muted).child([...(fallback ?? "")][0]?.toUpperCase() ?? "?"));
+}
+
+// The status badge at a tile's bottom-right corner: an 8 px dot inside a 2 px ring of t.chrome
+// (opaque, so it reads as cut out of the tile; the row's own background is translucent).
+const badge = (t, status) => div().absolute().right(-4).bottom(-4).size(12).flex_none().rounded_full().bg(t.chrome)
+  .flex().items_center().justify_center().child(dot(t, status, 8, 0));
 
 export default class Agents extends View {
   init(_props, cx) {
     if (props()?.sortMenu) return;
     this.folded = new Set();
+    // The whole section's fold (A5): per copy, not kept across restarts.
+    this.sectionFolded = false;
     // Each agent's last state and when it changed (ms), kept across restarts.
     this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}");
     this.pins = JSON.parse(localStorage.getItem("pins") ?? "[]");
@@ -148,7 +164,7 @@ export default class Agents extends View {
       .p(5)
       .bg(t.popover)
       .text_size(12.8)
-      .child(div().px(8).pt(4).pb(6).text_size(11).text_color(t.dim).child("Sort agents"))
+      .child(div().px(8).pt(4).pb(6).text_size(11).text_color(t.muted).child("Sort agents"))
       .children(SORTS.map((s) => h_flex()
         .id(`sort-${s.id}`)
         .h(31)
@@ -157,7 +173,7 @@ export default class Agents extends View {
         .rounded(7)
         .items_center()
         .text_color(t.foreground)
-        .hover((el) => el.bg(t.hover))
+        .hover((el) => el.bg(tokens(t).pill))
         .on_click(() => {
           setShared("agents.sort", s.id);
           closeOverlay(props().overlay);
@@ -186,7 +202,6 @@ export default class Agents extends View {
   subRow(t, s, shown, compact) {
     const k = s.t;
     const st = kidStatus(k, this.listed);
-    const pic = icon(k.program, 14, t.foreground);
     const on = k.address === shown;
     return h_flex()
       .id(`sub-${k.address}`)
@@ -199,31 +214,32 @@ export default class Agents extends View {
       .items_center()
       .text_size(12.5)
       .when(on, (el) => el.bg(t.raised))
-      .hover((s) => s.bg(t.hover))
+      .hover((s) => s.bg(tokens(t).pill))
       .on_click(() => this.peek(k.address))
       .children(s.lines.map(l => div().self_start().mt(-4).w(9).h(17).mr(4).flex_none()
         .when(Boolean(l), el => el.border_l(1.5).border_color(t.input))
         .when(l === "└" || l === "├", el => el.border_b(1.5).rounded_bl(6))))
-      .when(Boolean(pic), el => el.child(div().mr(8).child(pic)))
+      .child(tile(t, k.program, k.program?.name || k.name || k.template, 16, tokens(t).pill).mr(6))
       .child(div().flex_1().truncate().text_color(on ? t.foreground : t.muted).child(k.name || k.template || k.program?.name || k.address))
       .child(this.status(t, { status: st }, compact));
   }
 
   // compact: a ! for blocked where a header already says "Needs you".
   status(t, a, compact = false) {
-    const color = t[a.status] ?? t.dim;
     if (a.status === "working") return svg("mods/workspace-chrome/spinner.svg").size(12).mx(1).flex_none().text_color(t.working).spin(900);
-    if (a.status === "blocked" && compact) return div().size(14).flex_none().rounded(4).bg(t.blocked + "26").text_size(10.5).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
-    if (a.status === "blocked") return div().flex_none().px(6).h(18).rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).flex().items_center().child("Needs you");
+    if (a.status === "blocked" && compact) return div().size(14).flex_none().rounded(4).bg(tokens(t).blockedSoft).border(1).border_color(t.blocked).text_size(10.5).font_bold().text_color(t.foreground).flex().items_center().justify_center().child("!");
+    if (a.status === "blocked") return div().flex_none().px(6).h(18).rounded(5).bg(tokens(t).blockedSoft).border(1).border_color(t.blocked).text_size(10.5).font_semibold().text_color(t.foreground).flex().items_center().child("Needs you");
     // Idle: a ring; done: a dot.
-    if (a.status === "idle") return div().size(7).mx(3).flex_none().rounded(4).border(1.5).border_color(t.idle ?? t.dim);
-    return div().size(7).mx(3).flex_none().rounded(4).bg(a.status === "done" ? color : t.dim + "00");
+    return dot(t, a.status, 7, 3);
   }
 
   render(cx) {
     const t = theme();
     if (props()?.sortMenu) return this.sortMenu(t);
+    const tk = tokens(t);
     const collapsed = narrow();
+    // The 44 px rail has no room for a tile next to the number; the 76 px mac rail has.
+    const railWide = (find(layout(), "sidebar")?.size?.px ?? Infinity) >= 60;
     const sort = sortOf();
     let list = agents();
     this.listed = new Map(list.map((a) => [a.address, a.status]));
@@ -264,9 +280,9 @@ export default class Agents extends View {
         .items_center()
         .rounded(4)
         .text_size(11)
-        .text_color(open ? t.dim : (t[top] ?? t.dim))
+        .text_color(open ? t.muted : (t[top] ?? t.muted))
         .cursor_pointer()
-        .hover((s) => s.bg(t.hover).text_color(t.foreground))
+        .hover((s) => s.bg(tk.pill).text_color(t.foreground))
         .on_click((_e, cx) => {
           cx.stop_propagation();
           open ? this.folded.add(a.address) : this.folded.delete(a.address);
@@ -292,7 +308,6 @@ export default class Agents extends View {
     }
 
     const row = (a, i, subs = []) => {
-      const pic = icon(a.program, 16, t.foreground);
       const more = detail.get(a.address);
       // An agent on another machine (`vps/t7`) says which.
       const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
@@ -304,8 +319,9 @@ export default class Agents extends View {
           .flex_none()
           .items_center()
           .gap(4)
-          .hover((s) => s.bg(t.hover))
+          .hover((s) => s.bg(tk.pill))
           .on_click(() => run("pane.focus", { pane: a.pane }))
+          .when(railWide, el => el.child(tile(t, a.program, a.program?.name || a.title, 16, tk.pill)))
           .child(div().flex_1().min_w(0).whitespace_nowrap().text_right().text_color(t.muted).child(String(i + 1)))
           .child(h_flex().w(14).flex_none().items_center().justify_center().child(this.status(t, a, true)));
       }
@@ -318,9 +334,9 @@ export default class Agents extends View {
         .flex_none()
         .p(2)
         .rounded(4)
-        .text_color(t.dim)
+        .text_color(t.muted)
         .cursor_pointer()
-        .hover((s) => s.bg(t.hover).text_color(t.foreground))
+        .hover((s) => s.bg(tk.pill).text_color(t.foreground))
         .tooltip(isPinned ? "Unpin" : "Pin to the top")
         .on_click((_e, cx) => {
           cx.stop_propagation();
@@ -337,35 +353,33 @@ export default class Agents extends View {
       return h_flex()
         .id(`ag-${a.address}`)
         .px(8)
-        .h(32)
+        .py(7)
         .flex_none()
         .rounded(8)
         .items_center()
-        .gap(9)
-        .when(a.focused, (el) => el.bg(t.accent + "2e"))
+        .gap(10)
+        .when(a.focused, (el) => el.bg(tk.accentSoft))
         .cursor_pointer()
-        .hover((s) => s.bg(t.hover))
+        .hover((s) => s.bg(a.focused ? tk.accentSoft : tk.pill))
         .on_hover((on, cx) => {
           if (on) this.hovered = a.address;
           else if (this.hovered === a.address) this.hovered = null;
           cx.notify();
         })
         .on_click(() => run("pane.focus", { pane: a.pane }))
-        .when(Boolean(pic), el => el.child(div().id(`agent-fold-${a.address}`)
-          .when(subs.length > 0, el => el.on_click((_e, cx) => {
-            cx.stop_propagation();
-            this.folded.has(a.address) ? this.folded.delete(a.address) : this.folded.add(a.address);
-            cx.notify();
-          })).child(pic)))
-        .child(h_flex().flex_1().min_w(0).gap(5).items_center()
-          .child(div().min_w(0).max_w(full && more ? 120 : 200).truncate().text_color(idle ? t.muted : t.foreground).child(name))
-          .when(full && Boolean(more), el => el.child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(`\u00b7 ${more}`))))
-        .when(Boolean(machine), el => el.child(div().text_size(10).text_color(t.dim).child(machine)))
-        .when(subs.length > 0, el => el.child(fold(a, subs)))
-        .when(this.hovered === a.address, el => el.child(pin))
-        .when(this.hovered !== a.address && Boolean(when), el => el.child(div().flex_none().text_size(11).text_color(t.dim).child(duration(now - when))))
-        .when(n < 9, el => el.child(keycap(t, `\u2318\u2325${n + 1}`)))
-        .child(this.status(t, a, byPriority && !isPinned));
+        .child(tile(t, a.program, a.program?.name || name, 20, a.focused ? alpha(t.foreground, 0.10) : tk.pill).child(badge(t, a.status)))
+        .child(v_flex().flex_1().min_w(0).gap(1)
+          .child(h_flex().min_w(0).gap(5).items_center()
+            .child(div().min_w(0).max_w(full && more ? 120 : 200).truncate().font_weight(a.focused ? 500 : 400).text_color(idle ? t.muted : t.foreground).child(name))
+            .when(full && Boolean(more), el => el.child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(`\u00b7 ${more}`)))
+            .when(Boolean(machine), el => el.child(div().flex_none().text_size(10).text_color(t.muted).child(machine)))
+            .when(subs.length > 0, el => el.child(fold(a, subs))))
+          .child(div().text_size(11.5).text_color(t.muted).child(STATUS_TEXT[a.status] ?? "")))
+        .child(v_flex().flex_none().items_end().gap(1).text_size(11).text_color(t.muted)
+          .child(h_flex().h(18).items_center()
+            .when(this.hovered === a.address, el => el.child(pin))
+            .when(this.hovered !== a.address && Boolean(when), el => el.child(duration(now - when))))
+          .child(div().child(n < 9 ? `\u2318\u2325${n + 1}` : "")));
     };
 
     // Groups in list order: spaces (grouped) or priority sections. Agents of a
@@ -398,40 +412,53 @@ export default class Agents extends View {
           open ? this.folded.add(g.id) : this.folded.delete(g.id);
           cx.notify();
         })
-        .child(div().truncate().text_color(t[g.status] ?? t.dim).child(g.label))
-        .when(byPriority || !open, (el) => el.child(div().text_color(t.dim).child(String(g.members.length))))
+        .child(div().truncate().text_color(t[g.status] ?? t.muted).child(g.label))
+        .when(byPriority || !open, (el) => el.child(div().text_color(t.muted).child(String(g.members.length))))
         .child(div().flex_1())
         .when(!open, (el) => el
           .when(!byPriority && top && top !== "idle", (el) => el.child(this.status(t, { status: top }, true)))
-          .child(svg("mods/workspace-chrome/chevron-right.svg").size(11).flex_none().text_color(t.dim)));
+          .child(svg("mods/workspace-chrome/chevron-right.svg").size(11).flex_none().text_color(t.muted)));
     };
     const rows = collapsed
       ? list.flatMap(withKids)
-      : groups.flatMap((g) => [header(g), ...(this.folded.has(g.id) ? [] : g.members.flatMap(withKids))]);
+      : this.sectionFolded
+        ? []
+        : groups.flatMap((g) => [header(g), ...(this.folded.has(g.id) ? [] : g.members.flatMap(withKids))]);
 
     return v_flex()
       .size_full()
       .min_h(0)
-      .bg(t.chrome)
+      .bg(tk.glass)
       .text_size(13)
       .when(!collapsed, (el) =>
         el.child(
           h_flex()
-            .px(16)
-            .h(41)
-            .pt(14)
-            .pb(5)
+            .px(8)
+            .h(24)
             .flex_none()
             .items_center()
-            .justify_between()
-            .child(h_flex().gap(8).items_center()
-              .child(div().text_size(11.5).font_semibold().text_color(t.muted).child("Agents"))
-              .child(div().text_size(10).text_color(t.dim).child("\u2318\u2325 1\u20139 \u00b7 \u2318[ \u2318]")))
+            .gap(8)
+            .child(h_flex()
+              .id("ag-section")
+              .gap(4)
+              .items_center()
+              .cursor_pointer()
+              .text_size(11)
+              .font_semibold()
+              .text_color(t.muted)
+              .hover((s) => s.text_color(t.foreground))
+              .on_click((_e, cx) => {
+                this.sectionFolded = !this.sectionFolded;
+                cx.notify();
+              })
+              .child(svg(`mods/workspace-chrome/chevron-${this.sectionFolded ? "right" : "down"}.svg`).size(11).flex_none())
+              .child("Agents"))
+            .child(div().flex_1().min_w(0).truncate().text_right().text_size(11).text_color(t.muted).child("\u2318\u2325 1\u20139 \u00b7 \u2318[ \u2318]"))
             .child(
               div()
                 .id("ag-sort")
                 .text_size(11)
-                .text_color(t.dim)
+                .text_color(t.muted)
                 .hover((s) => s.text_color(t.foreground))
                 .on_click(() => openOverlay({ mod: "guide-agents", kind: "popup", width: 200, height: 140, props: { sortMenu: true } }))
                 .tooltip(`Sort agents: ${sort.label}`)
@@ -440,7 +467,7 @@ export default class Agents extends View {
         ),
       )
       .when(list.length === 0 && !collapsed, (el) =>
-        el.child(div().px(12).text_size(12).text_color(t.dim).child("No agent status yet. Agents show up here when they report their status. Older versions and agents inside tmux may not.")),
+        el.child(div().px(12).text_size(12).text_color(t.muted).child("No agent status yet. Agents show up here when they report their status. Older versions and agents inside tmux may not.")),
       )
       .child(v_flex().id("ag-list").flex_1().min_h(0).px(collapsed ? 0 : 8).overflow_y_scrollbar().mode("always").children(rows))
       .child(
@@ -454,7 +481,7 @@ export default class Agents extends View {
             div()
               .id("collapse")
               .text_size(13)
-              .text_color(t.dim)
+              .text_color(t.muted)
               .hover((s) => s.text_color(t.foreground))
               .on_click(toggleSidebar)
               .child(collapsed ? "»" : ""),

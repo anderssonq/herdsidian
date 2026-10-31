@@ -6,24 +6,17 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, TextView } from "gpui-base";
 import { HIDDEN, base, hidden, render, linkTarget, resolve } from "./notes.js";
 import { exec, readTextFile, writeTextFile, watchFolder, pickFolder, theme, settings, nextCommand, run, layout, window } from "herdr";
+import { alpha, tokens } from "./tokens.js";
+import { find } from "./layout.js";
 
 const MAX_NOTES = 5000;
-
-function find(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
-    const found = find(child, id);
-    if (found) return found;
-  }
-  return null;
-}
 
 // Like the left sidebar: a rail of icons by width, not a flag, so dragging it narrow counts too.
 const width = () => find(layout(), "herdsidian")?.size?.px;
 const narrow = () => (width() ?? Infinity) < 160;
 
 // The shortcut that reaches a thing, as a small key cap.
-const keycap = (t, text) => div().flex_none().px(4).h(16).rounded(4).border(1).border_color(t.foreground + "14").text_size(10).text_color(t.muted).flex().items_center().child(text);
+const keycap = (t, text) => div().flex_none().px(5).h(18).rounded(4).border(1).border_color(tokens(t).line).text_size(10.5).text_color(t.muted).flex().items_center().child(text);
 
 // Folders and .md files of one folder, folders first.
 async function directory(path) {
@@ -121,7 +114,7 @@ export default class Notes extends View {
   setVault(path, cx) {
     if (!path) return;
     localStorage.setItem("vault", path);
-    this.vault = path; this.entries = new Map(); this.folders = new Set(); this.all = [];
+    this.vault = path; this.entries = new Map(); this.folders = new Set(); this.all = []; this.selected = null;
     this.searching = false; this.query = ""; this.error = null; this.search.set_value("");
     this.load(cx);
     this.watch(cx);
@@ -157,11 +150,11 @@ export default class Notes extends View {
       if (text === null) { this.error = `Cannot read ${path}`; return cx.notify(); }
       const asking = path === this.note ? this.asking : null;
       this.close();
-      this.note = path; this.loaded = text; this.error = null; this.asking = asking;
+      this.note = path; this.selected = path; this.loaded = text; this.error = null; this.asking = asking;
       const t = theme();
       this.editor = EditorState.new({ language: "markdown", value: text, soft_wrap: true, line_numbers: false, folding: false,
         font_family: settings().font_family, font_size: 13,
-        syntax: { keyword: t.accent, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi5, punctuation: t.dim, constant: t.ansi6 } });
+        syntax: { keyword: t.accent, string: t.ansi2, comment: t.muted, function: t.ansi4, type: t.ansi5, punctuation: t.muted, constant: t.ansi6 } });
       this.editor.on("change", (_e, cx) => { const d = this.editor.value() !== this.loaded; if (d !== this.dirty) { this.dirty = d; cx.notify(); } });
       this.setMode(mode);
       cx.notify();
@@ -222,29 +215,32 @@ export default class Notes extends View {
   }
 
   button(id, t, icon, tip, action) {
-    return div().id(id).size(26).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.dim)
-      .hover((s) => s.bg(t.hover).text_color(t.foreground)).cursor_pointer().tooltip(tip).on_click(action)
+    return div().id(id).size(28).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.muted)
+      .hover((s) => s.bg(tokens(t).pill).text_color(t.foreground)).cursor_pointer().tooltip(tip).on_click(action)
       .child(svg(`mods/workspace-chrome/${icon}.svg`).size(14));
   }
 
-  row(id, t, depth, icon, label, action, extra) {
-    return h_flex().id(id).h(28).flex_none().pl(8 + depth * 16).pr(8).gap(7).items_center().rounded(7).cursor_pointer()
-      .hover((s) => s.bg(t.hover)).on_click(action)
+  // `tone`: "folder" (foreground name), "note" (muted name) or "selected" (the last note opened).
+  row(id, t, depth, icon, label, action, extra, tone = "note") {
+    const selected = tone === "selected", tk = tokens(t);
+    return h_flex().id(id).h(28).flex_none().pl(8 + depth * 16).pr(8).gap(8).items_center().rounded(7).cursor_pointer()
+      .when(selected, (el) => el.bg(tk.accentSoft)).when(!selected, (el) => el.hover((s) => s.bg(tk.pill))).on_click(action)
       .child(icon)
-      .child(div().flex_1().min_w(0).truncate().child(label))
-      .when(Boolean(extra), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).truncate().max_w(140).child(extra)));
+      .child(div().flex_1().min_w(0).truncate().text_color(tone === "note" ? t.muted : t.foreground).when(selected, (el) => el.font_medium()).child(label))
+      .when(Boolean(extra), (el) => el.child(div().flex_none().text_size(11).text_color(t.muted).truncate().max_w(140).child(extra)));
   }
 
   rows(prefix, depth, out, t) {
     for (const e of this.entries.get(prefix) ?? []) {
-      const path = prefix ? `${prefix}/${e.name}` : e.name, open = this.folders.has(path);
+      const path = prefix ? `${prefix}/${e.name}` : e.name, open = this.folders.has(path), selected = !e.dir && path === this.selected;
       out.push(this.row(`note-${path}`, t, depth,
-        e.dir ? h_flex().gap(4).flex_none().items_center()
-          .child(svg(`mods/files/chevron-${open ? "down" : "right"}.svg`).size(12).text_color(t.dim))
-          .child(svg("mods/files/folder.svg").size(14).text_color(t.accent))
-          : h_flex().gap(4).flex_none().items_center().child(div().w(12)).child(svg("mods/files/file.svg").size(14).text_color(t.muted)),
+        e.dir ? h_flex().gap(8).flex_none().items_center()
+          .child(svg(`mods/files/chevron-${open ? "down" : "right"}.svg`).size(9).text_color(t.muted))
+          .child(svg("mods/herdsidian/folder.svg").size(16).text_color(t.accent))
+          : h_flex().gap(8).flex_none().items_center().child(div().w(9)).child(svg("mods/files/file.svg").size(14).text_color(selected ? t.accent : t.muted)),
         e.dir ? e.name : base(e.name),
-        (_e, cx) => (e.dir ? this.toggle(path, cx) : this.open(path, cx))));
+        (_e, cx) => (e.dir ? this.toggle(path, cx) : this.open(path, cx)),
+        null, e.dir ? "folder" : selected ? "selected" : "note"));
       if (e.dir && open) this.rows(path, depth + 1, out, t);
     }
     return out;
@@ -254,9 +250,9 @@ export default class Notes extends View {
     const q = this.query;
     const hits = this.all.filter((p) => base(p).toLowerCase().includes(q)).slice(0, 200);
     return hits.length
-      ? hits.map((p) => this.row(`hit-${p}`, t, 0, svg("mods/files/file.svg").size(14).flex_none().text_color(t.muted), base(p),
-        (_e, cx) => this.open(p, cx), p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : null))
-      : [div().p(8).text_size(12).text_color(t.dim).child("No note matches")];
+      ? hits.map((p) => this.row(`hit-${p}`, t, 0, svg("mods/files/file.svg").size(14).flex_none().text_color(p === this.selected ? t.accent : t.muted), base(p),
+        (_e, cx) => this.open(p, cx), p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : null, p === this.selected ? "selected" : "note"))
+      : [div().p(8).text_size(12).text_color(t.muted).child("No note matches")];
   }
 
   // To the rail, or back to the width it had.
@@ -277,7 +273,7 @@ export default class Notes extends View {
   }
 
   rail(t) {
-    return v_flex().id("herdsidian").size_full().pt(8).gap(4).items_center().bg(t.chrome)
+    return v_flex().id("herdsidian").size_full().pt(8).gap(4).items_center().bg(tokens(t).glass)
       .child(this.button("notes-expand", t, "panel-right", "Expand notes", () => this.collapse()))
       .when(Boolean(this.vault), (el) => el.child(this.button("notes-search-rail", t, "search", "Find a note", (_e, cx) => this.toggleSearch(cx))))
       .when(!this.note, (el) => el.child(this.button("notes-new-rail", t, "square-pen", "New note", (_e, cx) => { this.collapse(); this.newNote(cx); })));
@@ -293,8 +289,8 @@ export default class Notes extends View {
       .child(div().id("notes-choose").self_start().px(10).h(28).flex().items_center().rounded(7).bg(t.solid).text_color(t.solid_foreground)
         .cursor_pointer().on_click((_e, cx) => this.chooseVault(cx)).child("Choose a vault"));
     return v_flex().flex_1().min_h(0)
-      .when(this.searching, (el) => el.child(div().px(10).pb(6).flex_none().child(h_flex().h(30).px(8).gap(6).items_center().rounded(8).bg(t.foreground + "0f")
-        .child(svg("mods/workspace-chrome/search.svg").size(13).flex_none().text_color(t.dim))
+      .when(this.searching, (el) => el.child(div().px(10).pb(6).flex_none().child(h_flex().h(30).px(8).gap(6).items_center().rounded(8).bg(tokens(t).pill)
+        .child(svg("mods/workspace-chrome/search.svg").size(13).flex_none().text_color(t.muted))
         .child(Input.new(this.search).flex_1().text_size(12.5).text_color(t.foreground)))))
       .child(v_flex().id("notes-tree").flex_1().min_h(0).px(6).pb(8).overflow_y_scrollbar()
         .children(this.query ? this.found(t) : this.rows("", 0, [], t)));
@@ -302,16 +298,16 @@ export default class Notes extends View {
 
   pill(id, t, label, on, action) {
     return div().id(id).px(8).h(22).flex().items_center().rounded(5).text_size(11.5).cursor_pointer()
-      .text_color(on ? t.foreground : t.dim).when(on, (el) => el.bg(t.raised)).hover((s) => s.text_color(t.foreground))
+      .text_color(on ? t.foreground : t.muted).when(on, (el) => el.bg(t.raised)).hover((s) => s.text_color(t.foreground))
       .on_click(action).child(label);
   }
 
   reader(t) {
     const read = this.mode === "read";
     const banner = (text, actions) => v_flex().mx(10).mb(6).px(10).py(8).gap(6).flex_none().rounded(7)
-      .bg(t.blocked + "1f").text_size(12).text_color(t.foreground).child(div().child(text)).child(h_flex().gap(6).children(actions));
+      .bg(alpha(t.blocked, 0.12)).text_size(12).text_color(t.foreground).child(div().child(text)).child(h_flex().gap(6).children(actions));
     const act = (id, label, action) => div().id(id).px(8).h(22).flex().items_center().rounded(5).bg(t.raised).cursor_pointer()
-      .hover((s) => s.bg(t.hover)).on_click(action).child(label);
+      .hover((s) => s.bg(tokens(t).pill)).on_click(action).child(label);
     return v_flex().flex_1().min_h(0)
       .child(h_flex().h(34).px(10).gap(6).flex_none().items_center()
         .child(this.pill("mode-read", t, "Read", read, (_e, cx) => { this.setMode("read"); cx.notify(); }))
@@ -340,13 +336,13 @@ export default class Notes extends View {
     const t = theme();
     if (narrow()) return this.rail(t);
     const title = this.note ? base(this.note) : this.vault?.split("/").pop() ?? "Notes";
-    return v_flex().id("herdsidian").size_full().min_h(0).bg(t.chrome).text_color(t.foreground).text_size(13)
-      .child(h_flex().h(52).flex_none().pl(14).pr(8).gap(4).items_center()
+    return v_flex().id("herdsidian").size_full().min_h(0).bg(tokens(t).glass).text_color(t.foreground).text_size(13)
+      .child(h_flex().h(52).flex_none().pl(16).pr(8).gap(4).items_center()
         .when(Boolean(this.note), (el) => el.child(this.button("notes-back", t, "chevron-left", "Back to the notes",
           (_e, cx) => this.leave((cx) => { this.close(); cx.notify(); }, cx))))
         .child(v_flex().flex_1().min_w(0)
           .child(div().truncate().font_semibold().child(title))
-          .when(Boolean(this.note), (el) => el.child(div().truncate().text_size(10.5).text_color(t.dim).child(this.note))))
+          .when(Boolean(this.note), (el) => el.child(div().truncate().text_size(10.5).text_color(t.muted).child(this.note))))
         .when(!this.note, (el) => el
           .child(div().mr(4).child(keycap(t, "\u2318\u21e7O")))
           .when(Boolean(this.vault), (el) => el.child(this.button("notes-search", t, "search", "Find a note", (_e, cx) => this.toggleSearch(cx))))

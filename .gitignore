@@ -2,3 +2,4 @@
 jsconfig.json
 *.d.ts
 .kit-backup/
+.spec/

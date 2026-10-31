@@ -8,7 +8,7 @@ const root = new URL("..", import.meta.url).pathname;
 const errors = [];
 const files = (dir) => readdirSync(dir).flatMap((n) => {
   const p = join(dir, n);
-  if ([".git", "node_modules"].includes(n)) return [];
+  if ([".git", "node_modules", ".kit-backup", ".spec"].includes(n)) return [];
   return statSync(p).isDirectory() ? files(p) : [p];
 });
 const all = files(root).filter((p) => !p.endsWith("jsconfig.json"));
@@ -34,10 +34,14 @@ for (const [p, t] of Object.entries(json).filter(([p]) => p.startsWith("themes/"
 }
 
 // Mods named by the layout and the keys exist here or ship with Herdr.
-const shipped = ["workspace-chrome", "tabs", "pane", "files", "changes", "workspace-status"];
+const shipped = ["workspace-chrome", "files", "changes"];
 const ours = readdirSync(join(root, "mods"));
 const mods = new Set();
-const walk = (n) => { if (n?.content?.mod) mods.add(n.content.mod); (n?.children ?? []).forEach(walk); };
+const walk = (n) => {
+  if (n?.content?.mod) mods.add(n.content.mod);
+  if (n?.content?.pane?.header?.content?.mod) mods.add(n.content.pane.header.content.mod);
+  (n?.children ?? []).forEach(walk);
+};
 for (const [p, l] of Object.entries(json).filter(([p]) => p.startsWith("layouts/"))) {
   walk(l);
   if (l.theme && !json[`themes/${l.theme}.json`]) fail(p, `theme ${l.theme} has no themes/${l.theme}.json`);
@@ -47,6 +51,49 @@ for (const actions of Object.values(json["keys.json"] ?? {})) for (const a of Ob
   if (m && !["space", "agent", "tab", "pane", "layout", "app", "terminal", "window"].includes(m[1])) mods.add(m[1]);
 }
 for (const m of mods) if (!ours.includes(m) && !shipped.includes(m)) errors.push(`mod ${m} is used but not in mods/ nor shipped by Herdr`);
+
+// Shared copies (ADR-0001): every mods/*/<name>.js equals lib/<name>.js, and a mod that
+// imports ./<name>.js has the file. .kit-backup/ and .spec/ are skipped.
+const modFiles = all.filter((p) => relative(root, p).startsWith("mods/"));
+for (const name of ["tokens", "ui", "layout"]) {
+  const canonicalPath = join(root, `lib/${name}.js`);
+  let canonical = null;
+  try { canonical = readFileSync(canonicalPath, "utf8"); }
+  catch { fail(canonicalPath, "missing (the canonical copy)"); }
+  for (const p of modFiles.filter((p) => p.endsWith(`/${name}.js`))) {
+    if (canonical !== null && readFileSync(p, "utf8") !== canonical) fail(p, `differs from lib/${name}.js (copy it with cp)`);
+  }
+  const imports = new RegExp(`from\\s+["']\\./${name}\\.js["']`);
+  for (const p of modFiles.filter((p) => p.endsWith(".js"))) {
+    if (imports.test(readFileSync(p, "utf8")) && !modFiles.includes(join(p, "..", `${name}.js`))) {
+      fail(p, `imports ./${name}.js but the mod has no ${name}.js`);
+    }
+  }
+}
+
+// Colors in mods come from the theme: no hex literal, no alpha glued to a color string.
+// The one exception is the space avatar palette and the avatar letter, in guide-spaces/main.js.
+const avatarHex = new Set([
+  "#22a99a", "#e3814f", "#5b8def", "#8b7cf6", "#3fae6a", "#d9649a", // MARK
+  "#000000bf", // AVATAR_LETTER
+]);
+// tokens.js holds the HIGHLIGHT literal; ui.js and layout.js copies are scanned like any mod file.
+const shared = (p) => p.endsWith("/tokens.js");
+for (const p of modFiles.filter((p) => p.endsWith(".js") && !shared(p))) {
+  const allowed = relative(root, p) === "mods/guide-spaces/main.js" ? avatarHex : new Set();
+  readFileSync(p, "utf8").split("\n").forEach((line, i) => {
+    for (const lit of line.match(/#[0-9a-f]{6}(?:[0-9a-f]{2})?(?![0-9a-f])/gi) ?? []) {
+      if (!allowed.has(lit.toLowerCase())) fail(p, `line ${i + 1}: hex literal ${lit} (derive it from theme() / tokens.js)`);
+    }
+    for (const lit of line.match(/#[0-9a-f]{3,4}(?![0-9a-f])/gi) ?? []) {
+      fail(p, `line ${i + 1}: short hex literal ${lit} (derive it from theme() / tokens.js)`);
+    }
+    // `+ "26"`, `${c}26` anywhere in a template, and `.concat("26")`.
+    if (/\+\s*["'][0-9a-f]{2}["']|\}[0-9a-f]{2}(?![0-9a-z_])|\.concat\(\s*["'][0-9a-f]{2}["']/i.test(line)) {
+      fail(p, `line ${i + 1}: alpha glued to a color string (use alpha() from tokens.js)`);
+    }
+  });
+}
 
 // Nothing personal in what gets shared.
 for (const p of all.filter((p) => /\.(js|json|md)$/.test(p))) {

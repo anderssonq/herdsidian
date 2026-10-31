@@ -2,9 +2,9 @@
 
 Your Obsidian vault inside the [Herdr](https://herdr.dev) desktop app: a
 **Notes** sidebar to browse, read and edit your Markdown notes next to your
-terminals and agents. It comes as the **Herdsidian** layout: near-black and
-glass-tinted, with the **Herdsidian Carbon** theme and a sidebar that shows the
-shortcut to every space and agent.
+terminals and agents. It comes as the **Herdsidian** layout: tinted glass over
+a gradient of the active theme (near-black with the default **Herdsidian
+Carbon** theme), and a sidebar that shows the shortcut to every space and agent.
 
 <!-- preview.png: pending (take it with a demo vault and demo spaces) -->
 
@@ -16,10 +16,14 @@ shortcut to every space and agent.
   - `herdsidian_midnight`: Tokyo Night colors.
   - `herdsidian_catppuccin`: Catppuccin Mocha colors, mauve accent.
   - `herdsidian_nord`: Nord colors, frost cyan accent.
-  The glass background is part of the layout, so it stays charcoal with
-  every theme.
-- **Glass look**: a charcoal-to-black gradient shows through the terminals,
-  the sidebar, the tab bar and the status bar.
+  The glass follows the theme: every color of the layout comes from it.
+- **Glass look**: a gradient of the theme's colors shows through the sidebar,
+  the toolbar, the status bar and the Notes sidebar. Terminals are solid cards
+  on top of it. The glass is transparency only (Herdr has no blur).
+- **Restyled toolbar, pane headers and status bar**: tabs as a segmented
+  control, a Search box, and the theme name in the status bar. Program icons
+  show in agent rows (on a small tile with the status dot as a badge), in tabs
+  and in the pane header.
 - **Notes sidebar** (`herdsidian` mod), on the right:
   - Browse the vault's folders and `.md` notes, or find a note by name.
   - Read a note rendered: frontmatter, headings, links. `[[wikilinks]]`
@@ -38,6 +42,7 @@ shortcut to every space and agent.
 | Keys | What it does |
 |---|---|
 | `⌘⇧O` | Show or hide the Notes sidebar |
+| `⌘K` | Open the search picker |
 | `⌘E` | In a note: switch between Read and Edit |
 | `⌘S` | In a note: save |
 | `⌃1` … `⌃9` | Go to space 1–9 |
@@ -56,7 +61,7 @@ Ask your agent, from a Herdr terminal:
 
 Or by hand:
 
-1. Copy `layouts/herdsidian.json`, the four files in `themes/` and the four
+1. Copy `layouts/herdsidian.json`, the four files in `themes/` and the seven
    folders in `mods/` into `~/.config/herdr-app/` (same paths).
 2. Merge `keys.json` into `~/.config/herdr-app/keys.json`: add its
    `layout:herdsidian` and `mod:herdsidian` sections. The keys only apply while
@@ -65,7 +70,7 @@ Or by hand:
 3. Check the mods:
    ```sh
    cd ~/.config/herdr-app/mods
-   for m in herdsidian herdsidian-chrome guide-spaces guide-agents; do herdr-app check $m; done
+   for m in herdsidian herdsidian-chrome guide-spaces guide-agents herdsidian-tabs herdsidian-pane herdsidian-status; do herdr-app check $m; done
    ```
 4. Switch to it: `herdr-app do layout.switch '{"name":"herdsidian"}'`
    (or Settings → Look, or `⌘⇧L`).
@@ -92,10 +97,14 @@ Then bind a key to it in `keys.json`, for example
   and `find` to list notes, and `open` (macOS) or `xdg-open` (Linux) for
   web links.
 - `guide-spaces` and `guide-agents` are Herdr's own `spaces` and `agents`
-  with key caps added: like the originals, `guide-spaces` runs `git` and
+  with shortcut hints added: like the originals, `guide-spaces` runs `git` and
   `hc machine ls` and watches your spaces' repo folders.
 - `herdsidian-chrome` is Herdr's `workspace-chrome` (sidebar header and
-  footer) with the name "Herdsidian" in the theme's accent color.
+  footer), restyled as glass with a neutral top sheen.
+- `herdsidian-tabs`, `herdsidian-pane` and `herdsidian-status` are restyled
+  copies of Herdr's `tabs`, `pane` and `workspace-status` (version 0.1.10),
+  with the same behavior. `herdsidian-status` reads Herdr's settings only, to
+  show the theme name.
 - None of them reaches the network.
 
 ## Limits
@@ -116,8 +125,26 @@ runs under Node:
 
 ```sh
 npm test       # node --test, no dependencies
-npm run lint   # JS syntax, JSON, theme format, mod references, no home paths
+npm run lint   # JS syntax, JSON, theme format, mod references, shared-file copies, no hard-coded colors (3-, 4-, 6-, 8-digit hex or alpha glued to a string), no home paths
 ```
+
+Theme colors with alpha come from `lib/tokens.js`. Three files in `lib/` are
+canonical: `tokens.js`, `ui.js` (the shared top sheen, 180° over the full
+block, and the program `icon` helper) and `layout.js` (the `find` tree helper). Each mod that uses one carries
+a byte-identical copy as `mods/<mod>/<name>.js`, because a mod folder is
+installed on its own. After you edit one, copy it into every mod that has it:
+
+```sh
+cp lib/tokens.js mods/<mod>/tokens.js
+cp lib/ui.js mods/<mod>/ui.js          # herdsidian-chrome, herdsidian-tabs, herdsidian-pane, guide-agents
+cp lib/layout.js mods/<mod>/layout.js  # herdsidian, herdsidian-chrome, herdsidian-tabs, guide-agents, guide-spaces
+```
+
+`npm run lint` fails if a copy differs.
+
+The "Needs you" chip (pane header and agents list) uses `foreground` text on
+`blockedSoft` with a 1 px `blocked` border, so it passes contrast in all four
+themes.
 
 Changes to the mods themselves are checked in Herdr with `herdr-app check`.
 

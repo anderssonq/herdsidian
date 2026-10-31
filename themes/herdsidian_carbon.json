@@ -27,7 +27,7 @@
     "working": "#e5b95c",
     "blocked": "#f14c4c",
     "done": "#3fbf8f",
-    "idle": "#6b6b6b",
+    "idle": "#808080",
     "unknown": "#6b6b6b"
   }
 }
