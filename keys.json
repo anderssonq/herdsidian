@@ -1,0 +1,31 @@
+{
+  "mod:herdsidian": {
+    "cmd-s": "herdsidian.save",
+    "cmd-e": "herdsidian.mode"
+  },
+  "layout:herdsidian": {
+    "cmd-alt-1": "guide-agents.focus-1",
+    "cmd-alt-2": "guide-agents.focus-2",
+    "cmd-alt-3": "guide-agents.focus-3",
+    "cmd-alt-4": "guide-agents.focus-4",
+    "cmd-alt-5": "guide-agents.focus-5",
+    "cmd-alt-6": "guide-agents.focus-6",
+    "cmd-alt-7": "guide-agents.focus-7",
+    "cmd-alt-8": "guide-agents.focus-8",
+    "cmd-alt-9": "guide-agents.focus-9",
+    "cmd-shift-o": "layout.toggle:herdsidian",
+    "ctrl-1": "space.select:1",
+    "ctrl-2": "space.select:2",
+    "ctrl-3": "space.select:3",
+    "ctrl-4": "space.select:4",
+    "ctrl-5": "space.select:5",
+    "ctrl-6": "space.select:6",
+    "ctrl-7": "space.select:7",
+    "ctrl-8": "space.select:8",
+    "ctrl-9": "space.select:9",
+    "cmd-alt-[": "space.prev",
+    "cmd-alt-]": "space.next",
+    "cmd-[": "agent.prev",
+    "cmd-]": "agent.next"
+  }
+}
