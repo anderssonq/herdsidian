@@ -12,6 +12,12 @@ to each space, and hand them to an agent with one click.
 
 ![Herdsidian: a Claude Code agent at work, with the vault, the local graph and the notes linked to its space in the Notes sidebar](docs/preview.png)
 
+[![Herdsidian film poster: click to play the 43-second promo film](docs/film-poster.webp)](docs/film.mp4)
+
+**[Watch the 43-second film](docs/film.mp4)** (no sound, demo data): the Notes sidebar, a
+wikilink, the local graph at one and two hops, linking a note to the agent's space with
+Cmd+L, Send to agent pasting @paths into Claude Code's prompt, and the eight themes.
+
 ## Who it's for
 
 - Your agent setup lives in a vault: `CLAUDE.md`-style briefs, agent definitions,
