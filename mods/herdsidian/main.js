@@ -496,7 +496,7 @@ export default class Notes extends View {
     m.agentOnlyAllowed = Boolean(agent);
     m.chips = s.notes.map((n) => ({ path: n.path, label: base(n.path), scope: n.scope }));
     m.suggestions = this.suggestions.filter((p) => !linked.has(p)).map((p) => ({ path: p, label: base(p) }));
-    m.send = canSend({ agent, space: s.space, notes: s.notes });
+    m.send = this.sending ? { ok: false, reason: "Sending…" } : canSend({ agent, space: s.space, notes: s.notes });
     m.picking = this.picking;
     if (this.picking) m.pickHits = matchNotes(this.all, this.pickQuery, 6).map((p) => ({ path: p, label: base(p) }));
     return m;
@@ -611,11 +611,19 @@ export default class Notes extends View {
   // Copy, then focus the agent's terminal and paste; if that cannot apply the text stays copied.
   send(cx) {
     const s = this.scene();
+    if (this.sending) return; // A second click while the first send runs.
     if (!this.vault || !s.agent || !canSend({ agent: s.agent, space: s.space, notes: s.notes }).ok) return;
     const { text, skipped, overflow = 0 } = deliveryText(sendOrder(s.notes, this.center(s.notes)), this.vault, s.agent);
     const left = skipped + overflow, more = left ? ` +${left} not sent` : "";
     if (!text) return notify({ title: `Nothing to send${more}`, level: "warning" });
-    cx.write_to_clipboard(text);
+    this.sending = true;
+    try {
+      cx.notify();
+      cx.write_to_clipboard(text);
+    } catch (e) {
+      this.sending = false; // Never leave Send stuck on "Sending…".
+      throw e;
+    }
     const name = s.agent.program?.name ?? s.agent.app ?? "the agent", address = s.agent.address;
     // run() returns before the focus moves: wait a moment, and paste only when the focus really
     // reached the agent's terminal; otherwise the text stays copied.
@@ -626,6 +634,7 @@ export default class Notes extends View {
         await cx.sleep(50);
         if (focused()?.terminal === address) { run("terminal.paste"); pasted = true; }
       } catch {}
+      finally { this.sending = false; cx.notify(); }
       if (pasted) notify({ title: `Pasted into ${name}. Review and press Enter.${more}`, level: "success" });
       else notify({ title: `Copied. Press ⌘V in the agent.${more}`, level: "info" });
     });

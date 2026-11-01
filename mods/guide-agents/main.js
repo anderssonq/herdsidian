@@ -80,9 +80,18 @@ function tile(t, p, fallback, size, bg) {
     .child(pic ?? div().text_size(big ? 11 : 10).font_semibold().text_color(t.muted).child([...(fallback ?? "")][0]?.toUpperCase() ?? "?"));
 }
 
-// The status badge at a tile's bottom-right corner: an 8 px dot inside a 2 px ring of t.chrome
-// (opaque, so it reads as cut out of the tile; the row's own background is translucent).
-const badge = (t, status) => div().absolute().right(-4).bottom(-4).size(12).flex_none().rounded_full().bg(t.chrome)
+// `over` laid on `base` at opacity `a`, as an opaque "#rrggbb" (inputs "#rrggbb" or "#rrggbbaa").
+// `a` defaults to `over`'s own alpha byte, so a tokens.js color like accentSoft keeps its one source.
+function blend(base, over, a = over.length === 9 ? parseInt(over.slice(7, 9), 16) / 255 : 1) {
+  const ch = (c, i) => parseInt(c.slice(1 + i * 2, 3 + i * 2), 16);
+  return "#" + [0, 1, 2].map((i) => Math.round(ch(base, i) * (1 - a) + ch(over, i) * a).toString(16).padStart(2, "0")).join("");
+}
+
+// The status badge at a tile's bottom-right corner: an 8 px dot inside a 2 px ring, opaque so it
+// reads as cut out of the tile. The ring is t.chrome, or on the focused row (accentSoft over glass)
+// that row's composited color, so it doesn't show as a notch.
+const badge = (t, status, focused) => div().absolute().right(-4).bottom(-4).size(12).flex_none().rounded_full()
+  .bg(focused ? blend(t.chrome, tokens(t).accentSoft) : t.chrome)
   .flex().items_center().justify_center().child(dot(t, status, 8, 0));
 
 export default class Agents extends View {
@@ -224,6 +233,24 @@ export default class Agents extends View {
       .child(this.status(t, { status: st }, compact));
   }
 
+  toggleFold(addr) {
+    this.folded.has(addr) ? this.folded.delete(addr) : this.folded.add(addr);
+  }
+
+  // With sub-agents, the icon tile folds them like the chevron does; without, a click focuses the pane.
+  foldable(el, a, subs) {
+    if (subs.length === 0) return el;
+    return el
+      .id(`agent-fold-${a.address}`)
+      .cursor_pointer()
+      .tooltip(this.folded.has(a.address) ? "Unfold sub-agents" : "Fold sub-agents")
+      .on_click((_e, cx) => {
+        cx.stop_propagation();
+        this.toggleFold(a.address);
+        cx.notify();
+      });
+  }
+
   // compact: a ! for blocked where a header already says "Needs you".
   status(t, a, compact = false) {
     if (a.status === "working") return svg("mods/workspace-chrome/spinner.svg").size(12).mx(1).flex_none().text_color(t.working).spin(900);
@@ -239,7 +266,8 @@ export default class Agents extends View {
     const tk = tokens(t);
     const collapsed = narrow();
     // The 44 px rail has no room for a tile next to the number; the 76 px mac rail has.
-    const railWide = (find(layout(), "sidebar")?.size?.px ?? Infinity) >= 60;
+    // Narrower than 72 px, a two-digit number would run into the tile.
+    const railWide = (find(layout(), "sidebar")?.size?.px ?? Infinity) >= 72;
     const sort = sortOf();
     let list = agents();
     this.listed = new Map(list.map((a) => [a.address, a.status]));
@@ -285,7 +313,7 @@ export default class Agents extends View {
         .hover((s) => s.bg(tk.pill).text_color(t.foreground))
         .on_click((_e, cx) => {
           cx.stop_propagation();
-          open ? this.folded.add(a.address) : this.folded.delete(a.address);
+          this.toggleFold(a.address);
           cx.notify();
         })
         .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(11).flex_none())
@@ -322,7 +350,8 @@ export default class Agents extends View {
           .hover((s) => s.bg(tk.pill))
           .on_click(() => run("pane.focus", { pane: a.pane }))
           .when(railWide, el => el.child(tile(t, a.program, a.program?.name || a.title, 16, tk.pill)))
-          .child(div().flex_1().min_w(0).whitespace_nowrap().text_right().text_color(t.muted).child(String(i + 1)))
+          .child(div().flex_1().min_w(0))
+          .child(div().min_w(16).flex_none().whitespace_nowrap().text_right().text_color(t.muted).child(String(i + 1)))
           .child(h_flex().w(14).flex_none().items_center().justify_center().child(this.status(t, a, true)));
       }
       const when = this.since(a);
@@ -367,7 +396,7 @@ export default class Agents extends View {
           cx.notify();
         })
         .on_click(() => run("pane.focus", { pane: a.pane }))
-        .child(tile(t, a.program, a.program?.name || name, 20, a.focused ? alpha(t.foreground, 0.10) : tk.pill).child(badge(t, a.status)))
+        .child(this.foldable(tile(t, a.program, a.program?.name || name, 20, a.focused ? alpha(t.foreground, 0.10) : tk.pill).child(badge(t, a.status, a.focused)), a, subs))
         .child(v_flex().flex_1().min_w(0).gap(1)
           .child(h_flex().min_w(0).gap(5).items_center()
             .child(div().min_w(0).max_w(full && more ? 120 : 200).truncate().font_weight(a.focused ? 500 : 400).text_color(idle ? t.muted : t.foreground).child(name))

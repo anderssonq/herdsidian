@@ -1,6 +1,6 @@
 {
   "background": "#e1e2e7",
-  "foreground": "#3760bf",
+  "foreground": "#2e4a9e",
   "selection": "#b7c1e3",
   "cursor": "#3760bf",
   "ansi": [
@@ -23,7 +23,7 @@
     "accent_foreground": "#e1e2e7",
     "solid": "#2e7de9",
     "solid_foreground": "#e1e2e7",
-    "ring": "#2e7de9",
+    "ring": "#2563d0",
     "working": "#8c6c3e",
     "blocked": "#c64343",
     "done": "#587539",
