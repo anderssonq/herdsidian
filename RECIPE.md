@@ -7,7 +7,7 @@ each of the eight themes has its own tint. On the left, the spaces and agents
 lists show the shortcut to each row. On the right, a Notes sidebar browses,
 renders and edits the Markdown notes of an Obsidian vault.
 
-![Herdsidian](docs/preview.png)
+![Herdsidian](preview.png)
 
 ## What you see
 
