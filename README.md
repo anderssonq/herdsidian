@@ -1,5 +1,7 @@
 # Herdsidian
 
+![Herdsidian banner: the title over a violet and blue aurora, the tagline "Your vault is your agents' memory. Now it sits right next to them.", and the Herdr window tilted in perspective with a Claude Code agent, the Notes sidebar and floating note cards with wikilinks and an @path](docs/hero.jpg)
+
 **Your Obsidian vault is your agents' memory. Herdsidian puts it next to them.**
 
 A [Herdr](https://herdr.dev) layout for people who run their coding agents from an

@@ -1,0 +1,107 @@
+<!doctype html>
+<!-- The README banner (docs/hero.jpg) and the GitHub social preview (docs/social.jpg).
+     Rebuild from the repo root (macOS, Google Chrome), then export hero.jpg and social.jpg
+     (1280x640) from the PNG at JPEG quality 85-90:
+     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars \
+       --force-device-scale-factor=2 --window-size=1280,640 --screenshot=hero.png "file://$PWD/docs/hero.html"
+     It uses docs/preview.png and system fonts only. -->
+<html><head><meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 640px; overflow: hidden; background: #07080c; }
+  body { font-family: -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif; color: #f4f4f6; position: relative; }
+
+  /* aurora: Obsidian violet meets the Herdsidian blue */
+  .aurora { position: absolute; inset: -20%; filter: blur(70px); opacity: .95; }
+  .aurora i { position: absolute; border-radius: 50%; display: block; }
+  .a1 { width: 760px; height: 520px; left: -60px; top: 120px; background: radial-gradient(closest-side, #7c3aed 0%, #7c3aed00 100%); }
+  .a2 { width: 900px; height: 620px; left: 700px; top: 0px; background: radial-gradient(closest-side, #3b82f6 0%, #2f7cf600 100%); }
+  .a3 { width: 520px; height: 380px; left: 420px; top: 520px; background: radial-gradient(closest-side, #c026d3cc 0%, #c026d300 100%); }
+  .a4 { width: 420px; height: 300px; left: 1080px; top: 520px; background: radial-gradient(closest-side, #22d3ee99 0%, #22d3ee00 100%); }
+
+  /* the link graph as a constellation behind everything */
+  svg.stars { position: absolute; inset: 0; opacity: .55; }
+
+  /* horizon light under the screenshot */
+  .horizon { position: absolute; left: 470px; right: -60px; top: 540px; height: 2px;
+    background: linear-gradient(90deg, #0000, #8fb8ff, #c4a5ff, #0000); filter: blur(1px); opacity: .9; }
+  .horizon-glow { position: absolute; left: 520px; right: 0; top: 500px; height: 120px;
+    background: radial-gradient(closest-side, #6d8cff55, #0000); filter: blur(10px); }
+
+  /* the real app, tilted into the scene */
+  .stage { position: absolute; left: 575px; top: 92px; width: 740px; perspective: 1700px; }
+  .shot { width: 740px; border-radius: 14px; overflow: hidden; transform: rotateY(-17deg) rotateX(5deg) rotateZ(-1.5deg);
+    transform-origin: left center;
+    box-shadow: 0 0 0 1px #ffffff26, 0 0 0 2px #7c3aed33, 0 30px 80px -10px #000c, 0 0 120px -20px #5b7cfacc; }
+  .shot img { display: block; width: 100%; }
+  .shot::after { content: ""; position: absolute; inset: 0; border-radius: 14px;
+    background: linear-gradient(115deg, #ffffff1f 0%, #ffffff00 38%, #0000 70%, #00000059 100%); }
+
+  /* floating glass notes */
+  .note { position: absolute; padding: 11px 15px 12px; border-radius: 12px; font-size: 14px; line-height: 1.45;
+    background: linear-gradient(160deg, #ffffff1c, #ffffff08); border: 1px solid #ffffff2e;
+    box-shadow: 0 18px 40px -12px #000b, inset 0 1px 0 #ffffff26; backdrop-filter: blur(14px); color: #e9e9f2; }
+  .note b { display: block; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #b9b3ff; margin-bottom: 4px; font-weight: 600; }
+  .note code { font-family: "SF Mono", Menlo, monospace; font-size: 13px; color: #9cc3ff; }
+  .wl { color: #b4a3ff; font-weight: 600; }
+  .n1 { left: 488px; top: 404px; transform: rotate(-3deg); }
+  .n2 { left: 905px; top: 26px; transform: rotate(2deg); }
+  .n3 { left: 1040px; top: 468px; transform: rotate(-1.5deg); }
+
+  /* copy */
+  .copy { position: absolute; left: 72px; top: 150px; width: 470px; }
+  .kicker { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 600; letter-spacing: .14em;
+    text-transform: uppercase; color: #cfc8ff; padding: 6px 12px; border-radius: 99px; border: 1px solid #ffffff26; background: #ffffff0d; }
+  .kicker i { width: 7px; height: 7px; border-radius: 50%; background: #4c9df3; box-shadow: 0 0 10px #4c9df3; }
+  h1 { margin-top: 22px; font-size: 92px; line-height: .95; font-weight: 800; letter-spacing: -.045em;
+    background: linear-gradient(100deg, #ffffff 0%, #e7e2ff 45%, #a5b4fc 75%, #7dd3fc 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 6px 30px #7c3aed66); }
+  .tag { margin-top: 22px; font-size: 27px; line-height: 1.25; font-weight: 600; letter-spacing: -.015em; color: #f1f0fa; }
+  .tag em { font-style: normal; background: linear-gradient(90deg, #c4b5fd, #7dd3fc); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sub { margin-top: 14px; font-size: 16px; line-height: 1.5; color: #a9a9bd; width: 420px; }
+
+  /* cinema: vignette, letterbox fade and grain */
+  .vignette { position: absolute; inset: 0; background: radial-gradient(120% 90% at 55% 45%, #0000 55%, #000000b3 100%); }
+  .bars { position: absolute; inset: 0; background: linear-gradient(#000000d9 0, #0000 40px, #0000 600px, #000000d9 640px); }
+  svg.grain { position: absolute; inset: 0; opacity: .13; mix-blend-mode: overlay; }
+</style></head>
+<body>
+  <div class="aurora"><i class="a1"></i><i class="a2"></i><i class="a3"></i><i class="a4"></i></div>
+
+  <svg class="stars" viewBox="0 0 1280 640">
+    <g stroke="#b8b5ff" stroke-opacity=".28" stroke-width="1">
+      <line x1="60" y1="70" x2="190" y2="40"/><line x1="190" y1="40" x2="330" y2="96"/><line x1="330" y1="96" x2="470" y2="52"/>
+      <line x1="190" y1="40" x2="250" y2="118"/><line x1="40" y1="560" x2="150" y2="600"/><line x1="150" y1="600" x2="300" y2="566"/>
+      <line x1="300" y1="566" x2="420" y2="610"/><line x1="150" y1="600" x2="210" y2="530"/>
+    </g>
+    <g fill="#e0dcff">
+      <circle cx="60" cy="70" r="2.2"/><circle cx="190" cy="40" r="3.2"/><circle cx="330" cy="96" r="2.4"/><circle cx="470" cy="52" r="2"/>
+      <circle cx="250" cy="118" r="1.8"/><circle cx="40" cy="560" r="2"/><circle cx="150" cy="600" r="3"/><circle cx="300" cy="566" r="2.2"/>
+      <circle cx="420" cy="610" r="1.8"/><circle cx="210" cy="530" r="2"/>
+    </g>
+    <g fill="#ffffff" opacity=".6">
+      <circle cx="520" cy="30" r="1"/><circle cx="700" cy="22" r="1.2"/><circle cx="880" cy="40" r=".9"/><circle cx="120" cy="300" r="1"/>
+      <circle cx="30" cy="420" r=".8"/><circle cx="560" cy="620" r="1"/><circle cx="1230" cy="300" r="1"/><circle cx="1180" cy="610" r="1.2"/>
+    </g>
+  </svg>
+
+  <div class="horizon-glow"></div>
+  <div class="stage"><div class="shot"><img src="preview.png"></div></div>
+  <div class="horizon"></div>
+
+  <div class="note n1"><b>Acme API</b>Rules: <span class="wl">[[Code Style]]</span> · <span class="wl">[[Testing]]</span><br>Traps: <span class="wl">[[Rate limiting]]</span></div>
+  <div class="note n2"><b>Send to agent</b><code>@Projects/Acme API.md</code></div>
+  <div class="note n3"><b>herdsidian:</b><code>~/code/acme-api</code></div>
+
+  <div class="copy">
+    <span class="kicker"><i></i>Obsidian × Herdr</span>
+    <h1>Herdsidian</h1>
+    <p class="tag">Your vault is your agents' <em>memory</em>.<br>Now it sits right next to them.</p>
+    <p class="sub">Read, link and send your notes to Claude Code, Codex and every agent you run in Herdr.</p>
+  </div>
+
+  <div class="vignette"></div>
+  <div class="bars"></div>
+  <svg class="grain" viewBox="0 0 1280 640"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="3" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="1280" height="640" filter="url(#n)"/></svg>
+</body></html>
