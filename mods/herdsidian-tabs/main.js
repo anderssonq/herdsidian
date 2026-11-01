@@ -6,18 +6,9 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
-import { alpha, tokens, statusDot, PULSE, HIGHLIGHT } from "./tokens.js";
-import { glow, icon } from "./ui.js";
+import { alpha, tokens, HIGHLIGHT } from "./tokens.js";
+import { glow, icon, dot } from "./ui.js";
 import { find } from "./layout.js";
-
-// A status dot: a fill, or a ring for idle; a working dot pulses.
-const dot = (t, status, size) => {
-  const d = statusDot(t, status);
-  return div().size(size).flex_none().rounded_full()
-    .when(d.fill, el => el.bg(d.fill))
-    .when(d.ring, el => el.border(1.5).border_color(d.ring))
-    .when(d.pulse, el => el.loop("opacity", PULSE));
-};
 
 export default class Tabs extends View {
   init() {
@@ -66,7 +57,8 @@ export default class Tabs extends View {
       .when(tip, el => el.tooltip(tip))
       .on_mouse_down("left", stop).on_click(action).child(label);
     const item = (c, i) => {
-      const program = panes().find(p => p.tab === c.id && p.program?.agent)?.program ?? panes().find(p => p.tab === c.id)?.program;
+      const mine = panes().filter(p => p.tab === c.id);
+      const program = (mine.find(p => p.program?.agent) ?? mine[0])?.program;
       const name = /^tb\d+$/.test(c.name) ? program?.name ?? "Terminal" : c.name;
       return h_flex().id(`tab-${c.id}`).h(28).px(12).gap(8).rounded(7).items_center().flex_none().text_size(12.8)
         .border_t(1).border_color(c.active ? HIGHLIGHT : alpha(t.foreground, 0))

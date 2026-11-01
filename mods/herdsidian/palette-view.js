@@ -11,8 +11,8 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, Input, TextView } from "gpui-base";
 import { keycap } from "./graph-view.js";
-import { tokens, statusDot, PULSE } from "./tokens.js";
-import { icon } from "./ui.js";
+import { tokens } from "./tokens.js";
+import { icon, dot } from "./ui.js";
 import { ROW, LIST_MAX } from "./palette.js";
 
 export const PLACEHOLDER = "Search notes, agents and commands…";
@@ -26,14 +26,6 @@ const PREVIEW_HEIGHT = 200;
 
 const text12 = (t, tone, s) => div().px(10).h(ROW.title).flex().items_center().flex_none().text_size(12).text_color(tone === "blocked" ? t.blocked : t.muted).child(s);
 
-function dot(t, status) {
-  const d = statusDot(t, status);
-  return div().size(8).flex_none().rounded(8)
-    .when(Boolean(d.fill), (el) => el.bg(d.fill))
-    .when(Boolean(d.ring), (el) => el.border(1.5).border_color(d.ring))
-    .when(d.pulse, (el) => el.loop("opacity", PULSE));
-}
-
 // One selectable row's frame: the selected one has the accentSoft fill; hover never selects (AC22).
 function frame(k, m, row, on, height) {
   return h_flex().id(`row-${row.key}`).h(height).px(10).gap(8).items_center().flex_none().rounded(8).cursor_pointer()
@@ -45,7 +37,7 @@ function agentRow(t, k, m, row, on) {
   const a = row.agent ?? {};
   const prog = icon(a.program, 14, t.foreground);
   return frame(k, m, row, on, ROW.row)
-    .child(dot(t, a.status))
+    .child(dot(t, a.status, 8))
     .child(prog ?? div().flex_none().text_size(12.5).text_color(t.foreground).child(a.program?.name ?? row.label))
     .when(Boolean(a.space_name), (el) => el.child(div().flex_none().text_size(12.5).text_color(t.foreground).child(a.space_name)))
     .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(t.muted).child(a.title ? `— ${a.title}` : (row.detail ? `— ${row.detail}` : "")))

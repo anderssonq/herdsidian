@@ -3,22 +3,10 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, window, layout, nextCommand } from "herdr";
-import { alpha, tokens, statusDot, PULSE } from "./tokens.js";
-import { icon } from "./ui.js";
-import { find } from "./layout.js";
-
-// The sidebar's rail goes by its width, not a flag: dragging its edge narrows it too.
-const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
-
-// To the rail (on macOS wide enough for the traffic lights), or back to the width it had.
-function toggleSidebar() {
-  const width = find(layout(), "sidebar")?.size?.px;
-  if (!narrow()) setShared("sidebar.width", width);
-  // Mods edited before the rail went by width still read the flag.
-  setShared("sidebar.collapsed", !narrow());
-  run("layout.resize", { id: "sidebar", px: narrow() ? (shared("sidebar.width") ?? 248) : window()?.platform === "macos" ? 76 : 44 });
-}
+import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, layout, nextCommand } from "herdr";
+import { alpha, tokens } from "./tokens.js";
+import { icon, dot } from "./ui.js";
+import { find, narrow, toggleSidebar } from "./layout.js";
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 
@@ -57,19 +45,6 @@ function duration(ms) {
 }
 
 const STATUS_TEXT = { working: "Working", blocked: "Needs your input", done: "Done", idle: "Idle" };
-
-// The status dot: a fill, or a ring for idle; working pulses.
-function dot(t, status, size, margin) {
-  const d = statusDot(t, status);
-  return div()
-    .size(size)
-    .mx(margin)
-    .flex_none()
-    .rounded(size)
-    .when(Boolean(d.fill), (el) => el.bg(d.fill))
-    .when(Boolean(d.ring), (el) => el.border(1.5).border_color(d.ring))
-    .when(d.pulse, (el) => el.loop("opacity", PULSE));
-}
 
 // The agent's icon tile: the program icon centered, else the first letter of `fallback`.
 // 20 px (radius 6, 13 px icon) for main rows, 16 px (radius 5, 11 px icon) for sub-agents and the rail.

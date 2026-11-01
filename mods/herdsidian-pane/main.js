@@ -7,8 +7,8 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { panes, props, run, theme, home } from "herdr";
-import { tokens, statusDot, PULSE, HIGHLIGHT } from "./tokens.js";
-import { icon } from "./ui.js";
+import { tokens, HIGHLIGHT } from "./tokens.js";
+import { icon, dot } from "./ui.js";
 
 function folder(cwd) {
   if (!cwd) return "";
@@ -45,7 +45,7 @@ export default class Pane extends View {
     const name = ((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || "shell";
     const st = p.status;
     const pane = p.pane;
-    const dot = st === "working" || st === "done" ? statusDot(t, st) : null;
+    const live = st === "working" || st === "done";
     return h_flex()
       .id(`pane-head-${pane}`)
       .size_full()
@@ -61,8 +61,7 @@ export default class Pane extends View {
       .when(Boolean(p.program?.icon), el => el.child(icon(p.program, 14, t.muted)))
       .child(div().flex_none().truncate().max_w(260).font_medium().text_color(t.foreground).child(name))
       .child(div().flex_1().truncate().text_color(t.muted).child(folder(p.cwd)))
-      .when(dot, el => el.child(div().size(6).flex_none().rounded_full().bg(dot.fill)
-        .when(dot.pulse, d => d.loop("opacity", PULSE))))
+      .when(live, el => el.child(dot(t, st, 6)))
       .when(st === "blocked", el => el.child(div().flex_none().px(6).h(18).flex().items_center().rounded(5).bg(k.blockedSoft).border(1).border_color(t.blocked).text_size(10.5).font_semibold().text_color(t.foreground).child("Needs you")))
       .when(this.hovered, el => el
         .child(this.button(t, k, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }))
