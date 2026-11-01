@@ -1,7 +1,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -59,6 +59,28 @@ test("extractLinks trims targets and keeps order and duplicates", () => {
   assert.deepEqual(extractLinks("[[ B ]] [[A]] [[B]]"), ["B", "A", "B"]);
 });
 
+const FENCED = "[[Out1]]\n```js\n[[In1]]\n```\n[[Out2]]\n~~~\n[[In2]]\n~~~\n[[Out3]]\n";
+const INLINE = "a [[Out1]] `[[In1]]` b ``[[In2]] ` [[In3]]`` c [[Out2]]\n";
+
+test("extractLinks skips wikilinks inside fenced blocks and inline code", () => {
+  assert.deepEqual(extractLinks(FENCED), ["Out1", "Out2", "Out3"]);
+  assert.deepEqual(extractLinks(INLINE), ["Out1", "Out2"]);
+  assert.deepEqual(extractLinks("`[[A]]` and an unclosed ` tick [[B]]"), ["B"]);
+});
+
+test("extractLinks and render agree on every link, inside code or not", () => {
+  for (const text of [FENCED, INLINE, "[[A|x]] ![[b.png]] ![[C]] [[D#h]]", "````\n```\n[[In]]\n````\n[[Out]]"]) {
+    assert.deepEqual(extractLinks(text), rendered(text));
+  }
+});
+
+test("graph.js reads wikilinks with the pattern and embed test of notes.js, not its own copy", () => {
+  const source = readFileSync(new URL("../mods/herdsidian/graph.js", import.meta.url), "utf8");
+  assert.equal(source.includes("\\[\\["), false);
+  assert.match(source, /WIKILINK/);
+  assert.match(source, /isFileEmbed/);
+});
+
 // ---- AC39: chunks
 
 test("chunks splits 2,500 paths into 3 chunks of at most 1,000", () => {
@@ -106,6 +128,58 @@ test("INDEX_AWK reads CRLF notes without carriage returns", () => {
   assert.equal(run.stdout.includes("\r"), false);
   assert.deepEqual(files.get("sub/c.md").front, ["tags:", "- t1"]);
   assert.deepEqual(files.get("sub/c.md").targets, ["A"]);
+});
+
+test("INDEX_AWK skips wikilinks inside fenced blocks and inline code", () => {
+  writeFileSync(join(vault, "fenced.md"), FENCED);
+  writeFileSync(join(vault, "inline.md"), INLINE);
+  writeFileSync(join(vault, "tricky.md"), "````\n```\n[[In]]\n````\n[[Out]]\n  ```\n[[In2]]\n  ```\n`[[In3]]`\n");
+  const { run, files } = runAwk(["fenced.md", "inline.md", "tricky.md"]);
+  assert.equal(run.status, 0);
+  assert.deepEqual(files.get("fenced.md").targets, ["Out1", "Out2", "Out3"]);
+  assert.deepEqual(files.get("inline.md").targets, ["Out1", "Out2"]);
+  assert.deepEqual(files.get("tricky.md").targets, ["Out"]);
+});
+
+// Fixtures where code and links meet; extractLinks and INDEX_AWK must read each the same way.
+const CODE_CORPUS = {
+  "m1.md": "```npm i``` first.\nSee [[Setup]]\n",
+  "m1b.md": "``` `x`\n[[InFence]]\n```\n[[AfterFence]]\n",
+  "m1c.md": "~~~ `x`\n[[InTilde]]\n~~~\n[[AfterTilde]]\n",
+  "m2.md": "```\n[[In1]]\n```~~\n[[In2]]\n```\n[[Out]]\n",
+  "alias.md": "See [[Note|alias `c` x]] now [[Kept]]\n",
+  "lone.md": "a ` [[B]] and ``[[C]]`` [[D]]\n",
+  "plain.md": "[[A|x]] ![[b.png]] ![[C]] [[D#h]]\n",
+};
+
+test("INDEX_AWK reads a line that starts with an inline code span as prose, not a fence", () => {
+  writeFileSync(join(vault, "m1.md"), CODE_CORPUS["m1.md"]);
+  const { files } = runAwk(["m1.md"]);
+  assert.deepEqual(files.get("m1.md").targets, ["Setup"]);
+  assert.deepEqual(extractLinks(CODE_CORPUS["m1.md"]), ["Setup"]);
+});
+
+test("INDEX_AWK does not close a fence with a line that mixes backticks and tildes", () => {
+  writeFileSync(join(vault, "m2.md"), CODE_CORPUS["m2.md"]);
+  const { files } = runAwk(["m2.md"]);
+  assert.deepEqual(files.get("m2.md").targets, ["Out"]);
+  assert.deepEqual(extractLinks(CODE_CORPUS["m2.md"]), ["Out"]);
+});
+
+test("INDEX_AWK lets a code span inside a link split it, as render does", () => {
+  writeFileSync(join(vault, "alias.md"), CODE_CORPUS["alias.md"]);
+  const { files } = runAwk(["alias.md"]);
+  assert.deepEqual(files.get("alias.md").targets, ["Kept"]);
+  assert.deepEqual(extractLinks(CODE_CORPUS["alias.md"]), ["Kept"]);
+});
+
+test("INDEX_AWK and extractLinks give the same links for every code fixture", () => {
+  for (const [name, text] of Object.entries(CODE_CORPUS)) writeFileSync(join(vault, name), text);
+  const { files } = runAwk(Object.keys(CODE_CORPUS));
+  for (const [name, text] of Object.entries(CODE_CORPUS)) {
+    assert.deepEqual(files.get(name).targets, extractLinks(text), name);
+  }
+  for (const text of [FENCED, INLINE]) assert.deepEqual(extractLinks(text), rendered(text));
 });
 
 test("INDEX_AWK skips a missing file and still reads the others", () => {

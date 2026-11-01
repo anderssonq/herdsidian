@@ -72,6 +72,40 @@ test("render treats an embedded .md as a note and keeps an embed's alias", () =>
   assert.equal(render("![[Git|see git]]"), "[see git](note:Git)");
 });
 
+test("render leaves wikilinks inside fenced blocks as written", () => {
+  assert.equal(render("[[A]]\n```js\n[[B]]\n```\n[[C]]"), "[A](note:A)\n```js\n[[B]]\n```\n[C](note:C)");
+  assert.equal(render("~~~\n[[B]]\n~~~\n[[C]]"), "~~~\n[[B]]\n~~~\n[C](note:C)");
+  assert.equal(render("````\n```\n[[B]]\n````\n[[C]]"), "````\n```\n[[B]]\n````\n[C](note:C)");
+  assert.equal(render("```\n[[B]]\n[[C]]"), "```\n[[B]]\n[[C]]");
+});
+
+test("render reads a line starting with an inline code span as prose, not a fence", () => {
+  assert.equal(render("```npm i``` first.\nSee [[Setup]]\n"), "```npm i``` first.\nSee [Setup](note:Setup)\n");
+  // The first line is a span, so the lone ``` after [[B]] is what opens a fence.
+  assert.equal(render("``` `x`\n[[B]]\n```\n[[C]]"), "``` `x`\n[B](note:B)\n```\n[[C]]");
+});
+
+test("render does not close a fence with a line that mixes backticks and tildes", () => {
+  assert.equal(render("```\n[[B]]\n```~~\n[[C]]\n```\n[[D]]"), "```\n[[B]]\n```~~\n[[C]]\n```\n[D](note:D)");
+});
+
+test("render leaves a wikilink alone when a code span cuts it", () => {
+  assert.equal(render("[[Note|alias `c` x]] [[K]]"), "[[Note|alias `c` x]] [K](note:K)");
+});
+
+test("render leaves wikilinks inside inline code as written", () => {
+  assert.equal(render("`[[B]]` [[C]]"), "`[[B]]` [C](note:C)");
+  assert.equal(render("``[[B]] ` [[D]]`` [[C]]"), "``[[B]] ` [[D]]`` [C](note:C)");
+  assert.equal(render("a ` [[C]]"), "a ` [C](note:C)");
+});
+
+test("render escapes parentheses so a note named 'Smile :)' round-trips through linkTarget", () => {
+  const out = render("[[Smile :)]] and [[f(x)]]");
+  assert.equal(out, "[Smile :)](note:Smile%20%3A%29) and [f(x)](note:f%28x%29)");
+  const urls = [...out.matchAll(/\]\((note:[^)]*)\)/g)].map((m) => m[1]);
+  assert.deepEqual(urls.map(linkTarget), ["Smile :)", "f(x)"]);
+});
+
 test("linkTarget handles an empty link and an encoded #", () => {
   assert.equal(linkTarget("note:"), "");
   assert.equal(linkTarget("note:a%23b"), "a");

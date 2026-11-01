@@ -274,7 +274,7 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
 <summary>Development</summary>
 
 The pure logic runs under Node with no Herdr imports: `mods/herdsidian/notes.js`
-(Markdown, wikilinks), `graph.js` (link index, neighborhood, layout) and `context.js`
+(Markdown, wikilinks; wikilinks inside code are ignored), `graph.js` (link index, neighborhood, layout) and `context.js`
 (context links, suggestions, Send text). The palette adds `palette.js` (ranking, key
 hints, lists) and `send.js` (the paste sequence), also pure. `io.js`, `graph-view.js`,
 `palette-main.js` and `palette-view.js` need Herdr.
@@ -290,13 +290,14 @@ checks that the core it talks to is its own before it starts any agent, so your 
 settings and vault stay out of it. The README images come from it.
 
 Three files in `lib/` are canonical: `tokens.js` (theme colors with alpha), `ui.js` (top
-sheen, program icons) and `layout.js` (the `find` tree helper). A mod folder installs on
+sheen, program icons, status dot) and `layout.js` (the `find` tree helper and the sidebar
+rail helpers `narrow` and `toggleSidebar`; it imports Herdr). A mod folder installs on
 its own, so each mod that uses one carries a byte-identical copy. After editing one, copy
 it into every mod that has it; `npm run lint` fails if a copy differs.
 
 ```sh
 cp lib/tokens.js mods/<mod>/tokens.js
-cp lib/ui.js mods/<mod>/ui.js          # herdsidian-chrome, herdsidian-tabs, herdsidian-pane, guide-agents
+cp lib/ui.js mods/<mod>/ui.js          # herdsidian, herdsidian-chrome, herdsidian-tabs, herdsidian-pane, guide-agents
 cp lib/layout.js mods/<mod>/layout.js  # herdsidian, herdsidian-chrome, herdsidian-tabs, guide-agents, guide-spaces
 ```
 

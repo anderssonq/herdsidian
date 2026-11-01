@@ -32,14 +32,22 @@ export function tier(text, query) {
 }
 
 // The set of matchNotes(all, query, Infinity), best first: tier, linked, shorter name, path.
-export function rankNotes(all, query, linked = new Set()) {
+// Same order as rankNotes, but each entry keeps its tier: [{ path, tier }].
+export function rankNotesTiered(all, query, linked = new Set()) {
   const scored = matchNotes(all, query, Infinity).map((path) => {
     const name = base(path);
     return { path, tier: tier(name, query), linked: linked.has(path) ? 0 : 1, len: name.length };
   });
   scored.sort((a, b) => a.tier - b.tier || a.linked - b.linked || a.len - b.len || byCode(a.path, b.path));
-  return scored.map((s) => s.path);
+  return scored.map(({ path, tier: t }) => ({ path, tier: t }));
 }
+
+export const rankNotes = (all, query, linked = new Set()) => rankNotesTiered(all, query, linked).map((s) => s.path);
+
+// The write target of a space: what the context file keys a link by. null without a space or vault.
+export const spaceWhere = (space, vault, agent) => (space && vault
+  ? { space: space.id, name: space.name, folder: space.folder, vault, ...(agent ? { address: agent.address } : {}) }
+  : null);
 
 const isBlank = (query) => query.trim() === "";
 
@@ -174,9 +182,7 @@ export function commandList({ vault, notesHidden, space, starter, bindings, layo
 // The target space's context: { where, linked: Set, contextPaths }. target = { agent, space, liveIds? }.
 export function scene({ doc, target, vault, cwd, auto, all, home }) {
   const { agent = null, space = null, liveIds = [] } = target ?? {};
-  const where = space && vault
-    ? { space: space.id, name: space.name, folder: space.folder, vault, ...(agent ? { address: agent.address } : {}) }
-    : null;
+  const where = spaceWhere(space, vault, agent);
   const entry = where ? findEntry(doc, where, liveIds) : null;
   const links = autoLinks(autoMeta(auto, vault), cwd, home);
   const contextPaths = contextNotes(entry, agent?.address ?? null, links, new Set(all)).map((n) => n.path);
@@ -228,7 +234,7 @@ function emptyQueryNotes(notes, contextPaths, limit, fillRest) {
 
 // The ranked note rows for a non-empty query. The caller may memoize this apart from the agent rows.
 export function rankNoteRows(notes, query, linked) {
-  return rankNotes(notes, query.trim(), linked).map((p) => noteRow(p, tier(base(p), query.trim())));
+  return rankNotesTiered(notes, query.trim(), linked).map((r) => noteRow(r.path, r.tier));
 }
 
 // -> { top, sections, pickable, empty }. `rankedNotes` (from rankNoteRows) skips the ranking when given.
