@@ -199,6 +199,7 @@
     19
   ],
   "theme": "hs_carbon",
+  "preview": "layouts/herdsidian.svg",
   "terminal_opacity": 1,
   "ui_font": ".AppleSystemUIFont"
 }

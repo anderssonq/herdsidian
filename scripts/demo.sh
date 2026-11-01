@@ -98,7 +98,7 @@ work=$home/code
 # The layout, themes, mods and keys, installed into the demo's home.
 mkdir -p "$dir"/{app/layouts,app/themes,app/mods,app/data/herdsidian,cfg,rt} "$dir/st/herdsidian" "$work"
 chmod 700 "$dir/rt"
-cp "$repo"/layouts/herdsidian.json "$dir/app/layouts/"
+cp "$repo"/layouts/herdsidian.{json,svg} "$dir/app/layouts/"
 cp "$repo"/themes/hs_*.json "$dir/app/themes/"
 for m in "$repo"/mods/*(/); do rm -rf "$dir/app/mods/${m:t}" && cp -R "$m" "$dir/app/mods/${m:t}"; done
 cp "$repo/keys.json" "$dir/app/keys.json"

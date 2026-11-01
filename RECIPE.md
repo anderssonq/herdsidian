@@ -7,7 +7,7 @@ each of the eight themes has its own tint. On the left, the spaces and agents
 lists show the shortcut to each row. On the right, a Notes sidebar browses,
 renders and edits the Markdown notes of an Obsidian vault.
 
-<!-- ![Herdsidian](preview.png) pending -->
+![Herdsidian](preview.png)
 
 ## What you see
 
@@ -244,7 +244,9 @@ Look (layout root):
 
 ## Built from
 
-- Files: `layouts/herdsidian.json`, `themes/hs_carbon.json` (the layout's
+- Files: `layouts/herdsidian.json` (its root `"preview"` is
+  `layouts/herdsidian.svg`, the picture in Settings → Look: copy it too),
+  `themes/hs_carbon.json` (the layout's
   `"theme"`: copy it too, or the theme doesn't resolve),
   `themes/hs_midnight.json` (Tokyo Night: background `#1a1b26`,
   foreground `#c0caf5`, accent `#7aa2f7`),

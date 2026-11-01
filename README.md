@@ -96,7 +96,8 @@ Then press `⌘⇧O` and **Choose a vault**.
 <details>
 <summary>By hand</summary>
 
-1. Copy `layouts/herdsidian.json`, the eight files in `themes/` and the seven folders in
+1. Copy `layouts/herdsidian.json` and `layouts/herdsidian.svg` (its picture in
+   Settings → Look), the eight files in `themes/` and the seven folders in
    `mods/` into `~/.config/herdr-app/` (same paths). If you installed an earlier
    version, remove the old `themes/herdsidian_*.json` files.
 2. Merge the `layout:herdsidian` and `mod:herdsidian` sections of `keys.json` into
