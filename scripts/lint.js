@@ -95,6 +95,21 @@ for (const p of modFiles.filter((p) => p.endsWith(".js") && !shared(p))) {
   });
 }
 
+// Guards on the mod sources. Both report file and line.
+// 1. herdr's `window` import shadows the gpui global (F2): paint_path must go through globalThis.
+// 2. Notes never submits to an agent: it pastes only (AC27), so no send/keys/Enter/task calls.
+const paintPath = /(?<!globalThis\.)\bwindow\.paint_path/;
+const submitCall = /terminal\.(send|keys)\b|hc\(\s*\[\s*["'](send|keys)["']|["']enter["']|\btask\s*:/;
+for (const p of modFiles.filter((p) => p.endsWith(".js"))) {
+  const inNotes = /^mods\/herdsidian\/[^/]+\.js$/.test(relative(root, p));
+  readFileSync(p, "utf8").split("\n").forEach((line, i) => {
+    if (paintPath.test(line)) {
+      fail(p, `line ${i + 1}: use globalThis.window.paint_path (herdr's window import shadows the gpui global, F2)`);
+    }
+    if (inNotes && submitCall.test(line)) fail(p, `line ${i + 1}: Send to agent must paste, never submit (AC27)`);
+  });
+}
+
 // Nothing personal in what gets shared.
 for (const p of all.filter((p) => /\.(js|json|md)$/.test(p))) {
   if (/\/Users\/|\/home\/[a-z]/.test(readFileSync(p, "utf8"))) fail(p, "contains an absolute home path");

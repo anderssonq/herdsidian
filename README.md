@@ -10,12 +10,17 @@ Carbon** theme), and a sidebar that shows the shortcut to every space and agent.
 
 ## What you get
 
-- **Four color themes**, picked in Settings → Look:
-  - `herdsidian_carbon` (default): neutral blacks and greys, one blue accent
+- **Eight color themes** (four dark, four light), picked in Settings → Look:
+  - `hs_carbon` (default): neutral blacks and greys, one blue accent
     (`#4c9df3`), in the style of the Cursor IDE.
-  - `herdsidian_midnight`: Tokyo Night colors.
-  - `herdsidian_catppuccin`: Catppuccin Mocha colors, mauve accent.
-  - `herdsidian_nord`: Nord colors, frost cyan accent.
+  - `hs_midnight`: Tokyo Night colors.
+  - `hs_catppuccin`: Catppuccin Mocha colors, mauve accent.
+  - `hs_nord`: Nord colors, frost cyan accent.
+  - `hs_carbon_light`: neutral whites and greys, blue accent (`#005fb8`), in
+    the style of VS Code Light Modern.
+  - `hs_midnight_light`: Tokyo Night Day colors.
+  - `hs_catppuccin_light`: Catppuccin Latte colors, mauve accent.
+  - `hs_nord_light`: Nord Snow Storm background, frost blue accent.
   The glass follows the theme: every color of the layout comes from it.
 - **Glass look**: a gradient of the theme's colors shows through the sidebar,
   the toolbar, the status bar and the Notes sidebar. Terminals are solid cards
@@ -34,6 +39,29 @@ Carbon** theme), and a sidebar that shows the shortcut to every space and agent.
     or Overwrite.
   - Collapse it to an icon rail and expand it back, like the left sidebar.
   - Works with any folder of Markdown notes, not only Obsidian vaults.
+- **Graph** (bottom of the Notes panel): the local graph of the open note (or
+  of the first context note) at 1 or 2 hops, up to 40 nodes, with "+N more"
+  for the rest. Drag to pan, scroll to zoom, click a node to open the note.
+  Hop-2 labels show on hover or at zoom 1.5 or more. Labels are placed by
+  priority, hidden when they would overlap, and cut at 90 px with an
+  ellipsis. You can hide it. The hidden state and the hop count are
+  remembered.
+- **Agent context**: link notes to a space, with extras for one agent.
+  - Link with `⌘L` (the open note, or the picker when no note is open), with
+    "Add current note", or with the picker. With no note open, `⌘L` opens the
+    picker without moving the keyboard focus; a click focuses it.
+    Suggestions show faded: one click pins them.
+  - A context file from a newer Herdsidian is shown in the strip and never
+    overwritten.
+  - The optional frontmatter key `herdsidian: <path or list>` links a note
+    automatically when an agent works in that folder.
+  - **Send to agent** pastes the paths into the agent's prompt, only after
+    the focus has reached the agent's terminal; otherwise it only copies. It
+    never presses Enter. Claude Code gets `@path`, other agents get the plain path,
+    and a path with spaces goes in double quotes. It sends at most 600
+    characters, the center note first; "+N not sent" counts the rest. The
+    paths stay on the clipboard. If pasting fails it only copies and says
+    "press ⌘V". It is off for remote spaces.
 - **Shortcut guide** (`guide-spaces` and `guide-agents` mods): each space shows
   `⌃1…⌃9` and each agent `⌘⌥1…⌘⌥9`, and the list headers summarise the keys.
 
@@ -45,6 +73,7 @@ Carbon** theme), and a sidebar that shows the shortcut to every space and agent.
 | `⌘K` | Open the search picker |
 | `⌘E` | In a note: switch between Read and Edit |
 | `⌘S` | In a note: save |
+| `⌘L` | Link the open note to the focused agent's space (Notes must be shown) |
 | `⌃1` … `⌃9` | Go to space 1–9 |
 | `⌘⌥[` / `⌘⌥]` | Previous / next space |
 | `⌘⌥1` … `⌘⌥9` | Go to agent 1–9, in the order of the Agents list |
@@ -61,8 +90,10 @@ Ask your agent, from a Herdr terminal:
 
 Or by hand:
 
-1. Copy `layouts/herdsidian.json`, the four files in `themes/` and the seven
-   folders in `mods/` into `~/.config/herdr-app/` (same paths).
+1. Copy `layouts/herdsidian.json`, the eight files in `themes/` and the seven
+   folders in `mods/` into `~/.config/herdr-app/` (same paths). Themes were
+   renamed from `herdsidian_*` to `hs_*`: remove the old
+   `themes/herdsidian_*.json` files if you installed an earlier version.
 2. Merge `keys.json` into `~/.config/herdr-app/keys.json`: add its
    `layout:herdsidian` and `mod:herdsidian` sections. The keys only apply while
    the Herdsidian layout is shown, except `⌘S`/`⌘E`, which only apply while
@@ -94,8 +125,12 @@ Then bind a key to it in `keys.json`, for example
 ## What it touches
 
 - `herdsidian` reads and writes only inside the vault you choose. It runs `sh`
-  and `find` to list notes, and `open` (macOS) or `xdg-open` (Linux) for
-  web links.
+  and `find` to list notes, `awk` to read their links, `git` to find an
+  agent's repo folder, and `open` (macOS) or `xdg-open` (Linux) for web
+  links.
+- It also writes `${XDG_STATE_HOME:-~/.local/state}/herdsidian/context.json`
+  (the context links; machine-local, not in the vault). Send to agent puts
+  paths on the clipboard and pastes them into the agent's terminal.
 - `guide-spaces` and `guide-agents` are Herdr's own `spaces` and `agents`
   with shortcut hints added: like the originals, `guide-spaces` runs `git` and
   `hc machine ls` and watches your spaces' repo folders.
@@ -109,8 +144,10 @@ Then bind a key to it in `keys.json`, for example
 
 ## Limits
 
-- No backlinks, tags, graph or image embeds (`![[image.png]]` shows its file
-  name). Rename, delete and new folders are left to Obsidian.
+- No tags, no whole-vault graph and no image embeds (`![[image.png]]` shows
+  its file name). Rename, delete and new folders are left to Obsidian.
+- The context file is not reloaded live: a change from another Herdr window
+  shows after you relink or reopen.
 - The note list and search cover up to 5,000 notes.
 - Built and tested on macOS; the keys use `⌘`. Linux should work but is
   untested; Windows is not supported (folders are listed with `sh`).
@@ -119,9 +156,12 @@ See [RECIPE.md](RECIPE.md) for exactly what it does and how it is built.
 
 ## Development
 
-The mod's pure logic (Markdown rendering, wikilink resolution, ignored
-folders) lives in `mods/herdsidian/notes.js`, with no Herdr imports, so it
-runs under Node:
+The mod's pure logic lives in `mods/herdsidian/notes.js` (Markdown rendering,
+wikilink resolution, ignored folders), `graph.js` (link index, neighborhood,
+layout, zoom) and `context.js` (context links, suggestions, Send text), with
+no Herdr imports, so it runs under Node. `io.js` and `graph-view.js` need
+Herdr. Tests: `tests/notes.test.js`, `graph.test.js`, `context.test.js`.
+Building the index of 5,000 notes takes about 70 ms in the tests.
 
 ```sh
 npm test       # node --test, no dependencies
@@ -143,8 +183,9 @@ cp lib/layout.js mods/<mod>/layout.js  # herdsidian, herdsidian-chrome, herdsidi
 `npm run lint` fails if a copy differs.
 
 The "Needs you" chip (pane header and agents list) uses `foreground` text on
-`blockedSoft` with a 1 px `blocked` border, so it passes contrast in all four
-themes.
+`blockedSoft` with a 1 px `blocked` border, so it passes contrast (4.5:1) in
+seven of the eight themes. In `hs_midnight_light` it is 3.34:1, because Tokyo
+Night Day's own text color is only 4.5:1 on its background.
 
 Changes to the mods themselves are checked in Herdr with `herdr-app check`.
 

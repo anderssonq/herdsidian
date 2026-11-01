@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { GLOW_ANGLE, HIGHLIGHT, PULSE, alpha, statusDot, tokens } from "../lib/tokens.js";
 
 const theme = {
-  chrome: "#1a1a1a", canvas: "#0a0a0a", foreground: "#eeeeee", accent: "#4c9df3",
+  chrome: "#1a1a1a", canvas: "#0a0a0a", foreground: "#eeeeee", muted: "#a8a8a8", accent: "#4c9df3",
   blocked: "#e5484d", working: "#f5a524", done: "#3fae6a", idle: "#808080", unknown: "#555555",
 };
 
@@ -40,4 +40,12 @@ test("statusDot picks fill, ring and pulse per status", () => {
   assert.deepEqual(statusDot(theme, "done"), { fill: theme.done, ring: null, pulse: false });
   assert.deepEqual(statusDot(theme, "idle"), { fill: null, ring: theme.idle, pulse: false });
   assert.deepEqual(statusDot(theme, "weird"), { fill: theme.unknown, ring: null, pulse: false });
+});
+
+test("graph tokens carry their alpha suffixes", () => {
+  const k = tokens(theme);
+  assert.equal(k.node, "#a8a8a8");
+  assert.equal(k.nodeFar, "#a8a8a8cc");
+  assert.equal(k.edge, "#eeeeee38");
+  assert.equal(k.edgeHot, "#eeeeee");
 });

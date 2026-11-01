@@ -100,3 +100,33 @@ test("scans the ui.js copies for hex literals", () => {
   assert.match(r.stderr, /mods\/herdsidian-chrome\/ui\.js: line \d+: hex literal #123456/);
   assert.doesNotMatch(r.stderr, /differs from lib/);
 });
+
+const notes = "mods/herdsidian/main.js";
+
+test("rejects window.paint_path without globalThis", () => {
+  const r = lintWith(pane, "window.paint_path(1)");
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /mods\/herdsidian-pane\/main\.js: line \d+: use globalThis\.window\.paint_path/);
+});
+
+test("accepts globalThis.window.paint_path", () => {
+  const r = lintWith(pane, "globalThis.window.paint_path(1)");
+  assert.equal(r.code, 0, r.stderr);
+});
+
+test("rejects terminal.send in mods/herdsidian", () => {
+  const r = lintWith(notes, 'run("terminal.send", {})');
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /mods\/herdsidian\/main\.js: line \d+: Send to agent must paste, never submit/);
+});
+
+test("rejects an Enter key in mods/herdsidian", () => {
+  const r = lintWith(notes, '"enter"');
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /Send to agent must paste, never submit/);
+});
+
+test("allows terminal.send outside mods/herdsidian (the rule is scoped)", () => {
+  const r = lintWith(pane, 'run("terminal.send", {})');
+  assert.equal(r.code, 0, r.stderr);
+});

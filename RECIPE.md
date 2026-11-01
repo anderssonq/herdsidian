@@ -3,7 +3,7 @@
 Herdsidian puts an Obsidian vault inside Herdr, in its own layout: the
 Graphite Glass look. Sidebars and bars are tinted glass over a gradient of the
 active theme, and panes are solid cards. Every color comes from the theme, so
-each of the four themes has its own tint. On the left, the spaces and agents
+each of the eight themes has its own tint. On the left, the spaces and agents
 lists show the shortcut to each row. On the right, a Notes sidebar browses,
 renders and edits the Markdown notes of an Obsidian vault.
 
@@ -73,8 +73,10 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
    - Header 52 px: vault folder name (semibold), a `⌘⇧O` key cap, then 28 px
      icon buttons: search, new note, choose vault, collapse (`panel-right`).
    - No vault yet: the title is "Notes", the search button is hidden, and the
-     body reads "Pick the folder of your Obsidian vault (or any folder of
-     Markdown notes)." above a `solid` "Choose a vault" button (`pickFolder`).
+     body reads "Choose a folder of Markdown notes, or create an empty one to
+     start. An Obsidian vault works too; Obsidian is not needed." above a
+     `solid` "Choose a vault" button (`pickFolder`). The graph section is not
+     shown until a vault is chosen.
    - Search box (when open): 30 px, radius 8, no border, `foreground` at 6 % fill.
    - Tree rows 28 px, radius 7, 16 px indent per level: chevron + a 16 px
      folder icon (`accent`, filled body), or a file icon and the note's name
@@ -84,9 +86,17 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      with `Read` / `Edit` pills (22 px, radius 5), `⌘E` cap, a 7 px `working`
      dot when there are unsaved changes, `Save` and `⌘S` cap.
    - Rail (width under 160 px): expand, search and new-note icons in a column.
+   - Graph section at the bottom: a header with a hide toggle, a `1 | 2` hops
+     pill, "+N more" when nodes were cut, and a fit button. The body is the
+     local graph of the open note (or the first context note): up to 40 nodes,
+     edges and the center node. Hop-2 labels show
+     on hover or at zoom 1.5 or more.
+   - Agent context block: the focused agent's label, its linked notes (chips
+     with unlink), faded suggestions (one click pins), "Add current note", a
+     picker (`Find a note to link…`) and a Send button.
 
 Look (layout root):
-- Theme `herdsidian_carbon` (default): background `#181818`, foreground
+- Theme `hs_carbon` (default): background `#181818`, foreground
   `#d6d6dd`, selection `#2f3a4a`, accent `#4c9df3`, canvas `#0e0e0e`, chrome
   `#121212`, border `#2a2a2a`, ANSI red `#f14c4c`, green `#3fbf8f`, yellow
   `#e5b95c`, blue `#4c9df3`.
@@ -131,21 +141,58 @@ Look (layout root):
   - New note: `Untitled.md` (or `Untitled N.md`) at the vault root, opened
     in Edit.
   - Collapse: resizes the block to 44 px and remembers the width it had.
+  - Graph: built from `[[wikilinks]]` (and note embeds) found by `awk`, with
+    backlinks derived. The center is the open note, else the first context
+    note. 1 or 2 hops, at most 40 nodes (hop 1 before hop 2, the more
+    connected first); the rest shows as "+N more". Drag pans, the wheel zooms
+    (0.5 to 2), a click on a node opens the note. Hide state and hops are kept
+    in `localStorage` (`graph.hidden`, `graph.hops`).
+  - Context: notes link to the space, with per-agent extras. `⌘L` links the
+    open note, or opens the picker when no note is open. A note's frontmatter
+    key `herdsidian: <path or list>` auto-links it when the agent's folder is
+    that path or inside it (`~` is expanded). Suggestions (space or repo name,
+    recent notes, alias or tag match; at most 6) are faded; one click pins.
+  - Links live in `${XDG_STATE_HOME:-~/.local/state}/herdsidian/context.json`,
+    machine-local and not in the vault (ADR-0002). Unknown keys in the file
+    are kept on write.
+  - Send to agent: pastes paths and never presses Enter. Claude Code gets
+    `@path`, other agents the plain path; a path with spaces is in double
+    quotes. At most 600 characters (the `@` and quotes count), center note
+    first, then the agent's pins, the space's notes, then auto links. "+N not
+    sent" counts what did not fit. The text stays on the clipboard. If the
+    paste fails, it only copies and the notice says "press ⌘V". Disabled for
+    remote spaces.
 
 ## Built from
 
-- Files: `layouts/herdsidian.json`, `themes/herdsidian_carbon.json` (the layout's
+- Files: `layouts/herdsidian.json`, `themes/hs_carbon.json` (the layout's
   `"theme"`: copy it too, or the theme doesn't resolve),
-  `themes/herdsidian_midnight.json` (Tokyo Night: background `#1a1b26`,
+  `themes/hs_midnight.json` (Tokyo Night: background `#1a1b26`,
   foreground `#c0caf5`, accent `#7aa2f7`),
-  `themes/herdsidian_catppuccin.json` (Catppuccin Mocha: background `#1e1e2e`,
-  foreground `#cdd6f4`, accent `#cba6f7`) and `themes/herdsidian_nord.json`
-  (Nord: background `#2e3440`, foreground `#d8dee9`, accent `#88c0d0`) as
-  alternatives in Settings → Look, the seven mods, `lib/tokens.js`, and
+  `themes/hs_catppuccin.json` (Catppuccin Mocha: background `#1e1e2e`,
+  foreground `#cdd6f4`, accent `#cba6f7`), `themes/hs_nord.json`
+  (Nord: background `#2e3440`, foreground `#d8dee9`, accent `#88c0d0`) and
+  their light versions `themes/hs_carbon_light.json` (VS Code Light Modern
+  style: background `#ffffff`, foreground `#3b3b3b`, accent `#005fb8`),
+  `themes/hs_midnight_light.json` (Tokyo Night Day: background `#e1e2e7`,
+  foreground `#3760bf`, accent `#2563d0`, muted `#47569a`; `ring` and `solid`
+  stay `#2e7de9`),
+  `themes/hs_catppuccin_light.json` (Catppuccin Latte: background `#eff1f5`,
+  foreground `#4c4f69`, accent `#8839ef`) and `themes/hs_nord_light.json`
+  (Nord Snow Storm: background `#eceff4`, foreground `#2e3440`, accent
+  `#5e81ac`) as alternatives in Settings → Look, the seven mods, `lib/tokens.js`, and
   `keys.json` to merge into the person's.
 - Themes: Nord's `chrome`, `muted` and `blocked` were adjusted so text and
-  dots pass contrast on the glass. `idle` is lighter in all four themes so
+  dots pass contrast on the glass. `idle` is lighter in the four dark themes so
   the idle ring reads on the selected row. The ANSI colors are untouched.
+- Light themes: `working`, `blocked` and `done` use the darker shades of each
+  palette so the dots read on a light background (3:1 on `chrome`). Latte has
+  no dark enough yellow or green: `working` is its yellow darkened to
+  `#b8740f` and `done` is its teal `#179299`. Tokyo Night Day `blocked` is its
+  `red1` `#c64343`. Nord has no official light
+  variant: `hs_nord_light` reverses the palette (Snow Storm background, Polar
+  Night text) and darkens the Aurora green and yellow and the Frost cyan in
+  its ANSI colors so terminal text stays readable.
 - Layout: a clone of Herdr's `main` with the root look above, `spaces` →
   `guide-spaces`, `agents` → `guide-agents`, `tabs` → `herdsidian-tabs`, the
   pane header → `herdsidian-pane`, `workspace-status` → `herdsidian-status`,
@@ -166,13 +213,31 @@ Look (layout root):
 
 - `guide-agents` stores the shown list in `this.order` and reads
   `nextCommand()` for `focus-N`.
-- `herdsidian`: `main.js` (the View) and `notes.js` (pure helpers: `render`,
-  `resolve`, `linkTarget`, `hidden`, `base`, `HIDDEN`, tested by `tests/notes.test.js`).
-  From `herdr`: `exec` (`sh` to list a folder, `find` for every note,
-  `open` for web links), `readTextFile`, `writeTextFile(path, text,
-  expected)` for conflict-safe saves, `watchFolder`, `pickFolder`,
-  `localStorage` (`vault`, `width`), `nextCommand`, `run("layout.resize")`,
-  `layout()`. From `gpui-base`: `TextView.markdown(...).on_link_click`,
+- `herdsidian`: `main.js` (the View), `notes.js` (pure helpers: `render`,
+  `resolve`, `linkTarget`, `hidden`, `base`, `HIDDEN`, tested by `tests/notes.test.js`),
+  and four new files:
+  - `graph.js` (pure): the `awk` program and its output parser, `buildIndex`,
+    `updateIndex`, `neighborhood` (cap `MAX_NODES` = 40), `layout`,
+    `toScreen`, `zoomAt` (`ZOOM` 0.5 to 2), `sectionMessage`, `missingRaw`,
+    `placeLabels`, `fitLabel`, `estimateWidth`, `LABEL`. Labels are placed by
+    priority, hidden when they would overlap, and cut at 90 px with an
+    ellipsis. Tested by
+    `tests/graph.test.js`.
+  - `context.js` (pure): `parseContext`, `serializeContext`, `change`,
+    `findEntry`, `autoLinks`, `contextNotes`, `suggest`, `deliveryText`
+    (`MAX_SEND_CHARS` = 600), `sendOrder`, `emptyDoc`, `pickAgent`, `canSend`. Tested by
+    `tests/context.test.js`.
+  - `io.js`: the Herdr side of both. `stateDir`, `loadContext`, `saveContext`
+    (retries on a stale snapshot), `indexNotes` (one `awk` call per chunk of
+    1,000 files) and `gitTop` (`git rev-parse --show-toplevel`).
+  - `graph-view.js`: the Graph section and the Agent context block.
+  From `herdr`: `exec` (`sh` to list a folder and to read `XDG_STATE_HOME`,
+  `find` for every note, `awk`, `git`, `open` for web links), `readTextFile`,
+  `writeTextFile(path, text, expected)` for conflict-safe saves,
+  `watchFolder`, `pickFolder`, `localStorage` (`vault`, `width`,
+  `graph.hidden`, `graph.hops`, `recent:<vault>`), `nextCommand`,
+  `run("layout.resize")`, `run("pane.focus")`, `run("terminal.paste")`,
+  `agents()`, `layout()`, `notify`, and `cx.write_to_clipboard`. From `gpui-base`: `TextView.markdown(...).on_link_click`,
   `EditorState` + `Editor`, `InputState` + `Input`.
 - `lib/tokens.js`: the one place where theme colors get their alpha.
   `alpha(color, a)` takes `#rrggbb` or `#rrggbbaa` and returns a full
@@ -180,7 +245,8 @@ Look (layout root):
   `glass` (`chrome` 55 %), `mainGlass` (`canvas` 35 %), `line` (`foreground`
   7 %), `pill` (`foreground` 6 %, also hover), `accentSoft` (`accent` 18 %),
   `glow` (`foreground` 5 %, the top sheen), `glowEnd` (`foreground` 0 %), `blockedSoft` (`blocked`
-  15 %). Constants: `HIGHLIGHT` (`#ffffff0d`), `PULSE` and `GLOW_ANGLE`
+  15 %), `node` (`muted`), `nodeFar` (`muted` 80 %), `edge` (`foreground`
+  22 %, decorative) and `edgeHot` (`foreground`). Constants: `HIGHLIGHT` (`#ffffff0d`), `PULSE` and `GLOW_ANGLE`
   (180). `HAIRLINE`, `tokens().workingLine` and `tokens().highlight` were
   removed (nothing used them; mods import `HIGHLIGHT` directly).
   `statusDot(theme, status)` gives the dot recipe (fill or ring, pulse).
@@ -207,9 +273,9 @@ Look (layout root):
 - Keys: `layout:herdsidian` (`cmd-shift-o` → `layout.toggle:herdsidian`,
   `cmd-k` → `mod.open:picker`, `cmd-alt-1..9` → `guide-agents.focus-N`,
   `ctrl-1..9` → `space.select:N`, `cmd-alt-[`/`]` → `space.prev`/`next`,
-  `cmd-[`/`]` → `agent.prev`/`next`, so every shortcut the sidebar shows
-  works) and `mod:herdsidian` (`cmd-s` → `herdsidian.save`, `cmd-e` →
-  `herdsidian.mode`).
+  `cmd-[`/`]` → `agent.prev`/`next`, `cmd-l` → `herdsidian.link`, so every
+  shortcut the sidebar shows works) and `mod:herdsidian` (`cmd-s` →
+  `herdsidian.save`, `cmd-e` → `herdsidian.mode`).
 
 ## Watch out
 
@@ -257,13 +323,37 @@ Look (layout root):
   snapshot (conflict) from another error.
 - `<mod>.<command>` keys reach shown copies only: `⌘S`/`⌘E` do nothing while
   Notes is hidden.
+- `⌘L` (`herdsidian.link`) is a `<mod>.<command>` key too: it works only
+  while Notes is shown.
+- Herdr cannot type into a terminal without pressing Enter, so Send pastes
+  (`pane.focus` then `terminal.paste`). Notes never calls `terminal.send` or
+  `keys`; `npm run lint` rejects them in `mods/herdsidian`.
+- Claude Code collapses a paste of about 1,200 characters into
+  `[Pasted text]`. Send stops at 600 to stay well under it.
+- The paths stay on the clipboard after Send, by design.
+- Wikilinks split across two lines are not indexed (`awk` reads line by
+  line).
+- Use `globalThis.window.paint_path` for the graph. Herdr's `window` import
+  shadows the gpui global; `npm run lint` rejects a bare `window.paint_path`.
+- No per-frame animation. The layout is computed once, in `cx.spawn` (off
+  the render path), and render only reads the result. Never start work from
+  `render`.
+- The context file is not live-reloaded: a link made in another Herdr window
+  shows only after this one reloads it.
+- Graph marks reach at least 3:1 and muted labels at least 4.5:1 in all
+  eight themes (the `edge` line is decorative).
+- `⌘L` with no note open opens the picker without moving the keyboard focus;
+  a click focuses it. Send pastes only after the focus has reached the
+  agent's terminal (it waits 50 ms after `pane.focus`), otherwise it only
+  copies. A context file from a newer Herdsidian is shown in the strip and
+  never overwritten.
 - Clicks in Settings → Look are saved in `layouts/.state/` and win over the
   layout file. If `terminal_opacity` or the pane look is not what the file
   says, check `herdr-app status` and re-save the layout file.
 
 ## Done when
 
-- The four `themes/herdsidian_*.json` are in `~/.config/herdr-app/themes/`
+- The eight `themes/hs_*.json` are in `~/.config/herdr-app/themes/`
   and show in Settings → Look.
 - `herdr-app check` passes for all seven mods: `herdsidian`,
   `herdsidian-chrome`, `guide-spaces`, `guide-agents`, `herdsidian-tabs`,
@@ -277,3 +367,11 @@ Look (layout root):
 - Editing the file from a shell while it has unsaved edits, then `⌘S`,
   shows the conflict banner and leaves the file untouched.
 - Collapse makes a 44 px rail; expand brings back the previous width.
+- The Graph shows the open note's links at 1 and 2 hops (40 nodes at most),
+  pans, zooms and opens a note on click; hide and hops survive a restart.
+- `⌘L` links the open note; `context.json` appears under
+  `${XDG_STATE_HOME:-~/.local/state}/herdsidian/`, not in the vault.
+- Send pastes `@path` into Claude Code (plain path for others), never
+  presses Enter, and leaves the paths on the clipboard.
+- `npm test` passes (`graph.test.js`, `context.test.js`; the 5,000-note index
+  builds in about 70 ms) and `npm run lint` exits 0.

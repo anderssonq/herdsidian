@@ -15,6 +15,7 @@
     "cmd-alt-9": "guide-agents.focus-9",
     "cmd-shift-o": "layout.toggle:herdsidian",
     "cmd-k": "mod.open:picker",
+    "cmd-l": "herdsidian.link",
     "ctrl-1": "space.select:1",
     "ctrl-2": "space.select:2",
     "ctrl-3": "space.select:3",
