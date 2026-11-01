@@ -1,6 +1,25 @@
-# Herdsidian
+<p align="center">
+  <img src="docs/hero.jpg" width="760" alt="Herdsidian banner: the title over a violet and blue aurora, the tagline &quot;Your vault is your agents' memory. Now it sits right next to them.&quot;, and the Herdr window with a Claude Code agent and the Notes sidebar" />
+</p>
 
-![Herdsidian banner: the title over a violet and blue aurora, the tagline "Your vault is your agents' memory. Now it sits right next to them.", and the Herdr window tilted in perspective with a Claude Code agent, the Notes sidebar and floating note cards with wikilinks and an @path](docs/hero.jpg)
+<p align="center"><i>‹ your vault, next to your agents ›</i></p>
+
+<p align="center">
+  <a href="https://herdr.dev"><img src="https://img.shields.io/badge/Herdr-layout-7aa2f7" alt="Herdr layout" /></a>
+  <img src="https://img.shields.io/badge/Obsidian-vault-7C3AED?logo=obsidian&logoColor=white" alt="Obsidian vault" />
+  <img src="https://img.shields.io/badge/Claude%20Code-ready-D97757?logo=claude&logoColor=white" alt="Claude Code ready" />
+  <img src="https://img.shields.io/badge/macOS-tested-000000?logo=apple&logoColor=white" alt="Tested on macOS" />
+  <img src="https://img.shields.io/badge/tests-node%20--test-5FA04E?logo=nodedotjs&logoColor=white" alt="Tests with node --test" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-78a9ff" alt="MIT license" /></a>
+</p>
+
+<p align="center">
+  <img src="docs/demo.gif" width="760" alt="Herdsidian demo: the Notes sidebar, the local graph, linking a note to the agent's space, Send to agent pasting @paths into Claude Code, and the themes" />
+</p>
+
+<p align="center"><sub>20-second cut, demo data. <a href="docs/film.mp4">Full film (MP4, 43 s)</a></sub></p>
+
+---
 
 **Your Obsidian vault is your agents' memory. Herdsidian puts it next to them.**
 
@@ -12,11 +31,7 @@ to each space, and hand them to an agent with one click.
 
 ![Herdsidian: a Claude Code agent at work, with the vault, the local graph and the notes linked to its space in the Notes sidebar](docs/preview.png)
 
-[![Herdsidian film poster: click to play the 43-second promo film](docs/film-poster.webp)](docs/film.mp4)
-
-**[Watch the 43-second film](docs/film.mp4)** (no sound, demo data): the Notes sidebar, a
-wikilink, the local graph at one and two hops, linking a note to the agent's space with
-Cmd+L, Send to agent pasting @paths into Claude Code's prompt, and the eight themes.
+---
 
 ## Who it's for
 
@@ -26,6 +41,8 @@ Cmd+L, Send to agent pasting @paths into Claude Code's prompt, and the eight the
   app away.
 - You want the agent to start from the right notes, and the notes to keep up with what the
   agents learn.
+
+---
 
 ## The loop
 
@@ -63,6 +80,8 @@ herdsidian: ~/code/acme-api
 # Acme API
 ```
 
+---
+
 ## Features
 
 - **Notes sidebar.** Folders, notes and search on the right. Read mode renders
@@ -84,6 +103,8 @@ herdsidian: ~/code/acme-api
   `hs_nord`, and a light version of each.
 
 ![The eight themes](docs/themes.png)
+
+---
 
 ## Install
 
@@ -138,6 +159,8 @@ Then bind a key in `keys.json`, for example
 
 </details>
 
+---
+
 ## Keys
 
 | Keys | What it does |
@@ -159,6 +182,8 @@ Then bind a key in `keys.json`, for example
 `⌘E` and `⌘S` live in the `mod:herdsidian` section and work only while the Notes panel
 has the keyboard. The rest live in `layout:herdsidian`, so your keys in other layouts
 don't change.
+
+---
 
 ## The ⌘K palette
 
@@ -192,6 +217,8 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
 - **Missing vault.** If the vault folder is gone or cannot be listed, the Notes section
   shows the error instead of an empty list.
 
+---
+
 ## What it isn't
 
 - **Not an Obsidian replacement.** No tags view, no whole-vault graph, no image embeds
@@ -199,6 +226,8 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
 - **Not a sync tool.** It reads and writes the files in place. Obsidian, git and your
   agents see the same files.
 - **Not online.** Nothing reaches the network.
+
+---
 
 ## What it runs and stores
 
@@ -227,6 +256,8 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
   and `herdsidian-status` are restyled copies of Herdr's `spaces`, `agents`,
   `workspace-chrome`, `tabs`, `pane` and `workspace-status` (0.1.10), with the same
   behavior. `guide-spaces` runs `git` and `hc machine ls` like the original.
+
+---
 
 ## Known gaps
 
@@ -273,6 +304,8 @@ Check mod changes in Herdr with `herdr-app check`. The "Needs you" chip (`foregr
 `blockedSoft`, 1 px `blocked` border) passes 4.5:1 contrast in all eight themes.
 
 </details>
+
+---
 
 ## License
 
