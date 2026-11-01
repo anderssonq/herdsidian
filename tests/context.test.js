@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   parseContext, serializeContext, findEntry, applyChange, expandHome, autoLinks, contextNotes, normName,
   suggest, matchNotes, isClaude, deliveryText, quoteAtOutside, quoteAtInside, MAX_SEND_CHARS, pickAgent, canSend, pushRecent, sendOrder,
+  pendingRequest, shouldReload, changedJson,
 } from "../mods/herdsidian/context.js";
 
 const where = { space: "s1", name: "work", folder: "/r/work", vault: "/v" };
@@ -486,4 +487,39 @@ test("sendOrder keeps the input order within a scope and ignores a center that i
 test("sendOrder drops duplicates and keeps the first scope", () => {
   const notes = [n("a", "space"), n("a", "agent"), n("b", "auto")];
   assert.deepEqual(sendOrder(notes, "b"), [n("b", "auto"), n("a", "space")]);
+});
+
+const NOW = 1_000_000;
+const req = (extra = {}) => ({ id: "r1", op: "open", path: "a.md", vault: "/v", at: NOW - 100, ...extra });
+
+test("pendingRequest: a fresh request is handled once", () => {
+  assert.deepEqual(pendingRequest(req(), null, "/v", NOW), { action: "open", id: "r1" });
+  assert.equal(pendingRequest(req(), "r1", "/v", NOW).action, "none");
+  assert.deepEqual(pendingRequest(req({ op: "choose-vault", path: undefined }), null, "/v", NOW), { action: "choose-vault", id: "r1" });
+});
+
+test("pendingRequest: an old or malformed request is ignored", () => {
+  assert.equal(pendingRequest(req({ at: NOW - 5000 }), null, "/v", NOW).action, "none");
+  assert.equal(pendingRequest(req({ at: NOW + 1 }), null, "/v", NOW).action, "none");
+  assert.equal(pendingRequest(req({ at: undefined }), null, "/v", NOW).action, "none");
+  assert.equal(pendingRequest(req({ op: "open", path: "" }), null, "/v", NOW).action, "none");
+  assert.deepEqual(pendingRequest(null, null, "/v", NOW), { action: "none", id: null });
+});
+
+test("pendingRequest: a note of another vault gives other-vault", () => {
+  assert.deepEqual(pendingRequest(req({ vault: "/other" }), null, "/v", NOW), { action: "other-vault", id: "r1" });
+});
+
+test("shouldReload only when context-rev changed", () => {
+  assert.equal(shouldReload(2, 1), true);
+  assert.equal(shouldReload(1, 1), false);
+  assert.equal(shouldReload(undefined, null), false);
+  assert.equal(shouldReload(1, null), true);
+});
+
+test("changedJson compares by value and treats undefined as null", () => {
+  assert.equal(changedJson({ a: [1] }, { a: [1] }), false);
+  assert.equal(changedJson({ a: [1] }, { a: [2] }), true);
+  assert.equal(changedJson(undefined, null), false);
+  assert.equal(changedJson(undefined, "/v"), true);
 });

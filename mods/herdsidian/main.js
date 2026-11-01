@@ -6,15 +6,23 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, TextView } from "gpui-base";
 import { HIDDEN, base, hidden, render, linkTarget, resolve } from "./notes.js";
 import { exec, readTextFile, writeTextFile, watchFolder, pickFolder, theme, settings, nextCommand, run, layout, window,
-  agents, panes, spaces, focused, home, notify } from "herdr";
+  agents, panes, spaces, focused, home, notify, props, shared, setShared } from "herdr";
 import { alpha, tokens } from "./tokens.js";
 import { find } from "./layout.js";
 import { buildIndex, updateIndex, missingRaw, neighborhood, layout as ringLayout, toScreen, zoomAt, sectionMessage, placeLabels, AREA } from "./graph.js";
-import { emptyDoc, findEntry, autoLinks, contextNotes, suggest, deliveryText, sendOrder, pickAgent, canSend, pushRecent, matchNotes } from "./context.js";
-import { stateDir, loadContext, saveContext, indexNotes, gitTop } from "./io.js";
+import { emptyDoc, findEntry, autoLinks, contextNotes, suggest, deliveryText, sendOrder, pickAgent, canSend, pushRecent, matchNotes,
+  pendingRequest, shouldReload, changedJson } from "./context.js";
+import { stateDir, loadContext, saveContext, indexNotes, gitTop, allNotes } from "./io.js";
 import { graphSection, keycap } from "./graph-view.js";
+import { sendText, sendToasts } from "./send.js";
+import { autoFromIndex } from "./palette.js";
+import { Palette } from "./palette-main.js";
 
-const MAX_NOTES = 5000;
+// The ⌘K palette is another copy of this mod; the two copies talk through shared() keys (ADR-0003).
+// A key is written only when its value changed, so a write never wakes the other copy for nothing.
+const publish = (key, value) => {
+  if (changedJson(shared(key), value)) setShared(key, value);
+};
 
 const NO_META = new Map();
 const leaf = (path) => (path ?? "").split("/").filter(Boolean).pop() ?? "";
@@ -38,17 +46,17 @@ async function directory(path) {
   return out.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
 }
 
-// Every note in the vault, as paths relative to it: for search and wikilinks.
-async function allNotes(vault) {
-  const prune = [...HIDDEN].flatMap((n, i) => [...(i ? ["-o"] : []), "-name", n]);
-  const r = await exec("find", [vault, "(", ...prune, ")", "-prune", "-o", "-type", "f", "-iname", "*.md", "-print"]);
-  return r.stdout.split("\n").filter(Boolean).map((p) => p.slice(vault.length + 1)).sort().slice(0, MAX_NOTES);
-}
-
 export default class Notes extends View {
   init(_props, cx) {
+    // The palette popup is a copy of this mod: it starts none of the Notes work below.
+    if (props()?.overlay) { this.palette = new Palette(cx); return; }
     // No vault until one is chosen: the panel asks for it.
     this.vault = localStorage.getItem("vault");
+    publish("herdsidian.vault", this.vault);
+    // A fresh request is left to the first render; an old one was already handled.
+    const request = shared("herdsidian.request");
+    this.handled = pendingRequest(request, null, this.vault, Date.now()).action === "none" ? request?.id ?? null : null;
+    this.contextRev = shared("herdsidian.context-rev") ?? null;
     this.entries = new Map(); this.folders = new Set(); this.all = [];
     this.note = null; this.mode = "read"; this.query = ""; this.searching = false; this.generation = 0;
     this.search = InputState.new({ placeholder: "Find a note…" });
@@ -68,15 +76,7 @@ export default class Notes extends View {
     this.pick = InputState.new({ placeholder: "Find a note to link…" });
     this.pick.on("change", (_e, cx) => { this.pickQuery = this.pick.value().trim(); cx.notify(); });
     this.on = this.callbacks();
-    cx.spawn(async (cx) => {
-      try {
-        this.stateDir = await stateDir();
-        const loaded = await loadContext(this.stateDir);
-        this.ctx = { status: loaded.status, doc: loaded.doc };
-        if (loaded.status === "unsupported") this.ctxError = "Cannot save the agent context: the context file is from a newer Herdsidian";
-      } catch (e) { this.ctxError = String(e); }
-      cx.notify();
-    });
+    this.loadCtx(cx);
 
     this.load(cx);
     this.watch(cx);
@@ -92,6 +92,46 @@ export default class Notes extends View {
         cx.notify();
       }
     });
+  }
+
+  // The context file, read off the UI thread: at start, and again when the palette changed it.
+  loadCtx(cx) {
+    cx.spawn(async (cx) => {
+      try {
+        this.stateDir ??= await stateDir();
+        const loaded = await loadContext(this.stateDir);
+        this.ctx = { status: loaded.status, doc: loaded.doc };
+        if (loaded.status === "unsupported") this.ctxError = "Cannot save the agent context: the context file is from a newer Herdsidian";
+      } catch (e) { this.ctxError = String(e); }
+      cx.notify();
+    });
+  }
+
+  // What the palette asked for through shared(); a request id is handled once. Called from render,
+  // so the work runs in a spawn after the render (no notify or state change inside it).
+  handleShared(cx) {
+    const request = shared("herdsidian.request");
+    const { action, id } = pendingRequest(request, this.handled, this.vault, Date.now());
+    if (request && id !== this.handled) {
+      this.handled = id;
+      cx.spawn(async (cx) => {
+        await cx.sleep(0);
+        if (action === "open") {
+          if (narrow()) this.collapse(); // ↵ in the palette: show the note, not just the rail (AC23).
+          this.open(request.path, cx);
+        } else if (action === "other-vault") notify({ title: `Note is in another vault: ${leaf(request.vault)}`, level: "warning" });
+        else if (action === "choose-vault") this.chooseVault(cx);
+        cx.notify();
+      });
+    }
+    const rev = shared("herdsidian.context-rev") ?? null;
+    if (shouldReload(rev, this.contextRev)) {
+      this.contextRev = rev;
+      cx.spawn(async (cx) => {
+        await cx.sleep(0);
+        this.loadCtx(cx);
+      });
+    }
   }
 
   // The tree's open folders and the note list. A folder gone since it was opened closes.
@@ -149,7 +189,7 @@ export default class Notes extends View {
           const raw = files.length ? await indexNotes(vault, files) : new Map();
           if (gen === this.indexGen) { this.index = updateIndex(this.index, all, raw); this.indexVer++; }
         }
-        if (gen === this.indexGen) this.indexError = null;
+        if (gen === this.indexGen) { this.indexError = null; publish("herdsidian.auto", autoFromIndex(this.index?.meta, vault)); }
       } catch (e) { if (gen === this.indexGen) this.indexError = String(e); }
       if (gen !== this.indexGen) return;
       this.indexing = false;
@@ -198,6 +238,7 @@ export default class Notes extends View {
     if (this.dirty) return this.leave((cx) => { this.close(); this.setVault(path, cx); }, cx);
     this.close();
     localStorage.setItem("vault", path);
+    publish("herdsidian.vault", path);
     this.vault = path; this.entries = new Map(); this.folders = new Set(); this.all = []; this.selected = null;
     this.searching = false; this.query = ""; this.error = null; this.search.set_value("");
     // Another vault: its own index, graph, view and recent notes.
@@ -252,7 +293,9 @@ export default class Notes extends View {
     });
   }
 
-  close() {
+  // Also Herdr's teardown hook, called with cx when a popup copy closes: the palette answers first.
+  close(cx) {
+    if (this.palette) return this.palette.closed(cx);
     this.editor?.release();
     this.editor = null; this.note = null; this.dirty = false; this.conflict = false; this.asking = null;
   }
@@ -429,6 +472,7 @@ export default class Notes extends View {
     const all = spaces();
     const picked = pickAgent({ agents: agents(), focused: focused(), spaces: all, memory: this.agentMemory });
     this.agentMemory = picked.memory;
+    publish("herdsidian.memory", picked.memory);
     const agent = picked.agent, space = all.find((s) => s.id === picked.spaceId) ?? null;
     const cwd = agent ? panes().find((p) => p.pane === agent.pane)?.cwd ?? null : null;
     return { agent, space, cwd, liveIds: all.map((s) => s.id) };
@@ -614,33 +658,15 @@ export default class Notes extends View {
     if (this.sending) return; // A second click while the first send runs.
     if (!this.vault || !s.agent || !canSend({ agent: s.agent, space: s.space, notes: s.notes }).ok) return;
     const { text, skipped, overflow = 0 } = deliveryText(sendOrder(s.notes, this.center(s.notes)), this.vault, s.agent);
-    const left = skipped + overflow, more = left ? ` +${left} not sent` : "";
-    if (!text) return notify({ title: `Nothing to send${more}`, level: "warning" });
-    this.sending = true;
-    try {
-      cx.notify();
-      cx.write_to_clipboard(text);
-    } catch (e) {
-      this.sending = false; // Never leave Send stuck on "Sending…".
-      throw e;
-    }
     const name = s.agent.program?.name ?? s.agent.app ?? "the agent", address = s.agent.address;
-    // run() returns before the focus moves: wait a moment, and paste only when the focus really
-    // reached the agent's terminal; otherwise the text stays copied.
-    cx.spawn(async (cx) => {
-      let pasted = false;
-      try {
-        run("pane.focus", { terminal: address });
-        await cx.sleep(50);
-        if (focused()?.terminal === address) { run("terminal.paste"); pasted = true; }
-      } catch {}
-      finally { this.sending = false; cx.notify(); }
-      if (pasted) notify({ title: `Pasted into ${name}. Review and press Enter.${more}`, level: "success" });
-      else notify({ title: `Copied. Press ⌘V in the agent.${more}`, level: "info" });
-    });
+    const toasts = sendToasts(name, skipped, overflow);
+    if (!text) return notify({ title: toasts.nothing, level: "warning" });
+    sendText(cx, this, { text, address, name, more: toasts.more }, { run, focused, notify });
   }
 
   render(cx) {
+    if (this.palette) return this.palette.render(cx);
+    this.handleShared(cx);
     const t = theme();
     if (narrow()) return this.rail(t);
     const title = this.note ? base(this.note) : this.vault?.split("/").pop() ?? "Notes";

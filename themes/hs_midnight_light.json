@@ -25,7 +25,7 @@
     "solid_foreground": "#e1e2e7",
     "ring": "#2563d0",
     "working": "#8c6c3e",
-    "blocked": "#c64343",
+    "blocked": "#b83838",
     "done": "#587539",
     "idle": "#6172b0",
     "unknown": "#8990b3"

@@ -49,7 +49,7 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      rounded track holding the tabs as a segmented control (28 px tabs, radius
      7, the active one `raised` with a 1 px top highlight), a new-tab button,
      Files and Changes buttons, a 220 px Search box with `⌘K`, the Notes
-     toggle and the window buttons. Buttons are 30 px, radius 8. A 14 px
+     toggle and the window buttons. The Search box opens the palette (item 4). Buttons are 30 px, radius 8. A 14 px
      program icon leads each tab name (`foreground` on the selected tab,
      `muted` otherwise for tinted SVGs; pictures as is). The top sheen fills the whole
      toolbar (180°, `foreground` 5 % at the top to transparent at the bottom
@@ -94,6 +94,33 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
    - Agent context block: the focused agent's label, its linked notes (chips
      with unlink), faded suggestions (one click pins), "Add current note", a
      picker (`Find a note to link…`) and a Send button.
+4. **The ⌘K palette**, a popup (`mod.json` `overlay`: `kind: "popup"`, `at: "top"`,
+   `offset: 40`, `width: 680`, `frame: "none"`). It is the `herdsidian` mod started a
+   second time with `props().overlay` set. The card is 680 px wide, radius 18, padding 16,
+   the opaque theme `popover` color, a 1 px `line` border. Its height fits the content.
+   - Header: a 14 px search icon and the search field (placeholder "Search notes, agents
+     and commands…"), then the tabs All / Notes / Agents / Commands (24 px, radius 6;
+     the active one `accentSoft` with `foreground` text, the others `muted`). With no
+     vault there is no Notes tab.
+   - Top hit (text typed, All tab): a 56 px row. The title is 14 px semibold
+     `foreground`. A note's second line is 12 px `muted`:
+     "<folders> · linked to <space> · edited <time>", with empty parts left out. An
+     agent's is "<space> · <title>". The row ends with "Open ↵".
+   - Sections Agents, Notes and Commands (title 11 px semibold `muted`), rows 32 px,
+     radius 8, the selected one `accentSoft`. All shows at most 4 agents, 6 notes and
+     4 commands (the Top hit is not repeated). A single tab shows up to 50, in a list
+     that scrolls past 320 px.
+   - Agent row: `statusDot`, the program icon (else its name), the space name, "— <title>"
+     in `muted` (cut with an ellipsis), "needs you" in `blocked` for a blocked agent, and a
+     `⌥⌘N` key cap when it is right (see How it behaves). Note row: the name and
+     "— <top folder>". Command row: the label and its key cap.
+   - Preview (`⇥`): under the list, the first 2,048 characters of the note, read-only,
+     rendered as Markdown, 200 px high.
+   - Footer: key caps "↵ Open" (Focus on an agent, Run on a command), "⌘↵ Send to
+     agent", "⇥ Preview" and "esc Close". A key that does nothing for the selected row
+     is `muted` at half opacity, with the reason as a tooltip.
+   - Lines in `muted` 12 px: "Loading notes…", "No agents running", "No matches for
+     "<text>"", and "Open Notes once (⌘⇧O) to choose a vault". Errors are `blocked`.
 
 Look (layout root):
 - Theme `hs_carbon` (default): background `#181818`, foreground
@@ -119,7 +146,59 @@ Look (layout root):
 - `⌘⌥N` focuses the N-th agent of the list as shown (pinned first, then the
   sort order). Numbers follow the whole list, so folding a group hides rows
   but keeps the numbering.
-- `⌘K` opens the picker (the same as the toolbar's Search box).
+- `⌘K` opens the Herdsidian palette (`mod.open:herdsidian`), the same as the toolbar's
+  Search box. `⌘K` again closes it. The shipped `picker` stays on the person's own key.
+- The palette:
+  - Target: the agent focused when the palette opened (`pickAgent`: the focused agent,
+    else the remembered agent of the shown space). It is fixed at open. Moving over
+    other rows does not change it.
+  - Search: notes use `matchNotes` (the name contains the text, case ignored) and are
+    ranked: name equals the text, starts with it, a word starts with it (after a
+    space, `-`, `_` or `.`), contains it. Ties: notes linked to the target space,
+    then the shorter name, then the path A to Z. Agents match on program, space or tab
+    name (ranked the same way), then on title alone. Commands match on their label.
+    No fuzzy matching.
+  - Top hit: the best-ranked first row of any kind, only for a non-empty query on All.
+    A note's "edited" time is one `stat` per top-hit path, run off render.
+  - Empty query: no Top hit. All shows the agents, the target space's context notes
+    (none if empty) and the commands. A single Notes tab lists the context notes, then
+    the other notes A to Z.
+  - Keys: `↑` `↓` move over the rows, across sections, wrapping. A click acts like `↵`.
+    Hover does not select. `Esc` and a click outside close it. Herdr handles `Esc` and
+    calls the copy's `close()` hook; nothing runs.
+  - `↵` on a note: Notes is shown (`layout.show`) and opens it through its own `open()`,
+    so a note with unsaved changes asks first. `↵` on an agent: `pane.focus` (else
+    `agent.focus`). `↵` on a command: it runs, and the palette closes.
+  - `⌘↵` on a note: it pastes that one path, with the same text rules as Send to agent
+    (`deliveryText`: `@path` for Claude Code, the plain path for others, double quotes
+    around spaces, one line). Order: the note must still exist (`stat`; else the toast
+    "Note not found: <name>"), the text goes to the clipboard, `pane.focus` moves to the
+    agent, 50 ms later it pastes only if `focused()` is that terminal, then the toast
+    ("Pasted into <agent>. Review and press Enter." or "Copied. Press ⌘V in the
+    agent."), then the palette closes. It never presses Enter. The clipboard keeps the
+    path. A second `⌘↵` while one runs does nothing. It does nothing, and the footer
+    says why, with no agent focused, a remote space, no vault or a row that is not a
+    note (the `canSend` reasons).
+  - `⇥` on a note toggles the preview. On other rows it does nothing.
+  - Commands: "Link note to current agent…" (with a vault and a space), "New <agent> in
+    <space>" (`tab.new` with the first installed `knownAgents()` entry, no task, no
+    key), "Show Notes" / "Hide Notes" (`layout.toggle`), "Choose vault…" (only with no
+    vault) and "All Herdr commands…" (`app.palette`, `⇧⌘P`). Only Herdsidian's own
+    commands are listed. There is no "New agent" key: `⌘N` is Herdr's `space.new`.
+  - Key hints come only from `keys()`: the `layout:<name>` section first, then
+    `global`. A row with no real key shows none. An agent's `⌥⌘N` shows only when the
+    layout has `guide-agents`, the agent's address is the Nth of `guide-agents.order`
+    (N up to 9), and `guide-agents.focus-N` is bound.
+  - Link mode: the command turns the field into "Find a note to link to <space>…",
+    with a "Link to <space>" chip and only the Notes tab. `↵` runs the same
+    `saveContext` as `⌘L`, bumps `herdsidian.context-rev` so Notes reloads the file,
+    toasts "Linked <note> to <space>." and closes.
+  - No vault: no Notes tab, no Link command, "Choose vault…" is offered, agents and
+    commands work, and the line "Open Notes once (⌘⇧O) to choose a vault" shows. The
+    vault comes from `herdsidian.vault`, which Notes publishes, so Notes must have
+    started once.
+  - Loading: agents and commands show at once. Notes show "Loading notes…" until the
+    `find` returns; a failed `find` shows its error in that section only.
 - Notes:
   - Click a folder to fold or unfold it. Click a note to read it.
   - Search filters every note in the vault by name (up to 200 hits, with the
@@ -212,7 +291,8 @@ Look (layout root):
   | `herdsidian-status` | The status bar. Clone of `workspace-status`. |
 
 - `guide-agents` stores the shown list in `this.order` and reads
-  `nextCommand()` for `focus-N`.
+  `nextCommand()` for `focus-N`. After each order change it publishes the first 9
+  addresses as `guide-agents.order`, for the palette's `⌥⌘N` hints.
 - `herdsidian`: `main.js` (the View), `notes.js` (pure helpers: `render`,
   `resolve`, `linkTarget`, `hidden`, `base`, `HIDDEN`, tested by `tests/notes.test.js`),
   and four new files:
@@ -229,15 +309,32 @@ Look (layout root):
     `tests/context.test.js`.
   - `io.js`: the Herdr side of both. `stateDir`, `loadContext`, `saveContext`
     (retries on a stale snapshot), `indexNotes` (one `awk` call per chunk of
-    1,000 files) and `gitTop` (`git rev-parse --show-toplevel`).
+    1,000 files), `allNotes` (one `find`, `MAX_NOTES` = 5000), `noteTime` (`stat -f %m`
+    through `exec`) and `gitTop` (`git rev-parse --show-toplevel`).
   - `graph-view.js`: the Graph section and the Agent context block.
+  - The palette, five files:
+    - `palette.js` (pure): `tier`, `rankNotes`, `rankAgents`, `rankCommands`,
+      `formatChord`, `keyHint`, `agentHint`, `commandList`, `scene`, `buildList`,
+      `relativeTime`, `breadcrumb`, `topMeta`, `sendState`, `footer`, `visibleWindow`,
+      `autoFromIndex`, `autoMeta`, `isFreshRequest`. Limits: 4 agents, 6 notes, 4
+      commands, 50 in a single tab. Tested by `tests/palette.test.js`.
+    - `send.js` (pure): the one paste sequence of Send to agent, used by Notes and the
+      palette. `sendText`, `sendToasts`, `PASTE_WAIT_MS` = 50. Tested by
+      `tests/send.test.js`.
+    - `palette-main.js`: the `Palette` controller (state, keys, actions). Notes
+      creates it in `init` when `props().overlay` is set.
+    - `palette-view.js`: `paletteCard`, the card as a function of a plain model.
+    - Tests for the Herdr-side additions are in `tests/io.test.js` (`allNotes`,
+      `noteTime`) and `tests/lint.test.js` (the new rules).
   From `herdr`: `exec` (`sh` to list a folder and to read `XDG_STATE_HOME`,
   `find` for every note, `awk`, `git`, `open` for web links), `readTextFile`,
   `writeTextFile(path, text, expected)` for conflict-safe saves,
   `watchFolder`, `pickFolder`, `localStorage` (`vault`, `width`,
   `graph.hidden`, `graph.hops`, `recent:<vault>`), `nextCommand`,
   `run("layout.resize")`, `run("pane.focus")`, `run("terminal.paste")`,
-  `agents()`, `layout()`, `notify`, and `cx.write_to_clipboard`. From `gpui-base`: `TextView.markdown(...).on_link_click`,
+  `agents()`, `layout()`, `notify`, and `cx.write_to_clipboard`. The palette also uses
+  `keys()`, `spaces()`, `panes()`, `knownAgents()`, `props()`, `closeOverlay`,
+  `run("layout.show")`, `run("tab.new")` and `shared` / `setShared`. From `gpui-base`: `TextView.markdown(...).on_link_click`,
   `EditorState` + `Editor`, `InputState` + `Input`.
 - `lib/tokens.js`: the one place where theme colors get their alpha.
   `alpha(color, a)` takes `#rrggbb` or `#rrggbbaa` and returns a full
@@ -271,11 +368,30 @@ Look (layout root):
 - Icons: Herdr's `mods/workspace-chrome/*.svg` and `mods/files/*.svg`, plus
   the SVGs inside `herdsidian`, `herdsidian-tabs` and `herdsidian-pane`.
 - Keys: `layout:herdsidian` (`cmd-shift-o` → `layout.toggle:herdsidian`,
-  `cmd-k` → `mod.open:picker`, `cmd-alt-1..9` → `guide-agents.focus-N`,
+  `cmd-k` → `mod.open:herdsidian`, `cmd-alt-1..9` → `guide-agents.focus-N`,
   `ctrl-1..9` → `space.select:N`, `cmd-alt-[`/`]` → `space.prev`/`next`,
   `cmd-[`/`]` → `agent.prev`/`next`, `cmd-l` → `herdsidian.link`, so every
   shortcut the sidebar shows works) and `mod:herdsidian` (`cmd-s` →
-  `herdsidian.save`, `cmd-e` → `herdsidian.mode`).
+  `herdsidian.save`, `cmd-e` → `herdsidian.mode`). Inside the palette, `⌘↵` and `⇥`
+  are not in `keys.json`: the search field's `submit` event (with `secondary` set for
+  `⌘↵`) and the key handler read them.
+- Shared keys of the palette (`shared()` / `setShared()`). Each is written only when its
+  value changes. The 5,000-note list never goes through `shared()`.
+
+  | Key | Written by | Holds |
+  |---|---|---|
+  | `herdsidian.vault` | Notes (`init`, choose vault) | The vault path. |
+  | `herdsidian.auto` | Notes (after an index build) | `{ vault, notes }`: notes with a non-empty `herdsidian:` list, at most 200. |
+  | `herdsidian.memory` | Notes (`focus`) | The remembered agent per space, for `pickAgent`. |
+  | `herdsidian.request` | Palette | `{ id, at, op, path?, vault }`: open a note or choose a vault. Notes handles an `id` once, and a request younger than 5 s at start. |
+  | `herdsidian.context-rev` | Palette (after link) | A number. Notes reloads the context file when it changes. |
+  | `guide-agents.order` | `guide-agents` | The first 9 agent addresses, in list order. |
+
+- The overlay: `mods/herdsidian/mod.json` has the `overlay` block, and `keys.json` binds
+  `cmd-k` to `mod.open:herdsidian` in `layout:herdsidian`. `herdsidian-tabs` runs
+  `mod.open {name: "herdsidian"}` from its Search box. `npm run lint` checks that every
+  `mod.open:<name>` in `keys.json` names a mod in `mods/` or one shipped with Herdr
+  (`picker` is on that list).
 
 ## Watch out
 
@@ -347,6 +463,31 @@ Look (layout root):
   agent's terminal (it waits 50 ms after `pane.focus`), otherwise it only
   copies. A context file from a newer Herdsidian is shown in the strip and
   never overwritten.
+- The palette is a second copy of the `herdsidian` mod, so:
+  - `localStorage` is not shared between the Notes copy and the popup copy. The popup
+    reads the vault from `shared("herdsidian.vault")`, so Notes must have started once
+    (shown with `⌘⇧O`) before the palette knows the vault, the auto links and the
+    agent memory.
+  - Module-level state is per copy. Do not keep palette state in a module variable.
+  - `herdsidian.<command>` keys (`link`, `save`, `mode`) reach shown copies only. The
+    popup copy gets them while it is open; a hidden Notes does not.
+  - Esc is handled by Herdr, not by the mod. No key event arrives. The `close()` hook
+    runs on every close, so cleanup goes there.
+  - A synthetic osascript click is not delivered to GPUI. Test a click outside the
+    palette with a real click.
+  - `fs/promises` is not available. Read a file's time with `stat -f %m` through `exec`
+    (`noteTime`, about 12 ms).
+  - One `find` over 5,000 notes takes about 30 ms. The palette runs it once per open, in
+    `cx.spawn`, never in `render`, and never builds the link index.
+  - A Send from the palette must finish its paste before the copy ends: it pastes, then
+    closes. A closed overlay ends its async work.
+  - The palette files are under the no-submit lint rule like the rest of
+    `mods/herdsidian`. `⌘↵` is read as `submit` with `secondary`, never as the string
+    `"enter"`.
+  - `palette.js`, `send.js`, `notes.js`, `context.js` and `graph.js` must not import
+    `herdr`, `gpui-kit` or `gpui-base`. `npm run lint` reports the file and line.
+- The shipped `picker` is not removed. It stays reachable through the person's own
+  `cmd-p` binding; only `layout:herdsidian`'s `cmd-k` changed.
 - Clicks in Settings → Look are saved in `layouts/.state/` and win over the
   layout file. If `terminal_opacity` or the pane look is not what the file
   says, check `herdr-app status` and re-save the layout file.
@@ -361,7 +502,19 @@ Look (layout root):
 - `layout.switch herdsidian` shows the glass look, hints on spaces and
   agents, and no errors in `herdr-app status`.
 - Each theme gives the glass its own tint (`app.theme` with each name).
-- `⌘⇧O` shows Notes; a first run offers Choose a vault. `⌘K` opens the picker.
+- `⌘⇧O` shows Notes; a first run offers Choose a vault. `⌘K` opens the Herdsidian palette.
+- `⌘K` opens a popup 40 px from the top, 680 px wide, and the search field has the
+  keyboard at once. `⌘K` again, `Esc` or a click outside closes it, and typing then
+  lands in the terminal that had the keyboard.
+- The palette shows All / Notes / Agents / Commands. `↵` opens a note, focuses an agent
+  or runs a command. `⇥` previews a note. With no vault it says "Open Notes once
+  (⌘⇧O) to choose a vault".
+- `⌘↵` on a note pastes its path into the agent that was focused at open, never
+  presses Enter, and leaves the agent `idle`. With no agent it does nothing and the
+  footer says why.
+- A `⌥⌘N` hint on an agent row matches the key in the agents list.
+- A note opened from the palette while a note has unsaved changes asks Save / Discard /
+  Cancel first.
 - A note opens in Read, a `[[wikilink]]` opens its target, `⌘E` edits,
   `⌘S` saves to disk.
 - Editing the file from a shell while it has unsaved edits, then `⌘S`,
@@ -373,5 +526,8 @@ Look (layout root):
   `${XDG_STATE_HOME:-~/.local/state}/herdsidian/`, not in the vault.
 - Send pastes `@path` into Claude Code (plain path for others), never
   presses Enter, and leaves the paths on the clipboard.
-- `npm test` passes (`graph.test.js`, `context.test.js`; the 5,000-note index
-  builds in about 70 ms) and `npm run lint` exits 0.
+- `npm test` passes (307 tests: `graph.test.js`, `context.test.js`, `palette.test.js`,
+  `send.test.js` and the rest; the 5,000-note index builds in about 70 ms) and
+  `npm run lint` exits 0.
+- `herdr-app status` shows no errors after the install, and one overlay while the
+  palette is open, none after it closes.

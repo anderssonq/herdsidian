@@ -286,6 +286,9 @@ export default class Agents extends View {
     list = [...pinned, ...rest];
     setAgentOrder(list.map((a) => a.address));
     this.order = list;
+    // The palette's ⌥⌘N hints read this; written only when the order changes.
+    const published = list.slice(0, 9).map((a) => a.address);
+    if (JSON.stringify(published) !== JSON.stringify(shared("guide-agents.order") ?? null)) setShared("guide-agents.order", published);
 
     const withKids = (a, i) => {
       const subs = collapsed ? [] : this.tree(all, a.address);

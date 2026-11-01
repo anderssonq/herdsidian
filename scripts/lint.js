@@ -34,7 +34,7 @@ for (const [p, t] of Object.entries(json).filter(([p]) => p.startsWith("themes/"
 }
 
 // Mods named by the layout and the keys exist here or ship with Herdr.
-const shipped = ["workspace-chrome", "files", "changes"];
+const shipped = ["workspace-chrome", "files", "changes", "picker"];
 const ours = readdirSync(join(root, "mods"));
 const mods = new Set();
 const walk = (n) => {
@@ -49,6 +49,11 @@ for (const [p, l] of Object.entries(json).filter(([p]) => p.startsWith("layouts/
 for (const actions of Object.values(json["keys.json"] ?? {})) for (const a of Object.values(actions)) {
   const m = /^([a-z0-9-]+)\.[a-z0-9-]+$/.exec(a);
   if (m && !["space", "agent", "tab", "pane", "layout", "app", "terminal", "window"].includes(m[1])) mods.add(m[1]);
+}
+// `mod.open:<name>` opens a mod overlay: the mod must exist here or ship with Herdr.
+for (const [section, actions] of Object.entries(json["keys.json"] ?? {})) for (const [key, a] of Object.entries(actions)) {
+  const m = /^mod\.open:(.+)$/.exec(a);
+  if (m && !ours.includes(m[1]) && !shipped.includes(m[1])) errors.push(`keys.json: ${section} ${key}: mod.open:${m[1]} names a mod that is not in mods/ nor shipped by Herdr`);
 }
 for (const m of mods) if (!ours.includes(m) && !shipped.includes(m)) errors.push(`mod ${m} is used but not in mods/ nor shipped by Herdr`);
 
@@ -98,6 +103,10 @@ for (const p of modFiles.filter((p) => p.endsWith(".js") && !shared(p))) {
 // Guards on the mod sources. Both report file and line.
 // 1. herdr's `window` import shadows the gpui global (F2): paint_path must go through globalThis.
 // 2. Notes never submits to an agent: it pastes only (AC27), so no send/keys/Enter/task calls.
+// 3. The pure files stay testable under node: no herdr, gpui-kit or gpui-base import.
+// The no-submit rule (2) also covers palette-main.js, palette.js, palette-view.js and send.js.
+const pure = new Set(["notes", "context", "graph", "palette", "send"].map((n) => `mods/herdsidian/${n}.js`));
+const hostImport = /\bfrom\s*["'](herdr|gpui-kit|gpui-base)["']|\bimport\s*["'](herdr|gpui-kit|gpui-base)["']/;
 const paintPath = /(?<!globalThis\.)\bwindow\.paint_path/;
 const submitCall = /terminal\.(send|keys)\b|hc\(\s*\[\s*["'](send|keys)["']|["']enter["']|\btask\s*:/;
 for (const p of modFiles.filter((p) => p.endsWith(".js"))) {
@@ -106,6 +115,7 @@ for (const p of modFiles.filter((p) => p.endsWith(".js"))) {
     if (paintPath.test(line)) {
       fail(p, `line ${i + 1}: use globalThis.window.paint_path (herdr's window import shadows the gpui global, F2)`);
     }
+    if (pure.has(relative(root, p)) && hostImport.test(line)) fail(p, `line ${i + 1}: pure file must not import herdr, gpui-kit or gpui-base`);
     if (inNotes && submitCall.test(line)) fail(p, `line ${i + 1}: Send to agent must paste, never submit (AC27)`);
   });
 }

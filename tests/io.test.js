@@ -117,3 +117,50 @@ test("saveContext refuses a file from a newer Herdsidian for every change and wr
     assert.equal(f.files[FILE], text, type);
   }
 });
+
+const { allNotes, noteTime, MAX_NOTES } = await import("../mods/herdsidian/io.js");
+
+test("allNotes builds the find args, prunes HIDDEN, makes paths relative and sorts", async () => {
+  const calls = [];
+  const exec = async (cmd, args) => {
+    calls.push([cmd, ...args]);
+    return { code: 0, stdout: "/v/b.md\n/v/sub/a.MD\n\n/v/a.md\n", stderr: "" };
+  };
+  const notes = await allNotes("/v", { exec });
+  assert.deepEqual(notes, ["a.md", "b.md", "sub/a.MD"]);
+  assert.deepEqual(calls, [["find", "/v", "(", "-name", ".obsidian", "-o", "-name", ".git", "-o", "-name", ".trash",
+    "-o", "-name", "node_modules", ")", "-prune", "-o", "-type", "f", "-iname", "*.md", "-print"]]);
+});
+
+test("allNotes caps the list at 5,000", async () => {
+  const lines = Array.from({ length: MAX_NOTES + 20 }, (_, i) => `/v/n${String(i).padStart(5, "0")}.md`);
+  const notes = await allNotes("/v", { exec: async () => ({ code: 0, stdout: lines.join("\n"), stderr: "" }) });
+  assert.equal(MAX_NOTES, 5000);
+  assert.equal(notes.length, 5000);
+  assert.equal(notes[0], "n00000.md");
+});
+
+test("allNotes throws when the vault cannot be listed", async () => {
+  const exec = async () => ({ code: 1, stdout: "", stderr: "find: /gone: No such file or directory" });
+  await assert.rejects(allNotes("/gone", { exec }), /No such file or directory/);
+  await assert.rejects(allNotes("/gone", { exec: async () => ({ code: 1, stdout: "\n", stderr: "" }) }), /Cannot list the vault/);
+});
+
+test("allNotes keeps the list when find exits non-zero but still printed notes", async () => {
+  const exec = async () => ({ code: 1, stdout: "/v/b.md\n/v/a.md\n", stderr: "find: /v/locked: Permission denied" });
+  assert.deepEqual(await allNotes("/v", { exec }), ["a.md", "b.md"]);
+});
+
+test("noteTime gives milliseconds on success", async () => {
+  const calls = [];
+  const exec = async (cmd, args) => { calls.push([cmd, ...args]); return { code: 0, stdout: "1700000000\n", stderr: "" }; };
+  assert.equal(await noteTime("/v/a.md", { exec }), 1700000000000);
+  assert.deepEqual(calls, [["stat", "-f", "%m", "/v/a.md"]]);
+});
+
+test("noteTime gives null on a non-zero code, bad output or a throw", async () => {
+  assert.equal(await noteTime("/v/a.md", { exec: async () => ({ code: 1, stdout: "", stderr: "no" }) }), null);
+  assert.equal(await noteTime("/v/a.md", { exec: async () => ({ code: 0, stdout: "", stderr: "" }) }), null);
+  assert.equal(await noteTime("/v/a.md", { exec: async () => ({ code: 0, stdout: "x", stderr: "" }) }), null);
+  assert.equal(await noteTime("/v/a.md", { exec: async () => { throw new Error("boom"); } }), null);
+});

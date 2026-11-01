@@ -104,7 +104,7 @@ export default class Tabs extends View {
     const notesOn = Boolean(notes) && !notes.hidden;
     const search = h_flex().id("search").w(220).h(30).flex_none().px(10).gap(8).items_center().rounded(8).bg(k.pill).text_size(12.5).text_color(t.muted)
       .cursor_pointer().hover(s => s.bg(alpha(t.foreground, 0.10)))
-      .on_mouse_down("left", stop).on_click(() => run("mod.open", { name: "picker" }))
+      .on_mouse_down("left", stop).on_click(() => run("mod.open", { name: "herdsidian" }))
       .child(svg("mods/workspace-chrome/search.svg").size(14).flex_none())
       .child(div().flex_1().child("Search"))
       .child(div().text_size(11).child(w?.platform === "macos" ? "⌘K" : "Ctrl K"));

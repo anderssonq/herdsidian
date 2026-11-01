@@ -215,5 +215,28 @@ export function canSend({ agent, space, notes }) {
   return { ok: true, reason: null };
 }
 
+// What to do with the palette's request in shared("herdsidian.request"). `handled` is the id
+// already dealt with. A request older than 5 s is stale (left from a past session) and ignored.
+// -> { action: "open" | "choose-vault" | "other-vault" | "none", id }
+export function isFreshRequest(request, now, maxAgeMs = 5000) {
+  if (!request || !Number.isFinite(request.at)) return false;
+  const age = now - request.at;
+  return age >= 0 && age < maxAgeMs;
+}
+
+export function pendingRequest(request, handled, vault, now, maxAgeMs = 5000) {
+  const id = request?.id ?? null;
+  if (id === handled || !isFreshRequest(request, now, maxAgeMs)) return { action: "none", id };
+  if (request.op === "choose-vault") return { action: "choose-vault", id };
+  if (request.op === "open" && request.path) return { action: request.vault === vault ? "open" : "other-vault", id };
+  return { action: "none", id };
+}
+
+// Whether the context file must be read again: the palette bumped context-rev.
+export const shouldReload = (rev, seenRev) => (rev ?? null) !== (seenRev ?? null);
+
+// Whether a shared value changed (compared as JSON): a write is skipped when it did not.
+export const changedJson = (prev, next) => JSON.stringify(prev ?? null) !== JSON.stringify(next ?? null);
+
 // Newest first, at most 5, no duplicates.
 export const pushRecent = (list, note) => [note, ...list.filter((n) => n !== note)].slice(0, MAX_RECENT);

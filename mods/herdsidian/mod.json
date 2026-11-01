@@ -1,4 +1,5 @@
 {
   "place": "none",
-  "title": "Herdsidian"
+  "title": "Herdsidian",
+  "overlay": {"kind":"popup","at":"top","offset":40,"width":680,"height":0.8,"frame":"none"}
 }

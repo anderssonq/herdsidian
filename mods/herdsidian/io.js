@@ -3,6 +3,7 @@
 // and the git top folder. All parsing and merging lives in graph.js and context.js.
 
 import { exec, readTextFile, writeTextFile } from "herdr";
+import { HIDDEN } from "./notes.js";
 import { INDEX_AWK, chunks, parseIndexOutput } from "./graph.js";
 import { parseContext, serializeContext, applyChange } from "./context.js";
 
@@ -73,6 +74,28 @@ export async function indexNotes(vault, files) {
     for (const [path, entry] of parseIndexOutput(r.stdout)) raw.set(path, entry);
   }
   return raw;
+}
+
+export const MAX_NOTES = 5000;
+
+// Every note in the vault, as paths relative to it: for search and wikilinks. deps is for tests.
+export async function allNotes(vault, deps = { exec }) {
+  const prune = [...HIDDEN].flatMap((n, i) => [...(i ? ["-o"] : []), "-name", n]);
+  const r = await deps.exec("find", [vault, "(", ...prune, ")", "-prune", "-o", "-type", "f", "-iname", "*.md", "-print"]);
+  // find exits 1 on an unreadable subfolder yet still lists the rest: only no output at all is an error.
+  if (r.code !== 0 && !r.stdout.trim()) throw new Error(r.stderr || "Cannot list the vault");
+  return r.stdout.split("\n").filter(Boolean).map((p) => p.slice(vault.length + 1)).sort().slice(0, MAX_NOTES);
+}
+
+// When a note was last changed, in ms since the epoch; null when it cannot be read (macOS stat).
+export async function noteTime(abs, deps = { exec }) {
+  try {
+    const r = await deps.exec("stat", ["-f", "%m", abs]);
+    const secs = Number(r.stdout.trim());
+    return r.code === 0 && r.stdout.trim() && Number.isFinite(secs) ? secs * 1000 : null;
+  } catch {
+    return null;
+  }
 }
 
 // The repository folder of a cwd, or null when it is not in one (or git is missing).
