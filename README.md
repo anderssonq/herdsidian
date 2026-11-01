@@ -29,7 +29,7 @@ the agents and written back by them. Herdsidian opens that vault in a **Notes** 
 beside your terminals. You read and edit notes while the agents work, link the right notes
 to each space, and hand them to an agent with one click.
 
-![Herdsidian: a Claude Code agent at work, with the vault, the local graph and the notes linked to its space in the Notes sidebar](docs/preview.png)
+![Herdsidian: a Claude Code agent at work, with the vault, the local graph and the notes linked to its space in the Notes sidebar](preview.png)
 
 ---
 
