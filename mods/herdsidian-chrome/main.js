@@ -38,8 +38,9 @@ export default class WorkspaceChrome extends View {
     const macos = appWindow()?.platform === "macos";
     return h_flex().relative().size_full().bg(k.glass).pl(collapsed ? 0 : macos ? 84 : 14).pr(collapsed ? 0 : 10).items_center()
       .when(collapsed, el => el.justify_center())
-      .when(!collapsed, el => el.justify_end())
       .child(glow(k))
+      // The app name beside the macOS traffic lights (or at the left edge elsewhere).
+      .when(!collapsed, el => el.child(div().flex_1().min_w(0).truncate().text_size(13).font_medium().text_color(t.muted).child("Herdsidian")))
       // On the macOS rail the traffic lights fill the row; the agents list's » unfolds it.
       .when(!(collapsed && macos), el => el.child(div().id("sidebar-toggle").size(28).flex_none().flex().items_center().justify_center().rounded(6)
         .text_color(t.muted).hover(s => s.bg(k.pill))
