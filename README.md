@@ -79,11 +79,14 @@ herdsidian: ~/code/acme-api
 
 ## Install
 
-<!-- TODO(publish): set <REPO_URL> and add the herdr.dev/layouts/<owner>/herdsidian line once the GitHub repo exists. -->
-Clone it, then ask your agent from a Herdr terminal:
+Ask your agent, from a Herdr terminal:
+
+> Read ~/.config/herdr-app/AGENTS.md, then add this layout: herdr.dev/layouts/anderssonq/herdsidian
+
+Or clone it and ask the agent to add it from the clone:
 
 ```sh
-git clone <REPO_URL> herdsidian
+git clone https://github.com/anderssonq/herdsidian.git herdsidian
 ```
 
 > Read ~/.config/herdr-app/AGENTS.md, then add the Herdr layout in ./herdsidian.
