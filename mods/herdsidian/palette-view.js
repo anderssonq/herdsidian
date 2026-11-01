@@ -47,7 +47,7 @@ function agentRow(t, k, m, row, on) {
   return frame(k, m, row, on, ROW.row)
     .child(dot(t, a.status))
     .child(prog ?? div().flex_none().text_size(12.5).text_color(t.foreground).child(a.program?.name ?? row.label))
-    .child(div().flex_none().text_size(12.5).text_color(t.foreground).child(a.space_name ?? row.label))
+    .when(Boolean(a.space_name), (el) => el.child(div().flex_none().text_size(12.5).text_color(t.foreground).child(a.space_name)))
     .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(t.muted).child(a.title ? `— ${a.title}` : (row.detail ? `— ${row.detail}` : "")))
     .when(a.status === "blocked", (el) => el.child(div().flex_none().text_size(11.5).text_color(t.blocked).child("needs you")))
     .when(Boolean(row.hint), (el) => el.child(keycap(t, row.hint)));

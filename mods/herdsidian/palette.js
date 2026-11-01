@@ -103,6 +103,39 @@ export function hasMod(tree, mod) {
   return Object.values(tree).some((child) => hasMod(child, mod));
 }
 
+// True only when the node exists and neither it nor any ancestor has hidden: true.
+export function isShown(tree, id) {
+  const walk = (node) => {
+    if (node === null || typeof node !== "object") return false;
+    if (node.hidden === true) return false;
+    if (node.id === id) return true;
+    return (node.children ?? []).some(walk);
+  };
+  return walk(tree);
+}
+
+// The remembered agent counts only inside its own space.
+export const targetAgent = (picked) => (picked.agent && picked.agent.space === picked.spaceId ? picked.agent : null);
+
+// A memo key is a list of values compared one by one (===); identity values (notes, doc) are kept as they are.
+export const sameKey = (a, b) => Boolean(a) && a.length === b.length && a.every((v, i) => v === b[i]);
+
+// The ranked-notes memo key: the agents are not part of it, so an animated title never re-ranks the notes.
+export const rankKey = ({ query, tab, notes, linked }) => [query, tab, notes, linked];
+
+// The signature of the live agents; the program and app are in it so a late detection redraws the row.
+export const agentSig = (agents) => agents
+  .map((a) => `${a.address}|${a.status}|${a.title}|${a.space_name}|${a.tab_name}|${a.program?.key}|${a.program?.name}|${a.app}`)
+  .join("\n");
+
+// The list memo key: everything buildList and commandList read.
+export function modelKey({ query, tab, notes, notesError, doc, linking, starter, agents, order, layoutName, bindings, notesHidden, hasList }) {
+  return [
+    query, tab, notes, notesError, doc, linking, starter, agentSig(agents),
+    JSON.stringify(order ?? null), layoutName, JSON.stringify(bindings), notesHidden, hasList,
+  ];
+}
+
 // "⌥⌘N" only when the address is the Nth of guide-agents' own list and N is really bound (Decision 3).
 export function agentHint(address, order, bindings, layoutName, hasAgentsList) {
   if (!hasAgentsList || !Array.isArray(order)) return null;

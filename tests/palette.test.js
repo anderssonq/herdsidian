@@ -5,7 +5,7 @@ import { performance } from "node:perf_hooks";
 import {
   LIMITS, tier, rankNotes, rankAgents, rankCommands, formatChord, keyHint, hasMod, agentHint, commandList,
   scene, autoFromIndex, autoMeta, isFreshRequest, buildList, relativeTime, breadcrumb, topFolder, topMeta,
-  wrap, sendState, planSend, rankNoteRows, footer, visibleWindow,
+  wrap, sendState, planSend, rankNoteRows, footer, visibleWindow, isShown, targetAgent, sameKey, rankKey, modelKey,
 } from "../mods/herdsidian/palette.js";
 import { matchNotes, contextNotes, findEntry, autoLinks, deliveryText } from "../mods/herdsidian/context.js";
 import { tokens } from "../mods/herdsidian/tokens.js";
@@ -152,6 +152,54 @@ test("hasMod skips a hidden node and its whole subtree", () => {
   assert.equal(hasMod({ type: "block", hidden: true, content: { mod: "guide-agents" } }, "guide-agents"), false);
   const shown = { type: "row", children: [{ type: "column", hidden: false, children: [agents] }] };
   assert.equal(hasMod(shown, "guide-agents"), true);
+});
+
+test("isShown is true for a visible node, false for a hidden, hidden-ancestor or missing one", () => {
+  const leaf = (hidden) => ({ id: "herdsidian", ...(hidden === undefined ? {} : { hidden }) });
+  assert.equal(isShown({ type: "row", children: [{ type: "column", children: [leaf()] }] }, "herdsidian"), true);
+  assert.equal(isShown({ type: "row", children: [leaf(false)] }, "herdsidian"), true);
+  assert.equal(isShown({ type: "row", children: [leaf(true)] }, "herdsidian"), false);
+  assert.equal(isShown({ type: "row", children: [{ type: "column", hidden: true, children: [leaf()] }] }, "herdsidian"), false);
+  assert.equal(isShown({ type: "row", children: [{ id: "other" }] }, "herdsidian"), false);
+  assert.equal(isShown(null, "herdsidian"), false);
+});
+
+test("targetAgent keeps the agent only inside its own space", () => {
+  const a = { address: "t1", space: "s1" };
+  assert.equal(targetAgent({ agent: a, spaceId: "s1" }), a);
+  assert.equal(targetAgent({ agent: a, spaceId: "s2" }), null);
+  assert.equal(targetAgent({ agent: null, spaceId: "s1" }), null);
+  assert.equal(targetAgent({ spaceId: "s1" }), null);
+});
+
+test("rankKey ignores the agents and follows query, tab, notes and linked", () => {
+  const notes = ["a.md"], linked = new Set();
+  const base = { query: "q", tab: "all", notes, linked };
+  assert.ok(sameKey(rankKey(base), rankKey({ ...base })));
+  assert.ok(sameKey(rankKey(base), rankKey({ ...base, agents: [agent("t1", "Claude", "s", "t", "changed title")] })));
+  assert.ok(!sameKey(rankKey(base), rankKey({ ...base, query: "r" })));
+  assert.ok(!sameKey(rankKey(base), rankKey({ ...base, tab: "notes" })));
+  assert.ok(!sameKey(rankKey(base), rankKey({ ...base, notes: [...notes] })));
+  assert.ok(!sameKey(rankKey(base), rankKey({ ...base, linked: new Set() })));
+});
+
+test("modelKey is stable for the same inputs and changes with each input the list reads", () => {
+  const inputs = () => ({
+    query: "", tab: "all", notes: null, notesError: null, doc: {}, linking: null, starter: null,
+    agents: [agent("t1", "Claude Code", "s", "t", "title")], order: ["t1"], layoutName: "herdsidian",
+    bindings: [{ section: "global", action: "x", keys: "cmd-k" }], notesHidden: false, hasList: true,
+  });
+  const shared = { notes: null, doc: inputs().doc };
+  const make = (over) => modelKey({ ...inputs(), ...shared, ...over });
+  assert.ok(sameKey(make({}), make({})));
+  assert.ok(!sameKey(make({}), make({ order: ["t2", "t1"] })));
+  assert.ok(!sameKey(make({}), make({ bindings: [{ section: "global", action: "x", keys: "cmd-j" }] })));
+  assert.ok(!sameKey(make({}), make({ layoutName: "other" })));
+  assert.ok(!sameKey(make({}), make({ notesHidden: true })));
+  assert.ok(!sameKey(make({}), make({ agents: [agent("t1", "Claude Code", "s", "t", "new title")] })));
+  assert.ok(!sameKey(make({}), make({ agents: [agent("t1", "Codex", "s", "t", "title")] })));
+  assert.ok(!sameKey(make({}), make({ agents: [{ ...agent("t1", "Claude Code", "s", "t", "title"), program: { name: "Claude Code", key: "claude" } }] })));
+  assert.ok(!sameKey(make({}), make({ agents: [{ ...agent("t1", "Claude Code", "s", "t", "title"), app: "node" }] })));
 });
 
 test("agentHint gives the key of the Nth agent", () => {

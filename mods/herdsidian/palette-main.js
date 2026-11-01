@@ -11,10 +11,9 @@ import { theme, agents, spaces, panes, focused, keys, layout, shared, setShared,
 import { base, render as toMarkdown } from "./notes.js";
 import { emptyDoc, pickAgent } from "./context.js";
 import { stateDir, loadContext, saveContext, allNotes, noteTime } from "./io.js";
-import { find } from "./layout.js";
 import {
   ROW, LIST_MAX, TABS, scene, commandList, buildList, rankNoteRows, hasMod, agentHint, topMeta, wrap, sendState, planSend, footer,
-  visibleWindow,
+  visibleWindow, isShown, targetAgent, sameKey, rankKey, modelKey,
 } from "./palette.js";
 import { sendText } from "./send.js";
 import { paletteCard, PLACEHOLDER, linkPlaceholder } from "./palette-view.js";
@@ -29,8 +28,7 @@ export class Palette {
     // The target is fixed here: the agent focused when ⌘K was pressed (AC27). Rows never change it.
     const all = spaces();
     const picked = pickAgent({ agents: agents(), focused: focused(), spaces: all, memory: shared("herdsidian.memory") ?? {} });
-    // A remembered agent counts only inside its own space.
-    const agent = picked.agent?.space === picked.spaceId ? picked.agent : null;
+    const agent = targetAgent(picked);
     const space = all.find((s) => s.id === picked.spaceId) ?? null;
     const cwd = agent ? panes().find((p) => p.pane === agent.pane)?.cwd ?? null : null;
     this.target = { agent, space, cwd, liveIds: all.map((s) => s.id) };
@@ -250,10 +248,11 @@ export class Palette {
   // title must not re-rank 5,000 notes (AC37). null when this view shows no ranked notes.
   rankedFor(tab, sc) {
     if (!this.vault || !this.notes || this.notesError || this.query.trim() === "" || (tab !== "all" && tab !== "notes")) return null;
+    const key = rankKey({ query: this.query, tab, notes: this.notes, linked: sc.linked });
     const m = this.rankMemo;
-    if (m && m.query === this.query && m.tab === tab && m.notes === this.notes && m.linked === sc.linked) return m.rows;
+    if (m && sameKey(m.key, key)) return m.rows;
     const rows = rankNoteRows(this.notes, this.query, sc.linked);
-    this.rankMemo = { query: this.query, tab, notes: this.notes, linked: sc.linked, rows };
+    this.rankMemo = { key, rows };
     return rows;
   }
 
@@ -262,17 +261,15 @@ export class Palette {
   model() {
     const tab = this.linking ? "notes" : this.tab;
     const live = agents();
-    const sig = live.map((a) => `${a.address}|${a.status}|${a.title}|${a.space_name}|${a.tab_name}`).join("\n");
     const tree = layout();
     const hasList = hasMod(tree, "guide-agents");
-    const node = find(tree, "herdsidian");
-    const notesHidden = node ? Boolean(node.hidden) : true;
+    const notesHidden = !isShown(tree, "herdsidian");
     const bindings = keys(), layoutName = shared("layout"), order = shared("guide-agents.order");
-    const inputs = [
-      this.query, tab, this.notes, this.notesError, this.doc, this.linking, this.starter, sig,
-      JSON.stringify(order ?? null), layoutName, JSON.stringify(bindings), notesHidden, hasList,
-    ];
-    if (this.memo && this.memo.inputs.every((v, i) => v === inputs[i])) return this.memo;
+    const inputs = modelKey({
+      query: this.query, tab, notes: this.notes, notesError: this.notesError, doc: this.doc, linking: this.linking,
+      starter: this.starter, agents: live, order, layoutName, bindings, notesHidden, hasList,
+    });
+    if (this.memo && sameKey(this.memo.inputs, inputs)) return this.memo;
 
     const commands = commandList({
       vault: this.vault, notesHidden, space: this.target.space, starter: this.starter, bindings, layoutName,

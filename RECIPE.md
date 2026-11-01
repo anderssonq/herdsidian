@@ -486,6 +486,7 @@ Look (layout root):
     `"enter"`.
   - `palette.js`, `send.js`, `notes.js`, `context.js` and `graph.js` must not import
     `herdr`, `gpui-kit` or `gpui-base`. `npm run lint` reports the file and line.
+- Herdr runs a single window (`window()` has no id and there is no new-window command), and `shared()` is app-wide, so palette requests are not scoped to a window. Revisit this if Herdr adds multi-window support.
 - The shipped `picker` is not removed. It stays reachable through the person's own
   `cmd-p` binding; only `layout:herdsidian`'s `cmd-k` changed.
 - Clicks in Settings → Look are saved in `layouts/.state/` and win over the
