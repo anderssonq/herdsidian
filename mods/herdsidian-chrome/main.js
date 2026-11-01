@@ -3,22 +3,10 @@
 
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { theme, run, props, window as appWindow, shared, setShared, updates, layout } from "herdr";
+import { theme, run, props, window as appWindow, updates } from "herdr";
 import { tokens } from "./tokens.js";
 import { glow } from "./ui.js";
-import { find } from "./layout.js";
-
-// The sidebar's rail goes by its width, not a flag: dragging its edge narrows it too.
-const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
-
-// To the rail (on macOS wide enough for the traffic lights), or back to the width it had.
-function toggleSidebar() {
-  const width = find(layout(), "sidebar")?.size?.px;
-  if (!narrow()) setShared("sidebar.width", width);
-  // Mods edited before the rail went by width still read the flag.
-  setShared("sidebar.collapsed", !narrow());
-  run("layout.resize", { id: "sidebar", px: narrow() ? (shared("sidebar.width") ?? 248) : appWindow()?.platform === "macos" ? 76 : 44 });
-}
+import { narrow, toggleSidebar } from "./layout.js";
 
 export default class WorkspaceChrome extends View {
   render() {

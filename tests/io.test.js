@@ -164,3 +164,76 @@ test("noteTime gives null on a non-zero code, bad output or a throw", async () =
   assert.equal(await noteTime("/v/a.md", { exec: async () => ({ code: 0, stdout: "x", stderr: "" }) }), null);
   assert.equal(await noteTime("/v/a.md", { exec: async () => { throw new Error("boom"); } }), null);
 });
+
+const { listNotes, capNotice, backoffMs, touches } = await import("../mods/herdsidian/io.js");
+
+test("noteTime falls back to GNU stat -c %Y when BSD stat -f %m gives no time", async () => {
+  const calls = [];
+  const exec = async (cmd, args) => {
+    calls.push([cmd, ...args]);
+    // GNU stat: -f is a filesystem query, so the BSD form prints text, not a number.
+    return args[0] === "-f" ? { code: 0, stdout: "  File: \"/v/a.md\"\n    ID: 1\n", stderr: "" } : { code: 0, stdout: "1700000000\n", stderr: "" };
+  };
+  assert.equal(await noteTime("/v/a.md", { exec }), 1700000000000);
+  assert.deepEqual(calls, [["stat", "-f", "%m", "/v/a.md"], ["stat", "-c", "%Y", "/v/a.md"]]);
+});
+
+test("noteTime falls back when the BSD form throws and gives null when both fail", async () => {
+  const gnu = async (cmd, args) => { if (args[0] === "-f") throw new Error("bad flag"); return { code: 0, stdout: "5\n", stderr: "" }; };
+  assert.equal(await noteTime("/v/a.md", { exec: gnu }), 5000);
+  assert.equal(await noteTime("/v/gone.md", { exec: async () => ({ code: 1, stdout: "", stderr: "no" }) }), null);
+});
+
+test("listNotes reports the cap: the shown notes, the total and truncated", async () => {
+  const lines = Array.from({ length: MAX_NOTES + 20 }, (_, i) => `/v/n${String(i).padStart(5, "0")}.md`);
+  const got = await listNotes("/v", { exec: async () => ({ code: 0, stdout: lines.join("\n"), stderr: "" }) });
+  assert.equal(got.notes.length, MAX_NOTES);
+  assert.equal(got.total, MAX_NOTES + 20);
+  assert.equal(got.truncated, true);
+  assert.equal(capNotice(got), `Indexed the first 5000 of ${MAX_NOTES + 20} notes`);
+});
+
+test("listNotes under the cap is not truncated and gives no notice", async () => {
+  const got = await listNotes("/v", { exec: async () => ({ code: 0, stdout: "/v/b.md\n/v/a.md\n", stderr: "" }) });
+  assert.deepEqual(got, { notes: ["a.md", "b.md"], total: 2, truncated: false });
+  assert.equal(capNotice(got), null);
+});
+
+test("backoffMs grows from 1 s and stops at 30 s", () => {
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 20].map(backoffMs), [1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000]);
+});
+
+test("touches: an unknown or empty batch counts; otherwise the note, its folder or the vault must be in it", () => {
+  assert.equal(touches(null, "/v", "a.md"), true);
+  assert.equal(touches([], "/v", "a.md"), true);
+  assert.equal(touches(["/v/a.md"], "/v", "a.md"), true);
+  assert.equal(touches(["/v/b.md"], "/v", "a.md"), false);
+  assert.equal(touches(["/v/sub"], "/v", "sub/a.md"), true);
+  assert.equal(touches(["/v/sub/"], "/v", "sub/a.md"), true);
+  assert.equal(touches(["/v/sub2"], "/v", "sub/a.md"), false);
+  assert.equal(touches(["/v/"], "/v", "a.md"), true);
+});
+
+const { afterOutage } = await import("../mods/herdsidian/io.js");
+
+test("touches counts a batch whose paths are not under the stored vault (symlinked vault)", () => {
+  assert.equal(touches(["/real/vault/b.md"], "/link/vault", "a.md"), true);
+  assert.equal(touches(["/link/vault/b.md", "/real/x.md"], "/link/vault", "a.md"), false);
+});
+
+
+const { underVault } = await import("../mods/herdsidian/io.js");
+
+test("underVault is true when a reported path is the vault or under it, false for real paths of a symlinked vault", () => {
+  assert.equal(underVault(["/v"], "/v"), true);
+  assert.equal(underVault(["/v/"], "/v"), true);
+  assert.equal(underVault(["/other/x", "/v/a.md"], "/v"), true);
+  assert.equal(underVault(["/real/v/a.md"], "/v"), false);
+  assert.equal(underVault(["/v2/a.md"], "/v"), false);
+  assert.equal(underVault([], "/v"), false);
+});
+
+test("afterOutage is true only after failures", () => {
+  assert.equal(afterOutage(0), false);
+  assert.equal(afterOutage(3), true);
+});

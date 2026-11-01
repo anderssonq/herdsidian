@@ -1,6 +1,6 @@
 // The graph's pure logic, with no Herdr or GPUI imports so it can be tested with node:
 // links, the vault index, the neighborhood, the ring layout and the view transform.
-import { base, resolve } from "./notes.js";
+import { WIKILINK, base, isFileEmbed, mapProse, resolve } from "./notes.js";
 
 export const MAX_NODES = 40;
 const INDEX_CHUNK = 1000;
@@ -16,10 +16,27 @@ const WHEEL_STEP = 0.0025;
 // The awk program that narrows the vault to what the graph needs. It works in BEGIN and reads each
 // ARGV file with getline, so a file deleted since `find` is skipped instead of aborting the chunk.
 // Output: `F<TAB>path` per file, `M<TAB>line` per frontmatter line (only a leading ---  block,
-// at most 200 lines), `L<TAB>[[...]]` per wikilink on any line, frontmatter included (A1).
-export const INDEX_AWK = String.raw`BEGIN {
+// at most 200 lines), `L<TAB>[[...]]` per wikilink on any line, frontmatter included (A1), except
+// inside fenced blocks (three or more backticks or tildes) and inline code spans, like notes.js mapProse.
+// The backtick is built with sprintf because this template can't hold one.
+// A code span splits the prose around it: a link is never joined across one, as in render().
+// Known difference: in unclosed frontmatter (--- with no closing ---) awk reads no fences, while
+// notes.js render() does; accepted, it is a malformed note.
+export const INDEX_AWK = String.raw`function links(s,   a, rest, b, emb) {
+  while ((a = index(s, "[[")) > 0) {
+    rest = substr(s, a + 2)
+    b = index(rest, "]]")
+    if (b == 0) break
+    emb = (a > 1 && substr(s, a - 1, 1) == "!") ? "!" : ""
+    print "L\t" emb "[[" substr(rest, 1, b - 1) "]]"
+    s = substr(rest, b + 2)
+  }
+}
+BEGIN {
+  bt = sprintf("%c", 96)
   for (i = 1; i < ARGC; i++) {
     f = ARGV[i]
+    fence = ""
     r = (getline line < f)
     if (r < 0) continue
     print "F\t" f
@@ -40,29 +57,57 @@ export const INDEX_AWK = String.raw`BEGIN {
           buf[nf] = line
         }
       }
-      s = line
-      while ((a = index(s, "[[")) > 0) {
-        rest = substr(s, a + 2)
-        b = index(rest, "]]")
-        if (b == 0) break
-        emb = (a > 1 && substr(s, a - 1, 1) == "!") ? "!" : ""
-        print "L\t" emb "[[" substr(rest, 1, b - 1) "]]"
-        s = substr(rest, b + 2)
+      if (front != 1) {
+        ci = 0
+        while (substr(line, ci + 1, 1) == " ") ci++
+        cc = substr(line, ci + 1, 1)
+        ck = 0
+        if (ci <= 3 && (cc == bt || cc == "~")) while (substr(line, ci + ck + 1, 1) == cc) ck++
+        if (fence == "") {
+          if (ck >= 3 && (cc == "~" || index(substr(line, ci + ck + 1), bt) == 0)) { fence = cc; flen = ck; r = (getline line < f); continue }
+        } else {
+          if (cc == fence && ck >= flen && substr(line, ci + ck + 1) ~ /^[ \t]*$/) fence = ""
+          r = (getline line < f)
+          continue
+        }
       }
+      s = ""
+      cr = line
+      while ((cp = index(cr, bt)) > 0) {
+        s = s substr(cr, 1, cp - 1)
+        cr = substr(cr, cp)
+        ck = 0
+        while (substr(cr, ck + 1, 1) == bt) ck++
+        ct = substr(cr, ck + 1)
+        cf = 0
+        while ((cm = index(ct, bt)) > 0) {
+          ct = substr(ct, cm)
+          cj = 0
+          while (substr(ct, cj + 1, 1) == bt) cj++
+          ct = substr(ct, cj + 1)
+          if (cj == ck) { cf = 1; break }
+        }
+        if (cf) { links(s); s = ""; cr = ct }
+        else { s = s substr(cr, 1, ck); cr = substr(cr, ck + 1) }
+      }
+      links(s cr)
       r = (getline line < f)
     }
     close(f)
   }
 }`;
 
-// Targets render() turns into note: links, trimmed, in order, duplicates kept. Same regex as notes.js.
+// Targets render() turns into note: links, trimmed, in order, duplicates kept. Same pattern and
+// embed test as notes.js, and code is skipped as there.
 export function extractLinks(text) {
   const targets = [];
-  for (const [, embed, target] of text.matchAll(/(!?)\[\[([^\]|#]+)(#[^\]|]*)?(?:\|([^\]]*))?\]\]/g)) {
-    const name = target.trim();
-    if (embed && /\.(?!md$)\w+$/i.test(name)) continue;
-    targets.push(name);
-  }
+  mapProse(text, (prose) => {
+    for (const [, embed, target] of prose.matchAll(WIKILINK)) {
+      const name = target.trim();
+      if (!isFileEmbed(embed, name)) targets.push(name);
+    }
+    return prose;
+  });
   return targets;
 }
 
@@ -444,11 +489,10 @@ export function zoomAt(view, point, deltaY, size) {
 }
 
 // The muted one-liner for the section, or null when the graph shows (AC33-38).
-// s = { vault, indexing, error, index, center, graph }
+// s = { vault, error, index, center, graph }
 export function sectionMessage(s) {
   if (!s.vault) return "Choose a vault to see the graph.";
   if (s.error) return s.error;
-  if (s.indexing && !s.index) return "Indexing links…";
   if (!s.index) return "Indexing links…";
   if (!s.center) return "Open a note or link one to this agent.";
   if (s.index.links === 0) return "No [[wikilinks]] in this vault yet.";

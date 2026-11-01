@@ -296,7 +296,9 @@ Look (layout root):
   `nextCommand()` for `focus-N`. After each order change it publishes the first 9
   addresses as `guide-agents.order`, for the palette's `⌥⌘N` hints.
 - `herdsidian`: `main.js` (the View), `notes.js` (pure helpers: `render`,
-  `resolve`, `linkTarget`, `hidden`, `base`, `HIDDEN`, tested by `tests/notes.test.js`),
+  `resolve`, `linkTarget`, `hidden`, `base`, `HIDDEN`, `WIKILINK` (the one wikilink
+  pattern, also read by the graph), `isFileEmbed`, `mapProse`; wikilinks inside code
+  (fenced blocks, inline spans) are ignored; tested by `tests/notes.test.js`),
   and four new files:
   - `graph.js` (pure): the `awk` program and its output parser, `buildIndex`,
     `updateIndex`, `neighborhood` (cap `MAX_NODES` = 40), `layout`,
@@ -311,11 +313,17 @@ Look (layout root):
     `tests/context.test.js`.
   - `io.js`: the Herdr side of both. `stateDir`, `loadContext`, `saveContext`
     (retries on a stale snapshot), `indexNotes` (one `awk` call per chunk of
-    1,000 files), `allNotes` (one `find`, `MAX_NOTES` = 5000), `noteTime` (`stat -f %m`
-    through `exec`) and `gitTop` (`git rev-parse --show-toplevel`).
+    1,000 files), `listNotes` (one `find`, `MAX_NOTES` = 5000; gives `{ notes, total,
+    truncated }`), `allNotes` (its `notes`), `capNotice` (the notice text when capped,
+    shown in the Notes panel), `backoffMs` (watch retry wait, 1 s doubling to 30 s),
+    `afterOutage` (true on the first watch success after failures: clear the error, reload all),
+    `underVault` (whether a reported path is the vault or inside it),
+    `touches` (whether a watcher batch may have changed a note), `noteTime` (`stat -f %m`
+    through `exec`, then `stat -c %Y` if that gives no time) and `gitTop`
+    (`git rev-parse --show-toplevel`).
   - `graph-view.js`: the Graph section and the Agent context block.
   - The palette, five files:
-    - `palette.js` (pure): `tier`, `rankNotes`, `rankAgents`, `rankCommands`,
+    - `palette.js` (pure): `tier`, `rankNotes`, `rankNotesTiered`, `spaceWhere`, `rankAgents`, `rankCommands`,
       `formatChord`, `keyHint`, `agentHint`, `commandList`, `scene`, `buildList`,
       `relativeTime`, `breadcrumb`, `topMeta`, `sendState`, `footer`, `visibleWindow`,
       `autoFromIndex`, `autoMeta`, `isFreshRequest`. Limits: 4 agents, 6 notes, 4
@@ -327,7 +335,7 @@ Look (layout root):
       creates it in `init` when `props().overlay` is set.
     - `palette-view.js`: `paletteCard`, the card as a function of a plain model.
     - Tests for the Herdr-side additions are in `tests/io.test.js` (`allNotes`,
-      `noteTime`) and `tests/lint.test.js` (the new rules).
+      `listNotes`, `noteTime`, `backoffMs`, `afterOutage`, `underVault`, `touches`) and `tests/lint.test.js` (the new rules).
   From `herdr`: `exec` (`sh` to list a folder and to read `XDG_STATE_HOME`,
   `find` for every note, `awk`, `git`, `open` for web links), `readTextFile`,
   `writeTextFile(path, text, expected)` for conflict-safe saves,
@@ -352,20 +360,27 @@ Look (layout root):
   Tests: `tests/tokens.test.js`.
 - `lib/ui.js`: `icon(p, size, color)`, a program's icon (a tinted SVG in
   `color`, else the picture as is; null without one), used by `guide-agents`,
-  `herdsidian-tabs` and `herdsidian-pane`. And `glow(k)`, the top sheen shared
+  `herdsidian-tabs` and `herdsidian-pane`. `dot(t, status, size, margin = 0)`, the
+  round status dot (fill or ring, pulse for working, `mx(margin)` only when
+  positive), used by `herdsidian` (palette), `guide-agents`, `herdsidian-tabs` and
+  `herdsidian-pane`. And `glow(k)`, the top sheen shared
   by `herdsidian-chrome` and `herdsidian-tabs`. It paints the full size of its block with
   `GLOW_ANGLE` from `k.glow` (top) to `k.glowEnd` (bottom edge, fully
   transparent). Both blocks are 52 px high, so the halves meet at the
   divider. It uses the global gpui `window`, not herdr's `window` import.
   It imports `gpui-kit`, so Node tests do not import it.
-- `lib/layout.js`: `find(node, id)`, a pure tree search used by `herdsidian`,
-  `herdsidian-chrome`, `herdsidian-tabs`, `guide-agents` and `guide-spaces`.
+- `lib/layout.js`: `find(node, id)`, a tree search used by `herdsidian`,
+  `herdsidian-chrome`, `herdsidian-tabs`, `guide-agents` and `guide-spaces`. And the
+  sidebar rail helpers `narrow()` (width under 160 px) and `toggleSidebar()`
+  (`narrow` is used by `guide-agents`, `guide-spaces` and `herdsidian-chrome`;
+  `toggleSidebar` by `guide-agents` and `herdsidian-chrome`). It imports `herdr`, so
+  Node tests do not import it.
 - Copy rule: `lib/tokens.js`, `lib/ui.js` and `lib/layout.js` are the
   canonical files. Each mod that uses one carries a byte-identical
   `mods/<mod>/<name>.js`, because a mod folder is installed on its own. After
   you edit a canonical file, copy it into every mod that has it
   (`cp lib/tokens.js mods/<mod>/tokens.js`; `ui.js` lives in
-  `herdsidian-chrome`, `herdsidian-tabs`, `herdsidian-pane` and `guide-agents`). `npm run lint` fails if a copy
+  `herdsidian`, `herdsidian-chrome`, `herdsidian-tabs`, `herdsidian-pane` and `guide-agents`). `npm run lint` fails if a copy
   differs.
 - Icons: Herdr's `mods/workspace-chrome/*.svg` and `mods/files/*.svg`, plus
   the SVGs inside `herdsidian`, `herdsidian-tabs` and `herdsidian-pane`.

@@ -12,10 +12,10 @@ import { find } from "./layout.js";
 import { buildIndex, updateIndex, missingRaw, neighborhood, layout as ringLayout, toScreen, zoomAt, sectionMessage, placeLabels, AREA } from "./graph.js";
 import { emptyDoc, findEntry, autoLinks, contextNotes, suggest, deliveryText, sendOrder, pickAgent, canSend, pushRecent, matchNotes,
   pendingRequest, shouldReload, changedJson } from "./context.js";
-import { stateDir, loadContext, saveContext, indexNotes, gitTop, allNotes } from "./io.js";
+import { stateDir, loadContext, saveContext, indexNotes, gitTop, listNotes, capNotice, backoffMs, touches, afterOutage, underVault } from "./io.js";
 import { graphSection, keycap } from "./graph-view.js";
 import { sendText, sendToasts } from "./send.js";
-import { autoFromIndex } from "./palette.js";
+import { autoFromIndex, spaceWhere } from "./palette.js";
 import { Palette } from "./palette-main.js";
 
 // The ⌘K palette is another copy of this mod; the two copies talk through shared() keys (ADR-0003).
@@ -25,6 +25,8 @@ const publish = (key, value) => {
 };
 
 const NO_META = new Map();
+// hidden() slices the vault off a path, so it only applies to paths under the vault.
+const isHidden = (vault, p) => underVault([p], vault) && hidden(vault, p);
 const leaf = (path) => (path ?? "").split("/").filter(Boolean).pop() ?? "";
 
 // The last notes opened in the reader of one vault (suggestion source b).
@@ -57,7 +59,7 @@ export default class Notes extends View {
     const request = shared("herdsidian.request");
     this.handled = pendingRequest(request, null, this.vault, Date.now()).action === "none" ? request?.id ?? null : null;
     this.contextRev = shared("herdsidian.context-rev") ?? null;
-    this.entries = new Map(); this.folders = new Set(); this.all = [];
+    this.entries = new Map(); this.folders = new Set(); this.all = []; this.notice = null;
     this.note = null; this.mode = "read"; this.query = ""; this.searching = false; this.generation = 0;
     this.search = InputState.new({ placeholder: "Find a note…" });
     this.search.on("change", (_e, cx) => { this.query = this.search.value().trim(); cx.notify(); });
@@ -143,15 +145,17 @@ export default class Notes extends View {
         const root = await directory(vault);
         if (this.vault !== vault) return;
         this.entries.set("", root);
-        for (const path of [...this.folders]) {
-          const list = await directory(`${vault}/${path}`).catch(() => null);
-          if (this.vault !== vault) return;
-          if (list) this.entries.set(path, list);
-          else { this.folders.delete(path); this.entries.delete(path); }
-        }
-        const all = await allNotes(vault);
+        const paths = [...this.folders];
+        const lists = await Promise.all(paths.map((path) => directory(`${vault}/${path}`).catch(() => null)));
         if (this.vault !== vault) return;
-        this.all = all; this.error = null;
+        paths.forEach((path, i) => {
+          if (!this.folders.has(path)) return; // closed during the await
+          if (lists[i]) this.entries.set(path, lists[i]);
+          else { this.folders.delete(path); this.entries.delete(path); }
+        });
+        const listed = await listNotes(vault);
+        if (this.vault !== vault) return;
+        this.all = listed.notes; this.error = null; this.notice = capNotice(listed);
         this.reindex(cx, changed);
       } catch (e) { if (this.vault === vault) this.error = String(e); }
       cx.notify();
@@ -163,9 +167,10 @@ export default class Notes extends View {
   reindex(cx, changed) {
     const vault = this.vault;
     if (!vault) return;
-    // The vault root itself, or a flood of folder events, says too little: index everything.
-    if (changed && (changed.some((p) => p === vault || p === `${vault}/`)
-      || changed.filter((p) => !/\.md$/i.test(p) && !hidden(vault, p)).length > 20)) changed = null;
+    // The vault root itself, a flood of folder events, or paths not under the vault (a symlinked
+    // vault reported by its real path) say too little: index everything.
+    if (changed && (!underVault(changed, vault) || changed.some((p) => p === vault || p === `${vault}/`)
+      || changed.filter((p) => !/\.md$/i.test(p) && !isHidden(vault, p)).length > 20)) changed = null;
     if (this.indexing) {
       const queued = this.reindexAgain;
       this.reindexAgain = queued === "all" || !changed ? "all" : [...(queued ?? []), ...changed];
@@ -182,7 +187,7 @@ export default class Notes extends View {
           const known = new Set(all), prefix = `${vault}/`;
           const files = changed.filter((p) => p.startsWith(prefix) && /\.md$/i.test(p)).map((p) => p.slice(prefix.length)).filter((p) => known.has(p));
           // A folder renamed or moved reports the folder, not its notes: index the notes that have no entry yet.
-          const folders = changed.filter((p) => p.startsWith(prefix) && !/\.md$/i.test(p) && !hidden(vault, p));
+          const folders = changed.filter((p) => p.startsWith(prefix) && !/\.md$/i.test(p) && !isHidden(vault, p));
           if (folders.length) {
             for (const p of missingRaw(this.index, all)) if (!files.includes(p)) files.push(p);
           }
@@ -201,27 +206,48 @@ export default class Notes extends View {
   }
 
   // One watch per vault shown: a newer one (another vault, or the same again) ends this one.
+  // watchFolder resolves only when something changes, so after an outage the full reload (and the
+  // cleared error) waits for the next change batch; there is no periodic reload on purpose.
   watch(cx) {
     const vault = this.vault, generation = ++this.generation;
     if (!vault) return;
     cx.spawn(async (cx) => {
-      try {
-        for (;;) {
+      // A failed watch retries after a growing wait; it ends only when the vault changes or the mod unloads.
+      let failures = 0;
+      while (this.generation === generation) {
+        try {
           const changed = await watchFolder(vault);
           if (this.generation !== generation) return;
+          const back = afterOutage(failures);
+          failures = 0;
+          if (back) {
+            // Back after an outage: changes made meanwhile were never reported.
+            this.error = null;
+            this.load(cx);
+            this.refreshNote(cx);
+            continue;
+          }
           // Obsidian rewrites .obsidian/ all the time: that's not a note changing.
-          if (changed.every((p) => hidden(vault, p))) continue;
+          if (changed.every((p) => isHidden(vault, p))) continue;
           this.load(cx, changed);
-          this.refreshNote(cx);
+          this.refreshNote(cx, changed);
+        } catch (e) {
+          if (this.generation !== generation) return;
+          // Shown once per outage, not on every retry.
+          if (failures === 0) { this.error = `Cannot watch the vault: ${e}`; cx.notify(); }
+          failures++;
+          await cx.sleep(backoffMs(failures));
         }
-      } catch {}
+      }
     });
   }
 
   // The open note changed on disk: take the new text unless there are unsaved edits.
-  refreshNote(cx) {
+  // changed: the absolute paths the watcher reported; the read is skipped when the note is not among them.
+  refreshNote(cx, changed = null) {
     const note = this.note;
     if (!note || this.dirty) return;
+    if (!touches(changed, this.vault, note)) return;
     cx.spawn(async (cx) => {
       const text = await readTextFile(`${this.vault}/${note}`).catch(() => null);
       if (text === null || this.note !== note || this.dirty || text === this.loaded) return;
@@ -239,7 +265,7 @@ export default class Notes extends View {
     this.close();
     localStorage.setItem("vault", path);
     publish("herdsidian.vault", path);
-    this.vault = path; this.entries = new Map(); this.folders = new Set(); this.all = []; this.selected = null;
+    this.vault = path; this.entries = new Map(); this.folders = new Set(); this.all = []; this.selected = null; this.notice = null;
     this.searching = false; this.query = ""; this.error = null; this.search.set_value("");
     // Another vault: its own index, graph, view and recent notes.
     this.indexGen++; this.indexing = false; this.reindexAgain = null; this.indexError = null;
@@ -275,8 +301,10 @@ export default class Notes extends View {
   }
 
   read(path, cx, mode) {
+    const vault = this.vault;
     cx.spawn(async (cx) => {
-      const text = await readTextFile(`${this.vault}/${path}`).catch(() => null);
+      const text = await readTextFile(`${vault}/${path}`).catch(() => null);
+      if (this.vault !== vault) return; // the vault changed during the read: that note is not in this one
       if (text === null) { this.error = `Cannot read ${path}`; return cx.notify(); }
       const asking = path === this.note ? this.asking : null;
       this.close();
@@ -468,23 +496,28 @@ export default class Notes extends View {
 
   // The focused agent, its space and its folder, read live (A3, F3). The memory of the last agent
   // per space is assigned here, not notified, so clicking in this panel keeps the agent (AC21).
-  focus() {
+  // Called from render: the shared write (which re-renders every mod) is deferred to a spawn, and only when changed.
+  focus(cx) {
     const all = spaces();
     const picked = pickAgent({ agents: agents(), focused: focused(), spaces: all, memory: this.agentMemory });
     this.agentMemory = picked.memory;
-    publish("herdsidian.memory", picked.memory);
+    if (changedJson(shared("herdsidian.memory"), picked.memory)) {
+      const memory = picked.memory;
+      cx.spawn(async (cx) => {
+        await cx.sleep(0);
+        publish("herdsidian.memory", memory);
+      });
+    }
     const agent = picked.agent, space = all.find((s) => s.id === picked.spaceId) ?? null;
     const cwd = agent ? panes().find((p) => p.pane === agent.pane)?.cwd ?? null : null;
     return { agent, space, cwd, liveIds: all.map((s) => s.id) };
   }
 
   // focus() plus this space's context notes (links, the agent's pins, auto links), in A4 order.
-  scene() {
-    const f = this.focus();
+  scene(cx) {
+    const f = this.focus(cx);
     if (this.liveNotes?.of !== this.all) this.liveNotes = { of: this.all, set: new Set(this.all) };
-    const where = f.space && this.vault
-      ? { space: f.space.id, name: f.space.name, folder: f.space.folder, vault: this.vault, ...(f.agent ? { address: f.agent.address } : {}) }
-      : null;
+    const where = spaceWhere(f.space, this.vault, f.agent);
     const entry = where ? findEntry(this.ctx.doc, where, f.liveIds) : null;
     const auto = autoLinks(this.index?.meta ?? NO_META, f.cwd, home());
     return { ...f, where, notes: contextNotes(entry, f.agent?.address ?? null, auto, this.liveNotes.set) };
@@ -505,9 +538,9 @@ export default class Notes extends View {
       canAddCurrent: Boolean(this.note), send: { ok: false, reason: null },
       picking: false, pickState: this.pick, pickHits: [],
     };
-    if (this.hidden) { this.focus(); return m; }
+    if (this.hidden) { this.focus(cx); return m; }
 
-    const s = this.scene(), center = this.center(s.notes);
+    const s = this.scene(cx), center = this.center(s.notes);
     const linked = new Set(s.notes.map((n) => n.path));
     const key = JSON.stringify([this.vault, this.indexVer, center, this.hops, s.cwd, s.space?.name ?? null, s.space?.machine ?? null, this.recent, [...linked]]);
     if (key !== this.graphKey) {
@@ -532,7 +565,7 @@ export default class Notes extends View {
       m.labels = placeLabels(m.nodes.filter((n) => n.kind !== "far" || far || n.hovered), undefined, this.area);
       m.count = g.nodes.length; m.omitted = g.omitted;
     }
-    m.message = sectionMessage({ vault: this.vault, indexing: this.indexing, error: this.indexError, index: this.index, center, graph: g });
+    m.message = sectionMessage({ vault: this.vault, error: this.indexError, index: this.index, center, graph: g });
     m.error = this.indexError ?? this.ctxError;
 
     const agent = s.agent;
@@ -639,7 +672,7 @@ export default class Notes extends View {
 
   // One change to the context file (create on first link, keep other spaces), then the new doc.
   change(change, cx) {
-    const s = this.scene();
+    const s = this.scene(cx);
     if (!s.where) { this.ctxError = this.vault ? "No space to link notes to" : "Choose a vault first"; return cx.notify(); }
     cx.spawn(async (cx) => {
       try {
@@ -654,7 +687,7 @@ export default class Notes extends View {
   // Send to agent (plan Decision 5, D4): paths only, at most 600 characters, never submitted.
   // Copy, then focus the agent's terminal and paste; if that cannot apply the text stays copied.
   send(cx) {
-    const s = this.scene();
+    const s = this.scene(cx);
     if (this.sending) return; // A second click while the first send runs.
     if (!this.vault || !s.agent || !canSend({ agent: s.agent, space: s.space, notes: s.notes }).ok) return;
     const { text, skipped, overflow = 0 } = deliveryText(sendOrder(s.notes, this.center(s.notes)), this.vault, s.agent);
@@ -684,10 +717,11 @@ export default class Notes extends View {
           .child(this.button("notes-vault", t, "folder", "Choose the vault", (_e, cx) => this.chooseVault(cx))))
         .child(this.button("notes-collapse", t, "panel-right", "Collapse notes (⌘⇧O hides them)", () => this.collapse())))
       .when(Boolean(this.error), (el) => el.child(div().px(12).pb(6).text_size(11.5).text_color(t.blocked).child(this.error)))
+      .when(Boolean(this.notice), (el) => el.child(div().px(12).pb(6).text_size(11.5).text_color(t.muted).child(this.notice)))
       .child(this.note ? this.reader(t) : this.browser(t))
       // No vault: no graph section, only the choose-a-folder prompt above.
       .when(Boolean(this.vault), (el) => el.child(graphSection(t, this.graphModel(cx), this.on)))
       // Still remember the last agent per space while no vault is chosen (AC21).
-      .when(!this.vault, (el) => { this.focus(); return el; });
+      .when(!this.vault, (el) => { this.focus(cx); return el; });
   }
 }

@@ -690,3 +690,21 @@ for (const file of THEMES) {
     assert.ok(ratio(muted, popover) >= 3, `muted ${ratio(muted, popover).toFixed(2)}`);
   });
 }
+
+import { rankNotesTiered, spaceWhere } from "../mods/herdsidian/palette.js";
+
+test("rankNotesTiered keeps the rankNotes order and carries the tier rankNoteRows uses", () => {
+  const notes = ["z/Notalphabet.md", "z/Beta Alpha.md", "z/Alpha Beta.md", "z/Alpha.md"];
+  const tiered = rankNotesTiered(notes, "alpha");
+  assert.deepEqual(tiered.map((r) => r.path), rankNotes(notes, "alpha"));
+  assert.deepEqual(tiered.map((r) => r.tier), [0, 1, 2, 3]);
+  assert.deepEqual(rankNoteRows(notes, " alpha ", new Set()).map((r) => [r.path, r.tier]), tiered.map((r) => [r.path, r.tier]));
+});
+
+test("spaceWhere builds the write target, with the address only for an agent, and null without space or vault", () => {
+  const space = { id: "s1", name: "work", folder: "/r/work", extra: 1 };
+  assert.deepEqual(spaceWhere(space, "/v", { address: "t1" }), { space: "s1", name: "work", folder: "/r/work", vault: "/v", address: "t1" });
+  assert.deepEqual(spaceWhere(space, "/v", null), { space: "s1", name: "work", folder: "/r/work", vault: "/v" });
+  assert.equal(spaceWhere(null, "/v", null), null);
+  assert.equal(spaceWhere(space, null, null), null);
+});

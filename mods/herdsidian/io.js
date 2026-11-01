@@ -78,24 +78,62 @@ export async function indexNotes(vault, files) {
 
 export const MAX_NOTES = 5000;
 
-// Every note in the vault, as paths relative to it: for search and wikilinks. deps is for tests.
-export async function allNotes(vault, deps = { exec }) {
+// Every note in the vault, as paths relative to it, capped at MAX_NOTES: { notes, total, truncated }.
+// total counts all the notes found, so the cap can be shown. deps is for tests.
+export async function listNotes(vault, deps = { exec }) {
   const prune = [...HIDDEN].flatMap((n, i) => [...(i ? ["-o"] : []), "-name", n]);
   const r = await deps.exec("find", [vault, "(", ...prune, ")", "-prune", "-o", "-type", "f", "-iname", "*.md", "-print"]);
   // find exits 1 on an unreadable subfolder yet still lists the rest: only no output at all is an error.
   if (r.code !== 0 && !r.stdout.trim()) throw new Error(r.stderr || "Cannot list the vault");
-  return r.stdout.split("\n").filter(Boolean).map((p) => p.slice(vault.length + 1)).sort().slice(0, MAX_NOTES);
+  const found = r.stdout.split("\n").filter(Boolean).map((p) => p.slice(vault.length + 1)).sort();
+  return { notes: found.slice(0, MAX_NOTES), total: found.length, truncated: found.length > MAX_NOTES };
 }
 
-// When a note was last changed, in ms since the epoch; null when it cannot be read (macOS stat).
+// The notes only, for callers that do not show the cap.
+export async function allNotes(vault, deps = { exec }) {
+  return (await listNotes(vault, deps)).notes;
+}
+
+// The one-line notice for a capped list, or null when every note was indexed.
+export const capNotice = ({ notes, total, truncated }) => (truncated ? `Indexed the first ${notes.length} of ${total} notes` : null);
+
+// The wait before the next watch retry: 1 s after the first failure, doubling, at most 30 s.
+export const backoffMs = (failures) => Math.min(30_000, 1000 * 2 ** Math.max(0, failures - 1));
+
+// Whether a watcher batch (absolute paths) may have changed the note. An empty or unknown list says
+// nothing, so it counts; a reported folder counts for the notes inside it (a rename reports the folder).
+export function touches(changed, vault, note) {
+  if (!changed || changed.length === 0) return true;
+  // A symlinked vault may be reported by its real path: then nothing can be matched, so re-read.
+  if (!underVault(changed, vault)) return true;
+  const abs = `${vault}/${note}`;
+  return changed.some((p) => {
+    const dir = p.replace(/\/+$/, "");
+    return dir === abs || dir === vault || abs.startsWith(`${dir}/`);
+  });
+}
+
+// What the first successful watch after `failures` failed ones must do: changes made during the
+// outage were never reported, so reload everything and drop the watch error.
+export const afterOutage = (failures) => failures > 0;
+
+// Whether some reported path is the vault or inside it. False for the real paths of a symlinked vault.
+export const underVault = (changed, vault) => changed.some((p) => p === vault || p.startsWith(`${vault}/`));
+
+// When a note was last changed, in ms since the epoch; null when it cannot be read.
+// BSD/macOS `stat -f %m` first; on GNU/Linux that is a filesystem query, so fall back to `stat -c %Y`.
 export async function noteTime(abs, deps = { exec }) {
-  try {
-    const r = await deps.exec("stat", ["-f", "%m", abs]);
-    const secs = Number(r.stdout.trim());
-    return r.code === 0 && r.stdout.trim() && Number.isFinite(secs) ? secs * 1000 : null;
-  } catch {
-    return null;
+  for (const args of [["-f", "%m", abs], ["-c", "%Y", abs]]) {
+    try {
+      const r = await deps.exec("stat", args);
+      const out = r.stdout.trim();
+      const secs = Number(out);
+      if (r.code === 0 && /^\d+$/.test(out) && Number.isFinite(secs)) return secs * 1000;
+    } catch {
+      // Try the next form.
+    }
   }
+  return null;
 }
 
 // The repository folder of a cwd, or null when it is not in one (or git is missing).
