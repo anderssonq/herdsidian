@@ -57,8 +57,16 @@ function commandRow(t, k, m, row, on) {
     .when(Boolean(row.hint), (el) => el.child(keycap(t, row.hint)));
 }
 
+// A setting: its name, and its current value at the end.
+function settingRow(t, k, m, row, on) {
+  return frame(k, m, row, on, ROW.row)
+    .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(t.foreground).child(row.label))
+    .child(div().flex_none().text_size(12).text_color(t.muted).child(row.detail));
+}
+
 function row(t, k, m, r, on) {
   if (r.kind === "agent") return agentRow(t, k, m, r, on);
+  if (r.kind === "setting") return settingRow(t, k, m, r, on);
   if (r.kind === "note") return noteRow(t, k, m, r, on);
   return commandRow(t, k, m, r, on);
 }

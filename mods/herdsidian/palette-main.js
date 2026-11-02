@@ -12,13 +12,15 @@ import { base, render as toMarkdown } from "./notes.js";
 import { emptyDoc, pickAgent } from "./context.js";
 import { stateDir, loadContext, saveContext, allNotes, noteTime } from "./io.js";
 import {
-  ROW, LIST_MAX, TABS, scene, commandList, buildList, rankNoteRows, hasMod, agentHint, topMeta, wrap, sendState, planSend, footer,
+  ROW, LIST_MAX, TABS, scene, commandList, settingSections, buildList, rankNoteRows, hasMod, agentHint, topMeta, wrap, sendState, planSend, footer,
   visibleWindow, isShown, targetAgent, sameKey, rankKey, modelKey,
 } from "./palette.js";
 import { sendText } from "./send.js";
+import { find } from "./layout.js";
+import { settings, setSetting } from "./settings.js";
 import { paletteCard, PLACEHOLDER, linkPlaceholder } from "./palette-view.js";
 
-const TAB_LABELS = { all: "All", notes: "Notes", agents: "Agents", commands: "Commands" };
+const TAB_LABELS = { all: "All", notes: "Notes", agents: "Agents", commands: "Commands", settings: "Settings" };
 const PREVIEW_CHARS = 2048;
 const REFOCUS_MS = 600; // Herdr may take the keyboard back right after the popup opens (AC15)
 const deps = { run, focused, notify };
@@ -116,6 +118,14 @@ export class Palette {
       this.close();
       if (row.agent.pane) run("pane.focus", { pane: row.agent.pane });
       else run("agent.focus", { terminal: row.agent.address });
+      return;
+    }
+    // Settings change in place: the palette stays open and its row shows the new value.
+    if (row.kind === "setting") {
+      const change = row.setting.action;
+      if (change.type === "setting") setSetting(change.name, change.value);
+      else run(change.name, change.args);
+      cx.notify();
       return;
     }
     const action = row.command.action;
@@ -264,10 +274,13 @@ export class Palette {
     const tree = layout();
     const hasList = hasMod(tree, "guide-agents");
     const notesHidden = !isShown(tree, "herdsidian");
+    // Notes is a rail under 160 px, as Notes itself decides (main.js narrow()).
+    const notesRail = (find(tree, "herdsidian")?.size?.px ?? Infinity) < 160;
+    const current = settings();
     const bindings = keys(), layoutName = shared("layout"), order = shared("guide-agents.order");
     const inputs = modelKey({
       query: this.query, tab, notes: this.notes, notesError: this.notesError, doc: this.doc, linking: this.linking,
-      starter: this.starter, agents: live, order, layoutName, bindings, notesHidden, hasList,
+      starter: this.starter, agents: live, order, layoutName, bindings, notesHidden, hasList, settings: current, notesRail,
     });
     if (this.memo && sameKey(this.memo.inputs, inputs)) return this.memo;
 
@@ -278,7 +291,7 @@ export class Palette {
     const list = buildList({
       query: this.query, tab, vault: this.vault, notes: this.notes, notesError: this.notesError, linked: sc.linked,
       contextPaths: sc.contextPaths, agents: live, commands, hintFor: (address) => agentHint(address, order, bindings, layoutName, hasList),
-      rankedNotes: this.rankedFor(tab, sc),
+      rankedNotes: this.rankedFor(tab, sc), settings: settingSections({ settings: current, notesHidden, notesRail }),
     });
     this.memo = { inputs, tab, scene: sc, list };
     return this.memo;

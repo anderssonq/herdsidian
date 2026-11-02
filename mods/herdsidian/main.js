@@ -91,6 +91,8 @@ export default class Notes extends View {
         if (c === "mode" && this.note) this.setMode(this.mode === "read" ? "edit" : "read");
         // Links the open note; with none open, opens the picker without taking the keyboard (none in the rail).
         if (c === "link") { if (this.note) this.linkCurrent(cx); else if (!narrow()) this.openPicker(cx, false); }
+        // From ⌘K → Settings → Layout: Notes width.
+        if ((c === "expand" && narrow()) || (c === "rail" && !narrow())) this.collapse();
         cx.notify();
       }
     });

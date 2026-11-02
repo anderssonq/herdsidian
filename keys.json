@@ -14,6 +14,8 @@
     "cmd-alt-8": "guide-agents.focus-8",
     "cmd-alt-9": "guide-agents.focus-9",
     "cmd-shift-o": "layout.toggle:herdsidian",
+    "cmd-shift-e": "herdsidian-tabs.files",
+    "cmd-shift-g": "herdsidian-tabs.changes",
     "cmd-k": "mod.open:herdsidian",
     "cmd-l": "herdsidian.link",
     "ctrl-1": "space.select:1",
