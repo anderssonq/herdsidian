@@ -3,11 +3,12 @@
 import { base } from "./notes.js";
 import { matchNotes, canSend, contextNotes, findEntry, autoLinks, deliveryText } from "./context.js";
 import { sendToasts } from "./send.js";
+import { keyHint } from "./keys.js";
 
 export const LIMITS = { agents: 4, notes: 6, commands: 4, single: 50 };
 export const ROW = { top: 56, row: 32, title: 24 }; // px, shared by the view and visibleWindow
 export const LIST_MAX = 320; // px of a single-kind list before it scrolls
-export const TABS = ["all", "notes", "agents", "commands"];
+export const TABS = ["all", "notes", "agents", "commands", "settings"];
 
 const MAX_AUTO = 200;
 const KIND_ORDER = { note: 0, agent: 1, command: 2 };
@@ -76,33 +77,6 @@ export function rankCommands(commands, query) {
     .sort((a, b) => a.tier - b.tier);
 }
 
-const MODS = [["ctrl", "⌃"], ["alt", "⌥"], ["shift", "⇧"], ["cmd", "⌘"]];
-const KEY_NAMES = { tab: "⇥", escape: "⎋", space: "Space", up: "↑", down: "↓", left: "←", right: "→" };
-
-// "cmd-alt-1" -> "⌥⌘1". Modifier order ⌃⌥⇧⌘. The key itself may be "-" or "[".
-export function formatChord(keys) {
-  const held = new Set();
-  let rest = keys;
-  for (;;) {
-    const hit = MODS.find(([name]) => rest.startsWith(`${name}-`) && rest.length > name.length + 1);
-    if (!hit) break;
-    held.add(hit[0]);
-    rest = rest.slice(hit[0].length + 1);
-  }
-  const key = KEY_NAMES[rest] ?? (rest.length === 1 ? rest.toUpperCase() : rest);
-  return MODS.filter(([name]) => held.has(name)).map(([, glyph]) => glyph).join("") + key;
-}
-
-// keys() list -> "⌘L" | null. The `layout:<name>` section first, then `global`, nothing else.
-export function keyHint(bindings, action, layoutName) {
-  if (!Array.isArray(bindings)) return null;
-  for (const section of [`layout:${layoutName}`, "global"]) {
-    const found = bindings.find((b) => b.section === section && b.action === action);
-    if (found) return formatChord(found.keys);
-  }
-  return null;
-}
-
 // True when a visible block of layout() has content.mod === mod. A hidden node hides its subtree.
 export function hasMod(tree, mod) {
   if (tree === null || typeof tree !== "object") return false;
@@ -137,10 +111,11 @@ export const agentSig = (agents) => agents
   .join("\n");
 
 // The list memo key: everything buildList and commandList read.
-export function modelKey({ query, tab, notes, notesError, doc, linking, starter, agents, order, layoutName, bindings, notesHidden, hasList }) {
+export function modelKey({ query, tab, notes, notesError, doc, linking, starter, agents, order, layoutName, bindings, notesHidden, hasList, settings, notesRail }) {
   return [
     query, tab, notes, notesError, doc, linking, starter, agentSig(agents),
     JSON.stringify(order ?? null), layoutName, JSON.stringify(bindings), notesHidden, hasList,
+    JSON.stringify(settings ?? null), notesRail,
   ];
 }
 
@@ -177,6 +152,27 @@ export function commandList({ vault, notesHidden, space, starter, bindings, layo
     action: { type: "run", name: "app.palette", args: {} },
   });
   return out;
+}
+
+// The Settings tab: [{ title, rows }]. Each row's `action` is
+// { type: "setting", name, value } (the `settings` store) or { type: "run", name, args }.
+// `settings` comes from readSettings (keys.js); notesRail is only read when Notes is shown.
+export function settingSections({ settings, notesHidden, notesRail }) {
+  const general = [{
+    id: "key-hints", label: "Key hints", detail: settings.keyHints ? "On" : "Off",
+    action: { type: "setting", name: "keyHints", value: !settings.keyHints },
+  }];
+  const layout = [{
+    id: "notes-shown", label: "Notes panel", detail: notesHidden ? "Hidden" : "Shown",
+    action: { type: "run", name: "layout.toggle", args: { id: "herdsidian" } },
+  }];
+  if (!notesHidden) {
+    layout.push({
+      id: "notes-width", label: "Notes width", detail: notesRail ? "Rail" : "Expanded",
+      action: { type: "run", name: notesRail ? "herdsidian.expand" : "herdsidian.rail", args: {} },
+    });
+  }
+  return [{ title: "General", rows: general }, { title: "Layout", rows: layout }];
 }
 
 // The target space's context: { where, linked: Set, contextPaths }. target = { agent, space, liveIds? }.
@@ -219,6 +215,9 @@ const agentRow = ({ agent, tier: t }, hintFor) => ({
 const noteRow = (path, t) => ({
   key: `note:${path}`, kind: "note", label: base(path), detail: topFolder(path), hint: null, tier: t, path,
 });
+const settingRow = (setting) => ({
+  key: `setting:${setting.id}`, kind: "setting", label: setting.label, detail: setting.detail, hint: null, tier: 0, setting,
+});
 const commandRow = ({ command, tier: t }) => ({
   key: `command:${command.id}`, kind: "command", label: command.label, detail: "", hint: command.hint, tier: t, command,
 });
@@ -238,9 +237,17 @@ export function rankNoteRows(notes, query, linked) {
 }
 
 // -> { top, sections, pickable, empty }. `rankedNotes` (from rankNoteRows) skips the ranking when given.
-export function buildList({ query, tab, vault, notes, notesError, linked, contextPaths, agents, commands, hintFor, rankedNotes }) {
+// The Settings tab lists only `settings` (from settingSections), filtered by label.
+export function buildList({ query, tab, vault, notes, notesError, linked, contextPaths, agents, commands, hintFor, rankedNotes, settings = [] }) {
   const q = query.trim();
   const blank = q === "";
+  if (tab === "settings") {
+    const sections = settings
+      .map(({ title, rows }) => ({ kind: "settings", title, message: null,
+        rows: rows.filter((r) => blank || tier(r.label, q) >= 0).map(settingRow) }))
+      .filter((sec) => sec.rows.length);
+    return { top: null, sections, pickable: sections.flatMap((sec) => sec.rows), empty: sections.length ? null : `No matches for "${q}"` };
+  }
   const single = tab !== "all" && TABS.includes(tab) && !(tab === "notes" && !vault);
   const wants = (kind) => !single || tab === kind;
 
@@ -350,7 +357,7 @@ export function sendState({ row, target, space, vault, sending }) {
   return { ok: true, reason: null };
 }
 
-const OPEN_LABEL = { note: "Open", agent: "Focus", command: "Run" };
+const OPEN_LABEL = { note: "Open", agent: "Focus", command: "Run", setting: "Change" };
 
 // The footer keys. ⇥ only when preview.supported.
 export function footer({ row, send, preview }) {

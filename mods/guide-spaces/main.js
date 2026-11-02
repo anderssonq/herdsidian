@@ -9,6 +9,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window } from "herdr";
 import { tokens } from "./tokens.js";
 import { narrow } from "./layout.js";
+import { settings } from "./settings.js";
 
 // Where a space is now: its first terminal's live folder, else where it was made.
 // `ps`: panes(), read once by the caller (each read copies every pane).
@@ -332,7 +333,7 @@ export default class Spaces extends View {
           .when(!tree, el => el.child(h_flex().size(20).flex_none().rounded(6).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color(AVATAR_LETTER).child([...w.name][0]?.toUpperCase() ?? "?")))
           .child(div().flex_shrink(0).max_w(150).truncate().text_color(t.foreground).when(on, el => el.font_medium()).child(w.name))
           .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
-          .when(i < 9, el => el.child(div().flex_none().text_size(11).text_color(t.muted).child(`\u2303${i + 1}`))),
+          .when(i < 9 && settings().keyHints, el => el.child(div().flex_none().text_size(11).text_color(t.muted).child(`\u2303${i + 1}`))),
       );
   }
 
@@ -373,7 +374,7 @@ export default class Spaces extends View {
           .on_click((_e, cx) => { this.sectionFolded = !this.sectionFolded; cx.notify(); })
           .child(svg(`mods/workspace-chrome/chevron-${this.sectionFolded ? "right" : "down"}.svg`).size(11).flex_none())
           .child(div().font_semibold().child("Spaces")))
-          .child(div().flex_1().min_w(0).truncate().text_right().child("\u2303 1\u20139 \u00b7 \u2318\u2325[ \u2318\u2325]")))
+          .child(div().flex_1().min_w(0).truncate().text_right().child(settings().keyHints ? "\u2303 1\u20139 \u00b7 \u2318\u2325[ \u2318\u2325]" : "")))
         .when(collapsed, el => el.justify_center())
         .child(div().id("space-new").size(22).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(k.pill).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))

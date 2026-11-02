@@ -48,7 +48,7 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
    - `herdsidian-tabs` toolbar (52 px, `window_drag`, `canvas` at 35 %): a
      rounded track holding the tabs as a segmented control (28 px tabs, radius
      7, the active one `raised` with a 1 px top highlight), a new-tab button,
-     Files and Changes buttons, a 220 px Search box with `⌘K`, the Notes
+     Files and Changes buttons, a 220 px Search box with its key (`⌘K`), the Notes
      toggle and the window buttons. The Search box opens the palette (item 4). Buttons are 30 px, radius 8. A 14 px
      program icon leads each tab name (`foreground` on the selected tab,
      `muted` otherwise for tinted SVGs; pictures as is). The top sheen fills the whole
@@ -99,7 +99,7 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
    second time with `props().overlay` set. The card is 680 px wide, radius 18, padding 16,
    the opaque theme `popover` color, a 1 px `line` border. Its height fits the content.
    - Header: a 14 px search icon and the search field (placeholder "Search notes, agents
-     and commands…"), then the tabs All / Notes / Agents / Commands (24 px, radius 6;
+     and commands…"), then the tabs All / Notes / Agents / Commands / Settings (24 px, radius 6;
      the active one `accentSoft` with `foreground` text, the others `muted`). With no
      vault there is no Notes tab.
    - Top hit (text typed, All tab): a 56 px row. The title is 14 px semibold
@@ -324,7 +324,7 @@ Look (layout root):
   - `graph-view.js`: the Graph section and the Agent context block.
   - The palette, five files:
     - `palette.js` (pure): `tier`, `rankNotes`, `rankNotesTiered`, `spaceWhere`, `rankAgents`, `rankCommands`,
-      `formatChord`, `keyHint`, `agentHint`, `commandList`, `scene`, `buildList`,
+      `agentHint`, `commandList`, `scene`, `buildList`,
       `relativeTime`, `breadcrumb`, `topMeta`, `sendState`, `footer`, `visibleWindow`,
       `autoFromIndex`, `autoMeta`, `isFreshRequest`. Limits: 4 agents, 6 notes, 4
       commands, 50 in a single tab. Tested by `tests/palette.test.js`.
@@ -375,7 +375,22 @@ Look (layout root):
   (`narrow` is used by `guide-agents`, `guide-spaces` and `herdsidian-chrome`;
   `toggleSidebar` by `guide-agents` and `herdsidian-chrome`). It imports `herdr`, so
   Node tests do not import it.
-- Copy rule: `lib/tokens.js`, `lib/ui.js` and `lib/layout.js` are the
+- `lib/keys.js`: `formatChord(keys)` and `keyHint(bindings, action, layoutName)`, the
+  key hints read from `keys()` (the `layout:<name>` section first, then `global`).
+  Used by `herdsidian` (palette) and `herdsidian-tabs`, which shows the bound key
+  beside each tab, New, Files, Changes and Search, and in the Notes tooltip; no key, no hint.
+  Also `SETTING_DEFAULTS` and `readSettings(raw)`, the defaults and validation of the
+  settings store. Pure, so Node tests import it.
+- `lib/settings.js`: the global `settings` store. `settings()` reads
+  `shared("herdsidian.settings")` through `readSettings`; `setSetting(name, value)`
+  writes it, and every mod re-renders. Today one value: `keyHints` (default true) hides
+  the always-shown keys in `herdsidian-tabs` (tabs, New, Files, Changes, Search),
+  `guide-spaces` (`⌃N`, header) and `guide-agents` (`⌘⌥N`, header). Tooltips keep their
+  key. Changed from ⌘K → Settings, whose Layout section also toggles Notes
+  (`layout.toggle`) and its width (`herdsidian.expand` / `herdsidian.rail`, handled by
+  Notes' `nextCommand()`). Imports `herdr`; in `herdsidian-tabs` it is imported as
+  `herdsidianSettings`, because Herdr's own `settings()` is used there too.
+- Copy rule: `lib/tokens.js`, `lib/ui.js`, `lib/layout.js`, `lib/keys.js` and `lib/settings.js` are the
   canonical files. Each mod that uses one carries a byte-identical
   `mods/<mod>/<name>.js`, because a mod folder is installed on its own. After
   you edit a canonical file, copy it into every mod that has it
@@ -387,8 +402,9 @@ Look (layout root):
 - Keys: `layout:herdsidian` (`cmd-shift-o` → `layout.toggle:herdsidian`,
   `cmd-k` → `mod.open:herdsidian`, `cmd-alt-1..9` → `guide-agents.focus-N`,
   `ctrl-1..9` → `space.select:N`, `cmd-alt-[`/`]` → `space.prev`/`next`,
-  `cmd-[`/`]` → `agent.prev`/`next`, `cmd-l` → `herdsidian.link`, so every
-  shortcut the sidebar shows works) and `mod:herdsidian` (`cmd-s` →
+  `cmd-[`/`]` → `agent.prev`/`next`, `cmd-l` → `herdsidian.link`,
+  `cmd-shift-e`/`g` → `herdsidian-tabs.files`/`changes` (the toolbar's `nextCommand()`
+  toggles that panel), so every shortcut the sidebar and the toolbar show works) and `mod:herdsidian` (`cmd-s` →
   `herdsidian.save`, `cmd-e` → `herdsidian.mode`). Inside the palette, `⌘↵` and `⇥`
   are not in `keys.json`: the search field's `submit` event (with `secondary` set for
   `⌘↵`) and the key handler read them.
@@ -524,8 +540,8 @@ Look (layout root):
 - `⌘K` opens a popup 40 px from the top, 680 px wide, and the search field has the
   keyboard at once. `⌘K` again, `Esc` or a click outside closes it, and typing then
   lands in the terminal that had the keyboard.
-- The palette shows All / Notes / Agents / Commands. `↵` opens a note, focuses an agent
-  or runs a command. `⇥` previews a note. With no vault it says "Open Notes once
+- The palette shows All / Notes / Agents / Commands / Settings. `↵` opens a note, focuses an agent,
+  runs a command or changes a setting (the palette stays open). `⇥` previews a note. With no vault it says "Open Notes once
   (⌘⇧O) to choose a vault".
 - `⌘↵` on a note pastes its path into the agent that was focused at open, never
   presses Enter, and leaves the agent `idle`. With no agent it does nothing and the

@@ -92,7 +92,7 @@ herdsidian: ~/code/acme-api
 - **Local graph.** The open note (or the first linked note) at 1 or 2 hops, up to 40
   nodes. Drag to pan, scroll to zoom, click to open. Hide it if you don't need it.
 - **⌘K palette.** One search for notes, agents and commands, in a popup at the top.
-  Tabs: All, Notes, Agents, Commands. `↵` opens a note, focuses an agent or runs a
+  Tabs: All, Notes, Agents, Commands, Settings. `↵` opens a note, focuses an agent or runs a
   command. `⌘↵` pastes the selected note's path into the agent you were working with.
   It never presses Enter. `⇥` previews the note.
 - **Shortcut guide.** Each space shows `⌃1…⌃9` and each agent `⌘⌥1…⌘⌥9`, so you
@@ -166,6 +166,7 @@ Then bind a key in `keys.json`, for example
 | Keys | What it does |
 |---|---|
 | `⌘⇧O` | Show or hide the Notes sidebar |
+| `⌘⇧E` / `⌘⇧G` | Show or hide the Files / Changes panel |
 | `⌘L` | Link the open note to the focused agent's space (no note open: open the picker) |
 | `⌘K` | Open the Herdsidian palette (the toolbar's Search box does the same) |
 | `↵` | In the palette: open the note, focus the agent or run the command |
@@ -174,6 +175,7 @@ Then bind a key in `keys.json`, for example
 | `↑` / `↓` | In the palette: move the selection |
 | `Esc` | Close the palette |
 | `⌘E` / `⌘S` | In a note: switch Read and Edit / save |
+| `⌘/` | Herdr's list of every shortcut (`app.help`) |
 | `⌃1` … `⌃9` | Go to space 1–9 |
 | `⌘⌥[` / `⌘⌥]` | Previous / next space |
 | `⌘⌥1` … `⌘⌥9` | Go to agent 1–9 |
@@ -193,6 +195,11 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
 - **Tabs.** All, Notes, Agents, Commands. With text typed, All shows the best match as the
   Top hit (a note shows its folder, "linked to <space>" and when it was edited), then up
   to 4 agents, 6 notes and 4 commands. A single tab shows up to 50.
+- **Settings.** The Settings tab changes Herdsidian's look in place (the palette stays
+  open). General: **Key hints** On / Off shows or hides the keys beside tabs, toolbar
+  buttons, Search and the sidebar rows. Layout: **Notes panel** Shown / Hidden and, while
+  shown, **Notes width** Expanded / Rail. The values live in one store,
+  `herdsidian.settings`, that every mod reads.
 - **Search.** A note matches when its name contains the text; an exact name, then a
   prefix, then a word start rank first, and notes linked to the space win ties. Agents
   match on program, space, tab or title. Commands match on their label.
@@ -299,6 +306,8 @@ it into every mod that has it; `npm run lint` fails if a copy differs.
 cp lib/tokens.js mods/<mod>/tokens.js
 cp lib/ui.js mods/<mod>/ui.js          # herdsidian, herdsidian-chrome, herdsidian-tabs, herdsidian-pane, guide-agents
 cp lib/layout.js mods/<mod>/layout.js  # herdsidian, herdsidian-chrome, herdsidian-tabs, guide-agents, guide-spaces
+cp lib/keys.js mods/<mod>/keys.js      # herdsidian, herdsidian-tabs, guide-agents, guide-spaces
+cp lib/settings.js mods/<mod>/settings.js  # herdsidian, herdsidian-tabs, guide-agents, guide-spaces
 ```
 
 Check mod changes in Herdr with `herdr-app check`. The "Needs you" chip (`foreground` on

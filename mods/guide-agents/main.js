@@ -7,6 +7,7 @@ import { agents, terminals, panes, focused, spaces, run, theme, shared, setShare
 import { alpha, tokens } from "./tokens.js";
 import { icon, dot } from "./ui.js";
 import { find, narrow, toggleSidebar } from "./layout.js";
+import { settings } from "./settings.js";
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 
@@ -386,7 +387,7 @@ export default class Agents extends View {
           .child(h_flex().h(18).items_center()
             .when(this.hovered === a.address, el => el.child(pin))
             .when(this.hovered !== a.address && Boolean(when), el => el.child(duration(now - when))))
-          .child(div().child(n < 9 ? `\u2318\u2325${n + 1}` : "")));
+          .child(div().child(n < 9 && settings().keyHints ? `\u2318\u2325${n + 1}` : "")));
     };
 
     // Groups in list order: spaces (grouped) or priority sections. Agents of a
@@ -460,7 +461,7 @@ export default class Agents extends View {
               })
               .child(svg(`mods/workspace-chrome/chevron-${this.sectionFolded ? "right" : "down"}.svg`).size(11).flex_none())
               .child("Agents"))
-            .child(div().flex_1().min_w(0).truncate().text_right().text_size(11).text_color(t.muted).child("\u2318\u2325 1\u20139 \u00b7 \u2318[ \u2318]"))
+            .child(div().flex_1().min_w(0).truncate().text_right().text_size(11).text_color(t.muted).child(settings().keyHints ? "\u2318\u2325 1\u20139 \u00b7 \u2318[ \u2318]" : ""))
             .child(
               div()
                 .id("ag-sort")

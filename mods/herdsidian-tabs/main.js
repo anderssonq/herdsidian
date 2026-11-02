@@ -5,15 +5,35 @@
 
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
+import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings, keys, nextCommand } from "herdr";
 import { alpha, tokens, HIGHLIGHT } from "./tokens.js";
 import { glow, icon, dot } from "./ui.js";
 import { find } from "./layout.js";
+import { keyHint } from "./keys.js";
+import { settings as herdsidianSettings } from "./settings.js"; // herdr has its own settings()
+
+// The side panels the toolbar offers (Files, Changes), unless the workspace says otherwise.
+const enabledPanels = () => shared("workspace.panels") ?? ["files", "changes"];
 
 export default class Tabs extends View {
-  init() {
+  init(_props, cx) {
     this.pressed = null;
     this.panels = JSON.parse(localStorage.getItem("panels") ?? "{}");
+    // keys.json "layout:herdsidian": "cmd-shift-e": "herdsidian-tabs.files", "cmd-shift-g": "herdsidian-tabs.changes".
+    cx.spawn(async (cx) => {
+      for (;;) {
+        const c = await nextCommand();
+        if ((c === "files" || c === "changes") && enabledPanels().includes(c)) this.togglePanel(c);
+        cx.notify();
+      }
+    });
+  }
+
+  // Shows the side panel on `id`, or hides it when it already shows `id`.
+  togglePanel(id) {
+    const root = layout(), panel = find(root, "panel"), body = find(root, "panel-body");
+    if (panel && !panel.hidden && body?.active === id) run("layout.hide", { id: "panel" });
+    else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
   }
 
   // The side panel is remembered per space: switching shows that space's choice
@@ -50,9 +70,18 @@ export default class Tabs extends View {
     const space = spaces().find(p => p.active);
     const shown = space?.tabs ?? [];
     const stop = (_e, cx) => cx.stop_propagation();
+    // Tooltips name the key that does the same, when one is bound (keys.json).
+    const bindings = keys(), layoutName = shared("layout");
+    const hint = action => keyHint(bindings, action, layoutName);
+    // The keys always shown beside tabs, buttons and Search; settings.keyHints (⌘K → Settings) hides them.
+    const shownHint = herdsidianSettings().keyHints ? hint : () => null;
+    const tipFor = (label, action) => { const key = hint(action); return key ? `${label}  ${key}` : label; };
+    // An icon with its key beside it, always shown (New, Files, Changes).
+    const keyed = (icon, action) => { const key = shownHint(action);
+      return h_flex().gap(6).items_center().child(icon).when(Boolean(key), el => el.child(div().text_size(11).child(key))); };
     const hover = s => s.bg(k.pill).text_color(t.foreground);
     // A 30 px muted icon button; `on` is the pressed look (Files / Changes / Notes).
-    const button = (id, label, action, on = false, tip = null) => div().id(id).size(30).flex_none().flex().items_center().justify_center().rounded(8)
+    const button = (id, label, action, on = false, tip = null) => div().id(id).h(30).min_w(30).px(7).flex_none().flex().items_center().justify_center().rounded(8)
       .text_color(on ? t.foreground : t.muted).cursor_pointer().when(on, el => el.bg(k.pill)).hover(s => on ? s.bg(alpha(t.foreground, 0.10)).text_color(t.foreground) : hover(s))
       .when(tip, el => el.tooltip(tip))
       .on_mouse_down("left", stop).on_click(action).child(label);
@@ -60,7 +89,8 @@ export default class Tabs extends View {
       const mine = panes().filter(p => p.tab === c.id);
       const program = (mine.find(p => p.program?.agent) ?? mine[0])?.program;
       const name = /^tb\d+$/.test(c.name) ? program?.name ?? "Terminal" : c.name;
-      return h_flex().id(`tab-${c.id}`).h(28).px(12).gap(8).rounded(7).items_center().flex_none().text_size(12.8)
+      const key = shownHint(`tab.select:${c.index}`);
+      return h_flex().id(`tab-${c.id}`).tooltip(tipFor(c.zoomed ? `${name} (zoomed)` : name, `tab.select:${c.index}`)).h(28).px(12).gap(8).rounded(7).items_center().flex_none().text_size(12.8)
         .border_t(1).border_color(c.active ? HIGHLIGHT : alpha(t.foreground, 0))
         .bg(c.active ? t.raised : alpha(t.foreground, 0)).text_color(c.active ? t.foreground : t.muted)
         .when(c.active, el => el.font_medium())
@@ -75,6 +105,8 @@ export default class Tabs extends View {
         .when(Boolean(c.status), el => el.child(dot(t, c.status, 6)))
         .when(Boolean(program?.icon), el => el.child(icon(program, 14, c.active ? t.foreground : t.muted)))
         .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
+        // The tab's key, always shown, like the sidebar's ⌃1 / ⌘⌥1.
+        .when(Boolean(key), el => el.child(div().flex_none().text_size(11).text_color(t.muted).child(key)))
         .when(c.active, el => el.child(div().id(`close-${c.id}`).text_color(t.muted).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/herdsidian-tabs/close.svg").size(12))));
     };
     const root = layout(), sidebar = find(root, "sidebar"), w = window();
@@ -83,14 +115,11 @@ export default class Tabs extends View {
       ? Math.max(16, (root.traffic_lights[0] + 64) / settings().zoom - (sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0))
       : 16;
     const panel = find(root, "panel"), body = find(root, "panel-body");
-    const enabled = shared("workspace.panels") ?? ["files", "changes"];
+    const enabled = enabledPanels();
     this.syncPanel(space, panel, body, enabled);
     const panelButton = (id, label, icon) => {
       const on = panel && !panel.hidden && body?.active === id;
-      return button(`panel-${id}`, svg(icon).size(16), () => {
-        if (on) run("layout.hide", { id: "panel" });
-        else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
-      }, on, label);
+      return button(`panel-${id}`, keyed(svg(icon).size(16), `herdsidian-tabs.${id}`), () => this.togglePanel(id), on, label);
     };
     const notes = find(root, "herdsidian");
     const notesOn = Boolean(notes) && !notes.hidden;
@@ -99,19 +128,19 @@ export default class Tabs extends View {
       .on_mouse_down("left", stop).on_click(() => run("mod.open", { name: "herdsidian" }))
       .child(svg("mods/workspace-chrome/search.svg").size(14).flex_none())
       .child(div().flex_1().child("Search"))
-      .child(div().text_size(11).child(w?.platform === "macos" ? "⌘K" : "Ctrl K"));
+      .when(Boolean(shownHint("mod.open:herdsidian")), el => el.child(div().text_size(11).child(shownHint("mod.open:herdsidian"))));
     return h_flex().size_full().min_w(0).relative().pr(12).pl(lightsPadding).gap(12).items_center().bg(k.mainGlass)
       .on_mouse_up("left", () => { this.pressed = null; })
       .on_scroll_wheel(e => { if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next"); })
       .child(glow(k))
       .child(h_flex().id("tab-bar").min_w(0).p(3).gap(2).items_center().rounded(10).bg(k.pill)
         .child(h_flex().id("tab-scroll").flex_1().min_w(0).items_center().gap(2).overflow_x_scrollbar().children(shown.map(item))))
-      .child(button("tab-new", svg("mods/workspace-chrome/plus.svg").size(16), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }), false, "New tab"))
+      .child(button("tab-new", keyed(svg("mods/workspace-chrome/plus.svg").size(16), "tab.new"), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }), false, "New tab"))
       .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/files/file.svg")))
       .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))
       .child(div().flex_1().h_full())
       .child(search)
-      .child(button("notes-toggle", svg("mods/workspace-chrome/panel-right.svg").size(16), () => run("layout.toggle", { id: "herdsidian" }), notesOn, "Notes"))
+      .child(button("notes-toggle", svg("mods/workspace-chrome/panel-right.svg").size(16), () => run("layout.toggle", { id: "herdsidian" }), notesOn, tipFor("Notes", "layout.toggle:herdsidian")))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/herdsidian-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
         .child(button("maximize", w.platform === "windows" ? svg(`mods/herdsidian-tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
         .child(button("close-window", w.platform === "windows" ? svg("mods/herdsidian-tabs/win-close.svg").size(16) : svg("mods/herdsidian-tabs/close.svg").size(13), () => run("window.close"))));

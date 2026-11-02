@@ -3,10 +3,11 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import {
-  LIMITS, tier, rankNotes, rankAgents, rankCommands, formatChord, keyHint, hasMod, agentHint, commandList,
+  LIMITS, tier, rankNotes, rankAgents, rankCommands, settingSections, hasMod, agentHint, commandList,
   scene, autoFromIndex, autoMeta, isFreshRequest, buildList, relativeTime, breadcrumb, topFolder, topMeta,
   wrap, sendState, planSend, rankNoteRows, footer, visibleWindow, isShown, targetAgent, sameKey, rankKey, modelKey,
 } from "../mods/herdsidian/palette.js";
+import { formatChord, keyHint, readSettings, SETTING_DEFAULTS } from "../lib/keys.js";
 import { matchNotes, contextNotes, findEntry, autoLinks, deliveryText } from "../mods/herdsidian/context.js";
 import { tokens } from "../mods/herdsidian/tokens.js";
 
@@ -707,4 +708,64 @@ test("spaceWhere builds the write target, with the address only for an agent, an
   assert.deepEqual(spaceWhere(space, "/v", null), { space: "s1", name: "work", folder: "/r/work", vault: "/v" });
   assert.equal(spaceWhere(null, "/v", null), null);
   assert.equal(spaceWhere(space, null, null), null);
+});
+
+// The settings store's values (lib/keys.js readSettings) and the palette's Settings tab
+
+test("readSettings fills defaults and ignores unknown or mistyped values", () => {
+  assert.deepEqual(readSettings(undefined), SETTING_DEFAULTS);
+  assert.deepEqual(readSettings(null), { keyHints: true });
+  assert.deepEqual(readSettings("on"), { keyHints: true });
+  assert.deepEqual(readSettings({ keyHints: false }), { keyHints: false });
+  assert.deepEqual(readSettings({ keyHints: "no", other: 1 }), { keyHints: true });
+});
+
+test("settingSections has General (key hints) and Layout (Notes panel, Notes width)", () => {
+  const s = settingSections({ settings: { keyHints: true }, notesHidden: false, notesRail: false });
+  assert.deepEqual(s.map((sec) => sec.title), ["General", "Layout"]);
+  const [hints] = s[0].rows;
+  assert.equal(hints.detail, "On");
+  assert.deepEqual(hints.action, { type: "setting", name: "keyHints", value: false });
+  const off = settingSections({ settings: { keyHints: false }, notesHidden: false, notesRail: false })[0].rows[0];
+  assert.equal(off.detail, "Off");
+  assert.deepEqual(off.action, { type: "setting", name: "keyHints", value: true });
+  assert.deepEqual(s[1].rows.map((r) => [r.id, r.detail]), [["notes-shown", "Shown"], ["notes-width", "Expanded"]]);
+  assert.deepEqual(s[1].rows[0].action, { type: "run", name: "layout.toggle", args: { id: "herdsidian" } });
+  assert.equal(s[1].rows[1].action.name, "herdsidian.rail");
+});
+
+test("settingSections offers Notes width only while Notes is shown, and expands a rail", () => {
+  const hidden = settingSections({ settings: { keyHints: true }, notesHidden: true, notesRail: false })[1].rows;
+  assert.deepEqual(hidden.map((r) => [r.id, r.detail]), [["notes-shown", "Hidden"]]);
+  const rail = settingSections({ settings: { keyHints: true }, notesHidden: false, notesRail: true })[1].rows[1];
+  assert.equal(rail.detail, "Rail");
+  assert.equal(rail.action.name, "herdsidian.expand");
+});
+
+test("buildList's Settings tab lists only the settings, filtered by label", () => {
+  const settings = settingSections({ settings: { keyHints: true }, notesHidden: false, notesRail: false });
+  const all = buildList({ ...base_(), tab: "settings", settings });
+  assert.equal(all.top, null);
+  assert.deepEqual(all.sections.map((sec) => sec.title), ["General", "Layout"]);
+  assert.deepEqual(all.pickable.map((r) => r.key), ["setting:key-hints", "setting:notes-shown", "setting:notes-width"]);
+  assert.ok(all.pickable.every((r) => r.kind === "setting"));
+  const width = buildList({ ...base_(), tab: "settings", settings, query: "width" });
+  assert.deepEqual(width.pickable.map((r) => r.key), ["setting:notes-width"]);
+  assert.deepEqual(width.sections.map((sec) => sec.title), ["Layout"]);
+  const none = buildList({ ...base_(), tab: "settings", settings, query: "zzz" });
+  assert.equal(none.empty, 'No matches for "zzz"');
+  assert.equal(buildList({ ...base_(), tab: "all", settings }).pickable.some((r) => r.kind === "setting"), false);
+});
+
+test("modelKey changes with the settings and the Notes width", () => {
+  const base = { query: "", tab: "settings", notes: null, notesError: null, doc: {}, linking: null, starter: null,
+    agents: [], order: [], layoutName: "herdsidian", bindings: [], notesHidden: false, hasList: true };
+  const make = (over) => modelKey({ ...base, settings: { keyHints: true }, notesRail: false, ...over });
+  assert.ok(sameKey(make({}), make({})));
+  assert.ok(!sameKey(make({}), make({ settings: { keyHints: false } })));
+  assert.ok(!sameKey(make({}), make({ notesRail: true })));
+});
+
+test("footer names the Enter action Change on a setting", () => {
+  assert.equal(footer({ row: { kind: "setting" }, send: null, preview: { supported: true } })[0].label, "Change");
 });

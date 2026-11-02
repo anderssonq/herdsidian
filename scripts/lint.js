@@ -60,7 +60,7 @@ for (const m of mods) if (!ours.includes(m) && !shipped.includes(m)) errors.push
 // Shared copies (ADR-0001): every mods/*/<name>.js equals lib/<name>.js, and a mod that
 // imports ./<name>.js has the file. .kit-backup/ and .spec/ are skipped.
 const modFiles = all.filter((p) => relative(root, p).startsWith("mods/"));
-for (const name of ["tokens", "ui", "layout"]) {
+for (const name of ["tokens", "ui", "layout", "keys", "settings"]) {
   const canonicalPath = join(root, `lib/${name}.js`);
   let canonical = null;
   try { canonical = readFileSync(canonicalPath, "utf8"); }
