@@ -12,9 +12,6 @@ import { find } from "./layout.js";
 import { keyHint } from "./keys.js";
 import { settings as herdsidianSettings } from "./settings.js"; // herdr has its own settings()
 
-// The side panels the toolbar offers (Files, Changes), unless the workspace says otherwise.
-const enabledPanels = () => shared("workspace.panels") ?? ["files", "changes"];
-
 export default class Tabs extends View {
   init(_props, cx) {
     this.pressed = null;
@@ -23,7 +20,7 @@ export default class Tabs extends View {
     cx.spawn(async (cx) => {
       for (;;) {
         const c = await nextCommand();
-        if ((c === "files" || c === "changes") && enabledPanels().includes(c)) this.togglePanel(c);
+        if (c === "files" || c === "changes") this.togglePanel(c);
         cx.notify();
       }
     });
@@ -38,14 +35,14 @@ export default class Tabs extends View {
 
   // The side panel is remembered per space: switching shows that space's choice
   // (closed if it never had one), and opening or closing it records it.
-  syncPanel(space, panel, body, enabled) {
+  syncPanel(space, panel, body) {
     if (!space || !panel) return;
     const now = panel.hidden ? null : body?.active ?? null;
     if (space.id !== this.space) {
       const first = this.space === undefined;
       this.space = space.id; this.pending = null;
       if (!(first && !(space.id in this.panels))) {
-        const stored = this.panels[space.id] ?? null, want = enabled.includes(stored) ? stored : null;
+        const want = this.panels[space.id] ?? null;
         if (want !== now) {
           this.pending = { want, until: Date.now() + 1000 };
           if (want) { run("layout.select", { stack: "panel-body", child: want }); run("layout.show", { id: "panel" }); }
@@ -115,8 +112,9 @@ export default class Tabs extends View {
       ? Math.max(16, (root.traffic_lights[0] + 64) / settings().zoom - (sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0))
       : 16;
     const panel = find(root, "panel"), body = find(root, "panel-body");
-    const enabled = enabledPanels();
-    this.syncPanel(space, panel, body, enabled);
+    // Files and Changes are always on here. Herdr's "workspace.panels" is ignored: its welcome
+    // writes [] when none is picked, which would hide them after an install.
+    this.syncPanel(space, panel, body);
     const panelButton = (id, label, icon) => {
       const on = panel && !panel.hidden && body?.active === id;
       return button(`panel-${id}`, keyed(svg(icon).size(16), `herdsidian-tabs.${id}`), () => this.togglePanel(id), on, label);
@@ -136,8 +134,8 @@ export default class Tabs extends View {
       .child(h_flex().id("tab-bar").min_w(0).p(3).gap(2).items_center().rounded(10).bg(k.pill)
         .child(h_flex().id("tab-scroll").flex_1().min_w(0).items_center().gap(2).overflow_x_scrollbar().children(shown.map(item))))
       .child(button("tab-new", keyed(svg("mods/workspace-chrome/plus.svg").size(16), "tab.new"), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }), false, "New tab"))
-      .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/files/file.svg")))
-      .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))
+      .child(panelButton("files", "Files", "mods/files/file.svg"))
+      .child(panelButton("changes", "Changes", "mods/changes/changes.svg"))
       .child(div().flex_1().h_full())
       .child(search)
       .child(button("notes-toggle", svg("mods/workspace-chrome/panel-right.svg").size(16), () => run("layout.toggle", { id: "herdsidian" }), notesOn, tipFor("Notes", "layout.toggle:herdsidian")))

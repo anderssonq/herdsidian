@@ -48,7 +48,8 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
    - `herdsidian-tabs` toolbar (52 px, `window_drag`, `canvas` at 35 %): a
      rounded track holding the tabs as a segmented control (28 px tabs, radius
      7, the active one `raised` with a 1 px top highlight), a new-tab button,
-     Files and Changes buttons, a 220 px Search box with its key (`⌘K`), the Notes
+     Files and Changes buttons (always on: it ignores Herdr's `workspace.panels`,
+     which the welcome can leave empty), a 220 px Search box with its key (`⌘K`), the Notes
      toggle and the window buttons. The Search box opens the palette (item 4). Buttons are 30 px, radius 8. A 14 px
      program icon leads each tab name (`foreground` on the selected tab,
      `muted` otherwise for tinted SVGs; pictures as is). The top sheen fills the whole

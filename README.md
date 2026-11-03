@@ -166,7 +166,7 @@ Then bind a key in `keys.json`, for example
 | Keys | What it does |
 |---|---|
 | `⌘⇧O` | Show or hide the Notes sidebar |
-| `⌘⇧E` / `⌘⇧G` | Show or hide the Files / Changes panel |
+| `⌘⇧E` / `⌘⇧G` | Show or hide the Files / Changes panel (their toolbar buttons are always on) |
 | `⌘L` | Link the open note to the focused agent's space (no note open: open the picker) |
 | `⌘K` | Open the Herdsidian palette (the toolbar's Search box does the same) |
 | `↵` | In the palette: open the note, focus the agent or run the command |

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { state, fakeCx, settle, findById, svgPaths } from "./support/mod-stubs.js";
 
+const { default: Tabs } = await import("../mods/herdsidian-tabs/main.js");
 const { default: Notes } = await import("../mods/herdsidian/main.js");
 
 const repo = new URL("../", import.meta.url).pathname;
@@ -12,6 +13,45 @@ beforeEach(() => {
   state.shared = {}; state.runs = []; state.toasts = []; state.commands = []; state.files = {};
   state.layout = { id: "root", children: [] };
   localStorage.removeItem("vault");
+});
+
+const renderTabs = async () => {
+  const view = new Tabs(), cx = fakeCx();
+  view.init({}, cx);
+  await settle();
+  return { view, cx, tree: view.render(cx) };
+};
+
+// Herdr's welcome leaves [] when no panel is picked; a new install must still show both.
+for (const [label, panels] of [["empty", []], ["unset", undefined], ["only changes", ["changes"]]]) {
+  test(`toolbar shows Files and Changes when workspace.panels is ${label}`, async () => {
+    state.shared["workspace.panels"] = panels;
+    const { tree } = await renderTabs();
+    assert.ok(findById(tree, "panel-files"), "Files button");
+    assert.ok(findById(tree, "panel-changes"), "Changes button");
+    assert.ok(svgPaths(tree).includes("mods/files/file.svg"));
+    assert.ok(svgPaths(tree).includes("mods/changes/changes.svg"));
+  });
+}
+
+test("the toolbar keys open their panel when workspace.panels is empty", async () => {
+  state.shared["workspace.panels"] = [];
+  state.commands = ["changes"];
+  await renderTabs();
+  assert.deepEqual(state.runs, [
+    ["layout.select", { stack: "panel-body", child: "changes" }],
+    ["layout.show", { id: "panel" }],
+  ]);
+});
+
+test("the Files button opens its panel when workspace.panels is empty", async () => {
+  state.shared["workspace.panels"] = [];
+  const { tree } = await renderTabs();
+  findById(tree, "panel-files").onClick();
+  assert.deepEqual(state.runs, [
+    ["layout.select", { stack: "panel-body", child: "files" }],
+    ["layout.show", { id: "panel" }],
+  ]);
 });
 
 const VAULT = "/vault/my notes", NOTE = "03-Knowledge/Git.md";
