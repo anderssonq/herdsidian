@@ -85,8 +85,8 @@ herdsidian: ~/code/acme-api
 ## Features
 
 - **Notes sidebar.** Folders, notes and search on the right. Read mode renders
-  frontmatter, headings and links; `⌘E` switches to Edit and `⌘S` saves. Collapses to an
-  icon rail. Any folder of Markdown files works; Obsidian is not needed.
+  frontmatter, headings and links; `⌘E` switches to Edit and `⌘S` saves. A button copies the
+  note's full path. Collapses to an icon rail. Any folder of Markdown files works; Obsidian is not needed.
 - **Agent context.** Notes linked per space, with extras for one agent. Suggestions (the
   space's repo name, recent notes, alias or tag matches) show faded; one click pins them.
 - **Local graph.** The open note (or the first linked note) at 1 or 2 hops, up to 40
@@ -166,7 +166,7 @@ Then bind a key in `keys.json`, for example
 | Keys | What it does |
 |---|---|
 | `⌘⇧O` | Show or hide the Notes sidebar |
-| `⌘⇧E` / `⌘⇧G` | Show or hide the Files / Changes panel |
+| `⌘⇧E` / `⌘⇧G` | Show or hide the Files / Changes panel (their toolbar buttons are always on) |
 | `⌘L` | Link the open note to the focused agent's space (no note open: open the picker) |
 | `⌘K` | Open the Herdsidian palette (the toolbar's Search box does the same) |
 | `↵` | In the palette: open the note, focus the agent or run the command |
@@ -280,7 +280,8 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
 <details>
 <summary>Development</summary>
 
-The pure logic runs under Node with no Herdr imports: `mods/herdsidian/notes.js`
+`tests/mods-ui.test.js` also renders the real toolbar and Notes mods, with the Herdr runtimes
+stubbed in `tests/support/mod-stubs.js`. The pure logic runs under Node with no Herdr imports: `mods/herdsidian/notes.js`
 (Markdown, wikilinks; wikilinks inside code are ignored), `graph.js` (link index, neighborhood, layout) and `context.js`
 (context links, suggestions, Send text). The palette adds `palette.js` (ranking, key
 hints, lists) and `send.js` (the paste sequence), also pure. `io.js`, `graph-view.js`,
