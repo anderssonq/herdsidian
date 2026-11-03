@@ -381,7 +381,7 @@ export default class Notes extends View {
   button(id, t, icon, tip, action) {
     return div().id(id).size(28).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.muted)
       .hover((s) => s.bg(tokens(t).pill).text_color(t.foreground)).cursor_pointer().tooltip(tip).on_click(action)
-      .child(svg(`mods/workspace-chrome/${icon}.svg`).size(14));
+      .child(svg(icon.includes("/") ? icon : `mods/workspace-chrome/${icon}.svg`).size(14));
   }
 
   // `tone`: "folder" (foreground name), "note" (muted name) or "selected" (the last note opened).
@@ -712,6 +712,10 @@ export default class Notes extends View {
         .child(v_flex().flex_1().min_w(0)
           .child(div().truncate().font_semibold().child(title))
           .when(Boolean(this.note), (el) => el.child(div().truncate().text_size(10.5).text_color(t.muted).child(this.note))))
+        .when(Boolean(this.note), (el) => el.child(this.button("notes-copy-path", t, "mods/herdsidian/copy.svg", "Copy the full path", (_e, cx) => {
+          cx.write_to_clipboard(`${this.vault}/${this.note}`);
+          notify({ title: "Path copied", level: "success" });
+        })))
         .when(!this.note, (el) => el
           .child(div().mr(4).child(keycap(t, "\u2318\u21e7O")))
           .when(Boolean(this.vault), (el) => el.child(this.button("notes-search", t, "search", "Find a note", (_e, cx) => this.toggleSearch(cx))))

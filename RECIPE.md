@@ -82,7 +82,8 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      folder icon (`accent`, filled body), or a file icon and the note's name
      without `.md`. The selected note is an `accent` pill at 18 %, with an
      `accent` file icon.
-   - Note view: back arrow, note name and its path (10.5 px `muted`); a bar
+   - Note view: back arrow, note name and its path (10.5 px `muted`), a copy
+     button (`copy.svg`, copies `<vault>/<note>`, toast "Path copied"); a bar
      with `Read` / `Edit` pills (22 px, radius 5), `⌘E` cap, a 7 px `working`
      dot when there are unsaved changes, `Save` and `⌘S` cap.
    - Rail (width under 160 px): expand, search and new-note icons in a column.
