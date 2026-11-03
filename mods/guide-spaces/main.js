@@ -1,14 +1,15 @@
 // Workspace spaces: stable colored avatars, worktrees under their checkout, grouped by
 // machine when more than one is known. After a space's name, the repo its first terminal
-// is in now, only where unusual: branch, ahead/behind. A space speaks up only when
-// something in it needs you (a compact glyph); the full agent state lives in the agents
-// list. Click to switch, right-click for its menu, drag to reorder.
+// is in now: its branch and ahead/behind sit in the row tooltip, ahead/behind also as pills
+// on the row. A space speaks up only when it is blocked or done: a dot on the full row
+// (blocked only), a glyph in the narrow rail (both); the full agent state lives in the agents list. Click to switch, right-click for its menu, drag to reorder.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window } from "herdr";
-import { tokens } from "./tokens.js";
+import { tokens, alpha, markLetter } from "./tokens.js";
 import { narrow } from "./layout.js";
+import { keycap } from "./ui.js";
 import { settings } from "./settings.js";
 
 // Where a space is now: its first terminal's live folder, else where it was made.
@@ -28,12 +29,25 @@ const FALLBACK = 60000;
 // that draws space avatars): one strong color per hue, light and dark alike.
 const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
 
-// The letter on an avatar: black at 75 %, readable on every MARK hue.
-const AVATAR_LETTER = "#000000bf";
-
-// A space speaks up only when something in it needs you.
+// A space speaks up only when it is blocked or done.
 export function glyph(status) {
   return status === "blocked" || status === "done" ? "●" : "·";
+}
+
+// The row tooltip: "<repo> · <branch> · ↑2 ↓1 · ⌃N". The branch always; the repo only when
+// unusual (not in a worktree row, not when the name already says it); a part that does not
+// apply is left out. `hint`: the key (already formatted) or "".
+export function spaceTip(g, { tree, name, hint }) {
+  const same = (a) => a.toLowerCase() === name.toLowerCase();
+  const parts = [];
+  if (g) {
+    if (!tree && !same(g.name)) parts.push(g.name);
+    parts.push(g.branch ?? "detached");
+    const counts = [g.ahead > 0 ? `↑${g.ahead}` : "", g.behind > 0 ? `↓${g.behind}` : ""].filter(Boolean).join(" ");
+    if (counts) parts.push(counts);
+  }
+  if (hint) parts.push(hint);
+  return parts.join(" · ");
 }
 
 export function tone(t, status) {
@@ -56,6 +70,7 @@ export default class Spaces extends View {
     this.born = {};
     this.pressed = null;
     this.over = null;
+    this.hovered = null; // the space id under the pointer: only its row shows the key cap
     this.machines = [];
     this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]"));
     this.sectionFolded = false; // the Spaces chevron: rows hidden, per copy
@@ -259,37 +274,35 @@ export default class Spaces extends View {
     });
   }
 
-  // Only what's unusual, after the name: "herdr \u00b7 spike \u21912 \u21931". The repo or
-  // branch goes when the name already says it (a worktree is named after its branch),
-  // and master/main go: nearly every space is on one.
-  gitTail(g, tree, name, t) {
-    const raw = g.branch ?? "detached";
-    const same = (a) => a.toLowerCase() === name.toLowerCase();
-    const branch = same(raw) || raw === "master" || raw === "main" ? "" : raw;
-    const repo = tree || same(g.name) ? "" : g.name;
-    const where = [repo, branch].filter(Boolean).join(" \u00b7 ");
-    return h_flex()
-      .flex_1()
-      .min_w(0)
-      .gap(5)
-      .justify_end()
-      .items_center()
-      .text_size(11.5)
-      .text_color(t.muted)
-      .when(Boolean(where), (el) => el.child(div().min_w(0).truncate().child(where)))
-      .when(g.ahead > 0, (el) => el.child(div().flex_none().text_color(t.ansi2).child(`\u2191${g.ahead}`)))
-      .when(g.behind > 0, (el) => el.child(div().flex_none().text_color(t.ansi1).child(`\u2193${g.behind}`)));
+  // Right of the name: ahead/behind pills, a dot when blocked, the key cap on the hovered row.
+  // The cap replaces the pills there (they are in the tooltip), so the name does not truncate.
+  signals({ w, i, g }, t) {
+    const cap = this.hovered === w.id && i < 9 && settings().keyHints;
+    const pill = (text, c) => div().flex_none().h(18).px(6).rounded(5).flex().items_center().text_size(11).text_color(c).bg(alpha(c, 0.16)).child(text);
+    return h_flex().flex_none().gap(5).items_center()
+      .when(!cap && Boolean(g) && g.ahead > 0, (el) => el.child(pill(`\u2191${g.ahead}`, t.ansi2)))
+      .when(!cap && Boolean(g) && g.behind > 0, (el) => el.child(pill(`\u2193${g.behind}`, t.ansi1)))
+      .when(w.status === "blocked", (el) => el.child(div().size(6).rounded(3).flex_none().bg(t.blocked)))
+      .when(cap, (el) => el.child(keycap(t, `\u2303${i + 1}`)));
   }
 
   row({ w, i, g, tree }, t) {
     const on = w.active;
     const colors = shared("space.colors") ?? {};
     const color = colors[w.id] ?? "ansi6";
-    const fill = color.startsWith("#") ? color : (MARK[color] ?? t[color]);
+    const fill = /^#[0-9a-f]{6}/i.test(color) ? color : MARK[color] ?? t[color] ?? t.accent;
     const k = tokens(t);
+    const tip = spaceTip(g, { tree, name: w.name, hint: i < 9 && settings().keyHints ? `⌃${i + 1}` : "" });
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
+      .when(Boolean(tip), (el) => el.tooltip(tip))
+      .on_hover((over, cx) => {
+        const next = over ? w.id : this.hovered === w.id ? null : this.hovered;
+        if (next === this.hovered) return;
+        this.hovered = next;
+        cx.notify();
+      })
       .px(8)
       .h(rowHeight({ tree }))
       .flex_none()
@@ -320,7 +333,10 @@ export default class Spaces extends View {
         const over = this.over;
         this.pressed = null;
         this.over = null;
-        if (from !== null && over === i && from !== i) run("space.move", { id: spaces()[from].id, index: i + 1 });
+        if (from !== null && over === i && from !== i) {
+          this.hovered = null; // The rows move under the pointer: no row is hovered until it moves again.
+          run("space.move", { id: spaces()[from].id, index: i + 1 });
+        }
         else if (from === i) run("space.select", { id: w.id });
         cx.notify();
       })
@@ -330,10 +346,9 @@ export default class Spaces extends View {
           .gap(10)
           .items_center()
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.dim)))
-          .when(!tree, el => el.child(h_flex().size(20).flex_none().rounded(6).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color(AVATAR_LETTER).child([...w.name][0]?.toUpperCase() ?? "?")))
-          .child(div().flex_shrink(0).max_w(150).truncate().text_color(t.foreground).when(on, el => el.font_medium()).child(w.name))
-          .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
-          .when(i < 9 && settings().keyHints, el => el.child(div().flex_none().text_size(11).text_color(t.muted).child(`\u2303${i + 1}`))),
+          .when(!tree, el => el.child(h_flex().size(20).flex_none().rounded(6).bg(alpha(fill, 0.2)).items_center().justify_center().text_size(11).font_bold().text_color(markLetter(fill, t)).child([...w.name][0]?.toUpperCase() ?? "?")))
+          .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).when(on, el => el.font_medium()).child(w.name))
+          .child(this.signals({ w, i, g }, t)),
       );
   }
 
@@ -371,10 +386,12 @@ export default class Spaces extends View {
     return v_flex().size_full().min_h(0).bg(k.glass).text_size(13)
       .child(h_flex().h(24).flex_none().px(8).gap(8).items_center().text_size(11).text_color(t.muted)
         .when(!collapsed, el => el.child(h_flex().id("spaces-fold").gap(4).items_center().cursor_pointer()
-          .on_click((_e, cx) => { this.sectionFolded = !this.sectionFolded; cx.notify(); })
+          .when(settings().keyHints, el => el.tooltip("⌃ 1–9 · ⌘⌥[ ⌘⌥]"))
+          .on_click((_e, cx) => { this.sectionFolded = !this.sectionFolded; this.hovered = null; cx.notify(); })
           .child(svg(`mods/workspace-chrome/chevron-${this.sectionFolded ? "right" : "down"}.svg`).size(11).flex_none())
           .child(div().font_semibold().child("Spaces")))
-          .child(div().flex_1().min_w(0).truncate().text_right().child(settings().keyHints ? "\u2303 1\u20139 \u00b7 \u2318\u2325[ \u2318\u2325]" : "")))
+          .child(div().flex_1())
+          .child(div().id("spaces-count").flex_none().text_size(11).text_color(t.muted).child(String(sp.length))))
         .when(collapsed, el => el.justify_center())
         .child(div().id("space-new").size(22).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(k.pill).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))

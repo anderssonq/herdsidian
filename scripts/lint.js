@@ -77,12 +77,11 @@ for (const name of ["tokens", "ui", "layout", "keys", "settings"]) {
 }
 
 // Colors in mods come from the theme: no hex literal, no alpha glued to a color string.
-// The one exception is the space avatar palette and the avatar letter, in guide-spaces/main.js.
+// The one exception is the space avatar palette (MARK), in guide-spaces/main.js.
 const avatarHex = new Set([
   "#22a99a", "#e3814f", "#5b8def", "#8b7cf6", "#3fae6a", "#d9649a", // MARK
-  "#000000bf", // AVATAR_LETTER
 ]);
-// tokens.js holds the HIGHLIGHT literal; ui.js and layout.js copies are scanned like any mod file.
+// tokens.js still holds hex literals (markLetter's black and white); ui.js and layout.js copies are scanned like any mod file.
 const shared = (p) => p.endsWith("/tokens.js");
 for (const p of modFiles.filter((p) => p.endsWith(".js") && !shared(p))) {
   const allowed = relative(root, p) === "mods/guide-spaces/main.js" ? avatarHex : new Set();

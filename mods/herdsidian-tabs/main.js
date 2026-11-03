@@ -6,11 +6,16 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings, keys, nextCommand } from "herdr";
-import { alpha, tokens, HIGHLIGHT } from "./tokens.js";
-import { glow, icon, dot } from "./ui.js";
+import { alpha, tokens } from "./tokens.js";
+import { glow, headerDots, icon, dot } from "./ui.js";
 import { find } from "./layout.js";
 import { keyHint } from "./keys.js";
 import { settings as herdsidianSettings } from "./settings.js"; // herdr has its own settings()
+
+// The toolbar's left edge in the window: the sidebar's width plus the root divider after it,
+// so the dot grid lines up across the seam. 0 when the sidebar is hidden.
+export const blockX = (root, sidebar) =>
+  sidebar && !sidebar.hidden ? (sidebar.size?.px ?? 0) + (root?.divider?.width ?? 0) : 0;
 
 export default class Tabs extends View {
   init(_props, cx) {
@@ -88,7 +93,7 @@ export default class Tabs extends View {
       const name = /^tb\d+$/.test(c.name) ? program?.name ?? "Terminal" : c.name;
       const key = shownHint(`tab.select:${c.index}`);
       return h_flex().id(`tab-${c.id}`).tooltip(tipFor(c.zoomed ? `${name} (zoomed)` : name, `tab.select:${c.index}`)).h(28).px(12).gap(8).rounded(7).items_center().flex_none().text_size(12.8)
-        .border_t(1).border_color(c.active ? HIGHLIGHT : alpha(t.foreground, 0))
+        .border_t(1).border_color(c.active ? k.highlight : alpha(t.foreground, 0))
         .bg(c.active ? t.raised : alpha(t.foreground, 0)).text_color(c.active ? t.foreground : t.muted)
         .when(c.active, el => el.font_medium())
         .when(!c.active, el => el.hover(s => s.bg(k.pill)))
@@ -102,7 +107,7 @@ export default class Tabs extends View {
         .when(Boolean(c.status), el => el.child(dot(t, c.status, 6)))
         .when(Boolean(program?.icon), el => el.child(icon(program, 14, c.active ? t.foreground : t.muted)))
         .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
-        // The tab's key, always shown, like the sidebar's ⌃1 / ⌘⌥1.
+        // The tab's key, always shown (the sidebar's ⌃1 shows only on hover).
         .when(Boolean(key), el => el.child(div().flex_none().text_size(11).text_color(t.muted).child(key)))
         .when(c.active, el => el.child(div().id(`close-${c.id}`).text_color(t.muted).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/herdsidian-tabs/close.svg").size(12))));
     };
@@ -127,10 +132,11 @@ export default class Tabs extends View {
       .child(svg("mods/workspace-chrome/search.svg").size(14).flex_none())
       .child(div().flex_1().child("Search"))
       .when(Boolean(shownHint("mod.open:herdsidian")), el => el.child(div().text_size(11).child(shownHint("mod.open:herdsidian"))));
-    return h_flex().size_full().min_w(0).relative().pr(12).pl(lightsPadding).gap(12).items_center().bg(k.mainGlass)
+    return h_flex().size_full().min_w(0).relative().overflow_hidden().pr(12).pl(lightsPadding).gap(12).items_center().bg(k.mainGlass)
       .on_mouse_up("left", () => { this.pressed = null; })
       .on_scroll_wheel(e => { if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next"); })
       .child(glow(k))
+      .child(headerDots(k, "herdsidian-tabs", blockX(root, sidebar)))
       .child(h_flex().id("tab-bar").min_w(0).p(3).gap(2).items_center().rounded(10).bg(k.pill)
         .child(h_flex().id("tab-scroll").flex_1().min_w(0).items_center().gap(2).overflow_x_scrollbar().children(shown.map(item))))
       .child(button("tab-new", keyed(svg("mods/workspace-chrome/plus.svg").size(16), "tab.new"), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }), false, "New tab"))

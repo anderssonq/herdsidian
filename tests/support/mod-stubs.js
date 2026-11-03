@@ -33,14 +33,16 @@ const anything = () => {
   return value;
 };
 
-// A recorded element. Every builder method returns the element; `when` runs its branch.
-function element(kind, arg) {
-  const node = { kind, arg, nodeId: null, onClick: null, kids: [] };
+// A recorded element. Every builder method returns the element and is kept in `calls` as
+// [name, args]; `when` runs its branch.
+export function element(kind, arg) {
+  const node = { kind, arg, nodeId: null, onClick: null, kids: [], calls: [] };
   const el = new Proxy(node, {
     get(target, key) {
       if (key in target) return target[key];
       if (typeof key === "symbol" || key === "then") return undefined;
       return (...args) => {
+        target.calls.push([key, args]);
         if (key === "id") target.nodeId = args[0];
         else if (key === "on_click") target.onClick = args[0];
         else if (key === "child") target.kids.push(args[0]);
@@ -53,7 +55,7 @@ function element(kind, arg) {
   return el;
 }
 
-const walk = (node, seen = []) => {
+export const walk = (node, seen = []) => {
   if (!node || typeof node !== "object" || !("kids" in node)) return seen;
   seen.push(node);
   for (const child of node.kids) walk(child, seen);

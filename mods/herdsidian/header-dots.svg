@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="52" viewBox="0 0 2400 52">
+  <!-- Header dot texture. A MASK: render with svg(...).text_color(k.dot) so the theme sets the color.
+       Dots r 0.7 px every 6 px; fades from full at the top to 55 % at 45 % height to 0 at the bottom. -->
+  <defs>
+    <pattern id="d" width="6" height="6" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="0.7" fill="#000"/></pattern>
+    <linearGradient id="f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="0.45" stop-color="#fff" stop-opacity="0.55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <mask id="m"><rect width="2400" height="52" fill="url(#f)"/></mask>
+  </defs>
+  <rect width="2400" height="52" fill="url(#d)" mask="url(#m)"/>
+</svg>

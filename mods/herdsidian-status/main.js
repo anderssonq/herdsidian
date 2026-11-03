@@ -4,8 +4,15 @@
 
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, agents, theme, themes, settings } from "herdr";
+import { spaces, agents, theme, themes, settings, run } from "herdr";
 import { tokens } from "./tokens.js";
+import { needsPill } from "./ui.js";
+
+// The pill's words: "Needs you" for one blocked agent, "Needs you · N" for several.
+export const needsLabel = (n) => (n > 1 ? `Needs you · ${n}` : "Needs you");
+
+// The first blocked agent in the list, or undefined.
+export const firstBlocked = (list) => list.find(a => a.status === "blocked");
 
 // The theme's name: settings().theme (a name, or { light, dark } by appearance), else the
 // themes() entry whose accent and chrome match theme().
@@ -36,7 +43,11 @@ export default class Status extends View {
       .child(h_flex().gap(6).items_center()
         .child(working > 0 ? dot(t.working, 5) : dot(t.dim, 5))
         .child(working > 0 ? div().text_color(t.working).child(`${working} working`) : `${list.length} agents`)
-        .when(needs > 0, el => el.child(div().text_color(t.blocked).child(`· ${needs} needs you`))))
+        .when(needs > 0, el => el.child(needsPill(t, k, t.canvas, needsLabel(needs))
+          .id("status-needs")
+          .cursor_pointer()
+          .tooltip("Go to the blocked agent")
+          .on_click(() => run("pane.focus", { pane: firstBlocked(list).pane })))))
       .child(div().flex_1())
       .child(div().id("theme-name").child(themeName(t)));
   }

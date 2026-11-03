@@ -14,33 +14,67 @@ renders and edits the Markdown notes of an Obsidian vault.
 Left to right:
 
 Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
-`terminal_padding` [14, 12].
+`terminal_padding` [10, 6].
 
 1. **Sidebar**, 248 px (min 44, max 480, not resizable): a 52 px `brand`
    block (`herdsidian-chrome`, `window_drag`), `guide-spaces` and
    `guide-agents` stacked with equal weight (min 90 each), and an 80 px
    `sidebar-footer` block (`herdsidian-chrome` with `props: { footer: true }`).
-   `herdsidian-chrome` is a clone of Herdr's `workspace-chrome`. The header has
-   no brand: only the hide-sidebar button (28 px), right-aligned over a
-   neutral top sheen. On macOS the header leaves 84 px on the left for the traffic
+   `herdsidian-chrome` is a clone of Herdr's `workspace-chrome`. The header
+   shows the app icon (18 px, `image()`, gap 7, then the name "Herdsidian" in
+   13 px medium `muted`), and the hide-sidebar button (28 px), right-aligned
+   over a neutral top sheen and the dot texture (see Header dots). The icon is
+   `herdsidian.svg`: a hexagon of grey glass facets whose lower-right facet is
+   split off by a thin dark crack (`#16181b`), inside the outline. It is always
+   grey (full color, never tinted) and the collapsed rail does not show it. On
+   macOS the header leaves 84 px on the left for the traffic
    lights. The footer has two 32 px rows, Settings and Add machine.
-   - Spaces header: 24 px high, `Spaces` (11 px semibold `muted`) + the hint
-     `⌃ 1–9 · ⌘⌥[ ⌘⌥]`, then a 22 px `+` button. Each of the first 9 rows
-     ends with a plain `⌃N` in 11 px `muted` text.
+   - Header dots: all three 52 px header blocks (sidebar brand, toolbar, Notes
+     header) carry a field of tiny dots, strongest at the top and fading out at
+     the bottom edge. `header-dots.svg` (2400×52, dots of radius 0.7 every 6 px,
+     the fade is an SVG mask) ships in `herdsidian-chrome`, `herdsidian-tabs`
+     and `herdsidian`. It is drawn by `headerDots(k, mod, blockX)` in `lib/ui.js`:
+     `svg(...)` 2400×52, absolute, top 0, `left(-dotOffset(blockX))`, tinted
+     `k.dot`, inside the 52 px block, which clips (`overflow_hidden`). It sits over
+     the glass and the top sheen, under the controls. `dotOffset(blockX)` is
+     `blockX mod 6`: 0 for the brand, the visible sidebar width plus the root
+     divider's width (`divider.width`, 1) for the toolbar (0 when the sidebar is hidden). Notes uses the window width
+     (`globalThis.window.viewport_size().width`, in screen px, so divided by Herdr's
+     `settings().zoom`, 1 when unknown) minus Notes' own layout width, or 0
+     when either is unknown. Notes does not re-render by itself on a window resize, so
+     its grid can sit up to 5 px off at this seam until the next render (measured;
+     accepted, a seam at Notes is tolerated). At a fractional zoom Herdr rasterizes the
+     SVG with a rounded pitch (6.5 px at zoom 1.1, not 6.6), so both seams jump 2 to 4 px
+     there; a mod cannot correct it. Notes draws it only when expanded, not on the rail.
+   - Spaces header: 24 px high, `Spaces` (11 px semibold `muted`), then the
+     number of spaces (11 px `muted`) and a 22 px `+` button. The hint
+     `⌃ 1–9 · ⌘⌥[ ⌘⌥]` is the tooltip of the `Spaces` title (with key hints on).
    - Agents header: `Agents` + `⌘⌥ 1–9 · ⌘[ ⌘]`. Each of the first 9 agent
      rows shows `⌘⌥N` in 11 px `muted` text, under the status pill or the
      duration.
-   - Rows: spaces 32 px (28 px for a worktree), radius 8. Agent rows have 7 px
-     of vertical padding, radius 8 and a status line (11.5 px `muted`). The
-     selected row is an `accent` pill at 18 %. Hover is `foreground` at 6 %.
-     Space avatars 20 px, radius 6, with the letter in black at 75 %
-     (`#000000bf`).
+   - Spaces row (quiet rows): 32 px (28 px for a worktree), radius 8: avatar,
+     name (flex 1, truncates), signals on the right. Avatar 20 px, radius 6,
+     background the mark color at 20 % (`alpha(mark, 0.2)`), the letter 11 px
+     bold in `markLetter(mark, t)`. Signals: ahead/behind pills (h 18, radius 5,
+     padding 0 6, 11 px): `↑N` in `ansi2` on `ansi2` at 16 %, `↓N` in `ansi1` on `ansi1`
+     at 16 %; a 6 px `blocked` dot when the space is blocked; and on the hovered
+     row only, the `⌃N` key cap (h 18, radius 4, 1 px `line` border, 10.5 px
+     `muted`; hidden when `keyHints` is off). With key hints on, the cap replaces the
+     ahead/behind pills on the hovered row (they are in the tooltip); the blocked dot
+     stays. With key hints off the pills stay on hover. The row tooltip is
+     `<repo> · <branch> · ↑2 ↓1 · ⌃N` (the branch always, the repo only when
+     unusual, the parts that do not apply left out). The selected row keeps
+     `accentSoft` and medium weight; hover keeps `pill`. Worktree rows are unchanged.
+   - Rows (agents): 7 px of vertical padding, radius 8 and a status line
+     (11.5 px `muted`; for a blocked agent "Needs you" in `blocked`, weight 500).
+     The selected row is an `accent` pill at 18 %. Hover is `foreground` at 6 %.
    - Agent icon tile: 20 px, radius 6, `foreground` at 6 % (10 % on the
      focused row), with the 13 px program icon centered (tinted SVGs in
      `foreground`, pictures as is). No icon: the first letter of the program
      name (11 px semibold `muted`). The status is an 8 px `statusDot` badge at
      the tile's bottom-right corner (a 12 px badge at right/bottom -4, so the dot's edge sits at -2) inside a 2 px ring of
-     `chrome`; working pulses, idle is a ring. Sub-agent rows and the wide
+     `chrome`; working pulses, idle is a ring. Blocked is not a dot: it is the
+     12 px "!" mark (`alertMark`) in a 16 px ring at right/bottom -6. Sub-agent rows and the wide
      rail (60 px or more) use a 16 px tile with an 11 px icon and no badge
      (their status shows at the right).
    - No border between the lists or above the footer.
@@ -55,23 +89,48 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      `muted` otherwise for tinted SVGs; pictures as is). The top sheen fills the whole
      toolbar (180°, `foreground` 5 % at the top to transparent at the bottom
      edge). The tab track shrinks and scrolls when there are many tabs.
-   - The active tab's panes as solid cards (radius 12, gap 8, padding 8,
+   - The active tab's panes as solid cards (radius 8, gap 6, padding 4,
      `lone: true`, background `background`, 1 px hairline border, 1 px
      `accent` border on focus). No shadow.
-   - Pane header `herdsidian-pane`: 34 px, always shown. It has the agent
+   - Pane header `herdsidian-pane`: 30 px, 10 px side padding, always shown. It has the agent
      name or terminal title (`foreground`, medium) after a 14 px program icon
      (`muted`), the folder (`muted`), a
-     6 px status dot for working and done, a "Needs you" chip for blocked
-     (`foreground` text on `blockedSoft` with a 1 px `blocked` border; the
-     compact "!" chip in the agents list is the same),
+     6 px status dot for done only (working shows the bar), the "Needs you" pill for blocked
+     (see "Needs you" below),
      and split, zoom and close buttons on hover.
+   - Working bar (`workingBar` in `lib/ui.js`): while a pane's status is
+     `working`, a 2 px track along the top edge of the pane header (the card's
+     top), inset by `BAR_INSET` = 4 px on each side (half of `PANE_RADIUS` = 8, which equals
+     the layout's `radius`): 4 px is where the corner's curve meets the bar's 2 rows, and
+     `overflow_hidden` clips to a rectangle, so the bar cannot reach further without
+     poking out of the curve. It is
+     absolute (no layout space), `accentTrack`, at `top(-1)`: the header's 1 px top
+     border pushes `top(0)` one pixel down, so -1 puts the bar right under the card's border.
+     On it, an indicator 35 % of the track length (header width minus 2 x 4),
+     painted as 3 gradient segments
+     (transparent to `accent`, `accent` to `ansi5`, `ansi5` to transparent), looping
+     `left` from minus its width to the track length, period 3200 ms, `ease-in-out`
+     (it goes there and back). The width comes from `on_size_change`. No yellow: it
+     uses the theme's `accent` and ANSI magenta. Done, blocked, idle and plain
+     shells show no bar. A working pane has no status dot: the bar says it.
+   - "Needs you": one signal in every place, the words "Needs you", a "!" mark
+     (`alertMark(t, size, surface)`: a filled `blocked` circle with "!" 8-9 px,
+     weight 800, in the color of the surface under it) and the `blockedSoft` tint.
+     `needsPill(t, k, surface, label = "Needs you")` is the pill: h 18, radius 5,
+     padding 0 7, gap 5, `blockedSoft` background, no border, 11 px weight 500
+     `blocked` text, an 11 px "!" first. Used by the pane header, the agents list
+     (the full-width pill; the compact one is a 14 px "!" mark), the status bar and
+     the palette's agent row. Blocked reads without color, by the "!" shape.
+   - `herdsidian-status` bar: the blocked agents are a pill, a button: "Needs you",
+     or "Needs you · N" when N is more than 1. A click focuses the first blocked
+     agent (`pane.focus`). Tooltip "Go to the blocked agent".
    - The hidden Files/Changes panel (368 px, min 280, max 900).
    - `herdsidian-status` bar (28 px, `canvas` at 35 %): machine, branch, the
-     agent count or "N working" (and "· N needs you"), and the name of the
+     agent count or "N working" (and the "Needs you" pill), and the name of the
      active theme on the right. `⌘⇧P` still opens commands.
 3. **Notes**, 380 px (min 44, max 720), hidden until `⌘⇧O`. Same glass as the
    sidebar.
-   - Header 52 px: vault folder name (semibold), a `⌘⇧O` key cap, then 28 px
+   - Header 52 px, with the dot texture (expanded only): vault folder name (semibold), a `⌘⇧O` key cap, then 28 px
      icon buttons: search, new note, choose vault, collapse (`panel-right`).
    - No vault yet: the title is "Notes", the search button is hidden, and the
      body reads "Choose a folder of Markdown notes, or create an empty one to
@@ -113,7 +172,7 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      4 commands (the Top hit is not repeated). A single tab shows up to 50, in a list
      that scrolls past 320 px.
    - Agent row: `statusDot`, the program icon (else its name), the space name, "— <title>"
-     in `muted` (cut with an ellipsis), "needs you" in `blocked` for a blocked agent, and a
+     in `muted` (cut with an ellipsis), the "Needs you" pill for a blocked agent, and a
      `⌥⌘N` key cap when it is right (see How it behaves). Note row: the name and
      "— <top folder>". Command row: the label and its key cap.
    - Preview (`⇥`): under the list, the first 2,048 characters of the note, read-only,
@@ -137,13 +196,14 @@ Look (layout root):
   `canvas` at 35 %.
 - `terminal_opacity` 1. The pane background is the theme's `background`, so
   terminals read as solid cards on the glass.
-- Pane border and root divider: `#ffffff12`. Pane focus: `accent`.
+- Pane border and root divider: the theme's `border` color (a token name, so
+  light themes get a visible edge). Pane focus: `accent`.
 - `ui_font`: `.AppleSystemUIFont` (the macOS system font).
 
 ## How it behaves
 
 - Agent statuses are Herdr's own (`guide-agents` is a clone of `agents`):
-  working spinner, blocked "Needs you", done dot, idle ring (1.5 px, in the
+  working spinner, blocked "Needs you" (the shared pill), done dot, idle ring (1.5 px, in the
   theme's `idle`).
 - `⌘⌥N` focuses the N-th agent of the list as shown (pinned first, then the
   sort order). Numbers follow the whole list, so folding a group hides rows
@@ -351,13 +411,21 @@ Look (layout root):
 - `lib/tokens.js`: the one place where theme colors get their alpha.
   `alpha(color, a)` takes `#rrggbb` or `#rrggbbaa` and returns a full
   `#rrggbbaa` color. `tokens(theme())` returns these full colors:
+  `dot` (`foreground` 11 %, 16 % on a light theme: the header dot texture),
+  `accentTrack` (`accent` 12 %: the working bar track), `highlight` (`foreground`
+  5 %, 8 % on a light theme: the inset top line),
   `glass` (`chrome` 55 %), `mainGlass` (`canvas` 35 %), `line` (`foreground`
   7 %), `pill` (`foreground` 6 %, also hover), `accentSoft` (`accent` 18 %),
   `glow` (`foreground` 5 %, the top sheen), `glowEnd` (`foreground` 0 %), `blockedSoft` (`blocked`
   15 %), `node` (`muted`), `nodeFar` (`muted` 80 %), `edge` (`foreground`
-  22 %, decorative) and `edgeHot` (`foreground`). Constants: `HIGHLIGHT` (`#ffffff0d`), `PULSE` and `GLOW_ANGLE`
-  (180). `HAIRLINE`, `tokens().workingLine` and `tokens().highlight` were
-  removed (nothing used them; mods import `HIGHLIGHT` directly).
+  22 %, decorative) and `edgeHot` (`foreground`). Constants: `PULSE` and `GLOW_ANGLE`
+  (180).
+  Pure helpers: `dotOffset(blockX)` (`blockX mod 6`, never negative), `contrast(a, b)`
+  (WCAG ratio), `isLight(theme)` (luminance of `background` above 0.5), `mix(a, b, w)`
+  (`#rrggbb` blend, w 0 gives a, 1 gives b) and `markLetter(mark, theme)`: the avatar letter
+  color, the mark mixed toward white (dark theme) or black (light theme) with weight 0.25,
+  raised in 0.05 steps up to 0.6 until it reaches 4.5:1 against the avatar (the mark at 20 % over
+  `chrome`).
   `statusDot(theme, status)` gives the dot recipe (fill or ring, pulse).
   Tests: `tests/tokens.test.js`.
 - `lib/ui.js`: `icon(p, size, color)`, a program's icon (a tinted SVG in
@@ -370,6 +438,13 @@ Look (layout root):
   `GLOW_ANGLE` from `k.glow` (top) to `k.glowEnd` (bottom edge, fully
   transparent). Both blocks are 52 px high, so the halves meet at the
   divider. It uses the global gpui `window`, not herdr's `window` import.
+  Also in `ui.js`: `headerDots(k, mod, blockX = 0)` (the dot texture, see Header dots),
+  `alertMark(t, size, surface)` (the "!" mark), `needsPill(t, k, surface, label)` (the
+  "Needs you" pill), `workingBar(t, k, width, inset = 0)` (the working bar, inset from
+  each side; null until the track has length) and `keycap(t, text)` (the small key cap:
+  h 18, radius 4, hairline `k.line`, 10.5 px `muted`; used by `herdsidian` and
+  `guide-spaces`). They are used by `herdsidian-chrome`, `herdsidian-tabs`, `herdsidian`
+  (dots, palette pill), `guide-agents`, `guide-spaces`, `herdsidian-pane` and `herdsidian-status`.
   It imports `gpui-kit`, so Node tests do not import it.
 - `lib/layout.js`: `find(node, id)`, a tree search used by `herdsidian`,
   `herdsidian-chrome`, `herdsidian-tabs`, `guide-agents` and `guide-spaces`. And the
@@ -386,9 +461,10 @@ Look (layout root):
 - `lib/settings.js`: the global `settings` store. `settings()` reads
   `shared("herdsidian.settings")` through `readSettings`; `setSetting(name, value)`
   writes it, and every mod re-renders. Today one value: `keyHints` (default true) hides
-  the always-shown keys in `herdsidian-tabs` (tabs, New, Files, Changes, Search),
-  `guide-spaces` (`⌃N`, header) and `guide-agents` (`⌘⌥N`, header). Tooltips keep their
-  key. Changed from ⌘K → Settings, whose Layout section also toggles Notes
+  the always-shown keys in `herdsidian-tabs` (tabs, New, Files, Changes, Search) and
+  `guide-agents` (`⌘⌥N`, header). In `guide-spaces` the `⌃N` cap shows only on hover and
+  the header hint is a tooltip; with `keyHints` off Spaces drops its keys from the
+  tooltips too. Tooltips elsewhere keep their key. Changed from ⌘K → Settings, whose Layout section also toggles Notes
   (`layout.toggle`) and its width (`herdsidian.expand` / `herdsidian.rail`, handled by
   Notes' `nextCommand()`). Imports `herdr`; in `herdsidian-tabs` it is imported as
   `herdsidianSettings`, because Herdr's own `settings()` is used there too.
@@ -397,7 +473,7 @@ Look (layout root):
   `mods/<mod>/<name>.js`, because a mod folder is installed on its own. After
   you edit a canonical file, copy it into every mod that has it
   (`cp lib/tokens.js mods/<mod>/tokens.js`; `ui.js` lives in
-  `herdsidian`, `herdsidian-chrome`, `herdsidian-tabs`, `herdsidian-pane` and `guide-agents`). `npm run lint` fails if a copy
+  `herdsidian`, `herdsidian-chrome`, `herdsidian-tabs`, `herdsidian-pane`, `herdsidian-status`, `guide-agents` and `guide-spaces`). `npm run lint` fails if a copy
   differs.
 - Icons: Herdr's `mods/workspace-chrome/*.svg` and `mods/files/*.svg`, plus
   the SVGs inside `herdsidian`, `herdsidian-tabs` and `herdsidian-pane`.
@@ -459,7 +535,7 @@ Look (layout root):
 - Never hard-code a color in a mod. `npm run lint` rejects any hex literal
   (3, 4, 6 or 8 digits) in `mods/**/*.js`, and alpha glued to a string
   (`+ "26"`, `` `${c}2e` ``). The only exception is the six space avatar
-  colors and the avatar letter (`#000000bf`), and only in
+  colors (`MARK`; the letter is derived by `markLetter`), and only in
   `mods/guide-spaces/main.js`. The `tokens.js`, `ui.js` and `layout.js`
   copies must equal `lib/`, and mods named by the layout and keys must exist
   in `mods/` or ship with Herdr (`workspace-chrome`, `files`, `changes`).
