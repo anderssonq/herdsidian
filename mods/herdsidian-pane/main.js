@@ -7,8 +7,14 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { panes, props, run, theme, home } from "herdr";
-import { tokens, HIGHLIGHT } from "./tokens.js";
-import { icon, dot } from "./ui.js";
+import { tokens } from "./tokens.js";
+import { icon, dot, needsPill, workingBar } from "./ui.js";
+
+// The pane card's corner radius. Must match "radius" in layouts/herdsidian.json (a test checks it).
+export const PANE_RADIUS = 8;
+// The working bar stops this far from each side: where the corner's curve meets the bar's 2 rows.
+// overflow_hidden clips to a rectangle, so the bar cannot reach further without poking out.
+export const BAR_INSET = PANE_RADIUS / 2;
 
 function folder(cwd) {
   if (!cwd) return "";
@@ -17,7 +23,15 @@ function folder(cwd) {
 }
 
 export default class Pane extends View {
-  init() { this.hovered = false; }
+  init() { this.hovered = false; this.width = 0; }
+
+  // The header's width, for the working bar's loop. Always stored; redraws only when it
+  // changed and this pane is working (only then does the width show).
+  resized(size, cx) {
+    if (size.width === this.width) return;
+    this.width = size.width;
+    if (this.me()?.status === "working") cx.notify();
+  }
 
   me() {
     return panes().find((p) => p.pane === props()?.pane);
@@ -45,24 +59,28 @@ export default class Pane extends View {
     const name = ((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || "shell";
     const st = p.status;
     const pane = p.pane;
-    const live = st === "working" || st === "done";
+    const bar = st === "working" ? workingBar(t, k, this.width, BAR_INSET) : null;
     return h_flex()
       .id(`pane-head-${pane}`)
+      .relative()
       .size_full()
-      .px(16)
+      .on_size_change((size, cx) => this.resized(size, cx))
+      .px(10)
       .gap(8)
       .items_center()
       .bg(t.background)
       .border_t(1)
-      .border_color(HIGHLIGHT)
+      .border_color(k.highlight)
       .text_size(12)
       .on_hover((hovered, cx) => { this.hovered = hovered; cx.notify(); })
       .on_click(() => run("pane.focus", { pane }))
       .when(Boolean(p.program?.icon), el => el.child(icon(p.program, 14, t.muted)))
       .child(div().flex_none().truncate().max_w(260).font_medium().text_color(t.foreground).child(name))
       .child(div().flex_1().truncate().text_color(t.muted).child(folder(p.cwd)))
-      .when(live, el => el.child(dot(t, st, 6)))
-      .when(st === "blocked", el => el.child(div().flex_none().px(6).h(18).flex().items_center().rounded(5).bg(k.blockedSoft).border(1).border_color(t.blocked).text_size(10.5).font_semibold().text_color(t.foreground).child("Needs you")))
+      .when(bar, el => el.child(bar))
+      // Working shows the bar instead of a dot.
+      .when(st === "done", el => el.child(dot(t, st, 6)))
+      .when(st === "blocked", el => el.child(needsPill(t, k, t.background)))
       .when(this.hovered, el => el
         .child(this.button(t, k, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }))
         .child(this.button(t, k, `ph-d-${pane}`, "split-down", "pane.split", { direction: "down", pane }))

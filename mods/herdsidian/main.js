@@ -9,11 +9,12 @@ import { exec, readTextFile, writeTextFile, watchFolder, pickFolder, theme, sett
   agents, panes, spaces, focused, home, notify, props, shared, setShared } from "herdr";
 import { alpha, tokens } from "./tokens.js";
 import { find } from "./layout.js";
+import { headerDots, keycap } from "./ui.js";
 import { buildIndex, updateIndex, missingRaw, neighborhood, layout as ringLayout, toScreen, zoomAt, sectionMessage, placeLabels, AREA } from "./graph.js";
 import { emptyDoc, findEntry, autoLinks, contextNotes, suggest, deliveryText, sendOrder, pickAgent, canSend, pushRecent, matchNotes,
   pendingRequest, shouldReload, changedJson } from "./context.js";
 import { stateDir, loadContext, saveContext, indexNotes, gitTop, listNotes, capNotice, backoffMs, touches, afterOutage, underVault } from "./io.js";
-import { graphSection, keycap } from "./graph-view.js";
+import { graphSection } from "./graph-view.js";
 import { sendText, sendToasts } from "./send.js";
 import { autoFromIndex, spaceWhere } from "./palette.js";
 import { Palette } from "./palette-main.js";
@@ -36,6 +37,18 @@ const recentOf = (vault) => {
 
 // Like the left sidebar: a rail of icons by width, not a flag, so dragging it narrow counts too.
 const width = () => find(layout(), "herdsidian")?.size?.px;
+// The block's left edge in layout units (Notes is the right-most block): the window width
+// minus Notes' own. Herdr's `window` import shadows the gpui global, hence globalThis.
+// viewport_size() is in screen px, so it is divided by Herdr's zoom (1 when unknown).
+// Notes does not re-render by itself on a window resize, so the grid can sit up to 5 px off
+// at this seam until the next render (measured; accepted, F2 tolerates a seam at Notes).
+// 0 when the width or Notes' own is unknown.
+export const blockX = () => {
+  const zoom = settings()?.zoom, total = globalThis.window?.viewport_size?.()?.width, own = width();
+  if (typeof total !== "number" || typeof own !== "number") return 0;
+  const x = total / (typeof zoom === "number" && zoom > 0 ? zoom : 1) - own;
+  return x > 0 ? x : 0;
+};
 const narrow = () => (width() ?? Infinity) < 160;
 
 // Folders and .md files of one folder, folders first.
@@ -706,7 +719,9 @@ export default class Notes extends View {
     if (narrow()) return this.rail(t);
     const title = this.note ? base(this.note) : this.vault?.split("/").pop() ?? "Notes";
     return v_flex().id("herdsidian").size_full().min_h(0).bg(tokens(t).glass).text_color(t.foreground).text_size(13)
-      .child(h_flex().h(52).flex_none().pl(16).pr(8).gap(4).items_center()
+      .child(h_flex().h(52).flex_none().relative().overflow_hidden().pl(16).pr(8).gap(4).items_center()
+        // The block's left edge is the window width minus Notes' own width, so the grid lines up with the toolbar's.
+        .child(headerDots(tokens(t), "herdsidian", blockX()))
         .when(Boolean(this.note), (el) => el.child(this.button("notes-back", t, "chevron-left", "Back to the notes",
           (_e, cx) => this.leave((cx) => { this.close(); cx.notify(); }, cx))))
         .child(v_flex().flex_1().min_w(0)

@@ -1,11 +1,12 @@
-// Sidebar header (hide-sidebar button over the top sheen) and footer (Settings,
-// Add machine). Glass and sheen colors come from tokens.js, never from a hex.
+// Sidebar header (app icon and name, hide-sidebar button, over the top sheen and dot
+// texture) and footer (Settings, Add machine). Glass, sheen and dot colors come from
+// tokens.js, never from a hex.
 
-import { View, div, svg } from "gpui-kit";
+import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, run, props, window as appWindow, updates } from "herdr";
 import { tokens } from "./tokens.js";
-import { glow } from "./ui.js";
+import { glow, headerDots } from "./ui.js";
 import { narrow, toggleSidebar } from "./layout.js";
 
 export default class WorkspaceChrome extends View {
@@ -24,10 +25,12 @@ export default class WorkspaceChrome extends View {
         .child(row("machine", "plus", "Add machine", () => run("mod.open", { name: "machine-add" })));
     }
     const macos = appWindow()?.platform === "macos";
-    return h_flex().relative().size_full().bg(k.glass).pl(collapsed ? 0 : macos ? 84 : 14).pr(collapsed ? 0 : 10).items_center()
+    return h_flex().relative().overflow_hidden().size_full().bg(k.glass).pl(collapsed ? 0 : macos ? 84 : 14).pr(collapsed ? 0 : 10).items_center()
       .when(collapsed, el => el.justify_center())
       .child(glow(k))
-      // The app name beside the macOS traffic lights (or at the left edge elsewhere).
+      .child(headerDots(k, "herdsidian-chrome", 0))
+      // The app icon, then the name, beside the macOS traffic lights (or at the left edge elsewhere).
+      .when(!collapsed, el => el.child(image("mods/herdsidian-chrome/herdsidian.svg").size(18).flex_none().mr(7)))
       .when(!collapsed, el => el.child(div().flex_1().min_w(0).truncate().text_size(13).font_medium().text_color(t.muted).child("Herdsidian")))
       // On the macOS rail the traffic lights fill the row; the agents list's » unfolds it.
       .when(!(collapsed && macos), el => el.child(div().id("sidebar-toggle").size(28).flex_none().flex().items_center().justify_center().rounded(6)

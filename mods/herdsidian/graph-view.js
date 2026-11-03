@@ -6,6 +6,7 @@
 import { PathBuilder, div, svg } from "gpui-kit";
 import { h_flex, v_flex, Input } from "gpui-base";
 import { tokens } from "./tokens.js";
+import { keycap } from "./ui.js";
 import { base } from "./notes.js";
 import { LABEL, estimateWidth, fitLabel } from "./graph.js";
 
@@ -17,9 +18,6 @@ const STRIP_MAX = 96;
 const STRIP_FIXED = 6 + 8 + 2 * 6 + 18 + 22;
 const PICKER_MAX = 190;
 const PICK_HITS = 6;
-
-// The shortcut that reaches a thing, as a small key cap.
-export const keycap = (t, text) => div().flex_none().px(5).h(18).rounded(4).border(1).border_color(tokens(t).line).text_size(10.5).text_color(t.muted).flex().items_center().child(text);
 
 // One stroke path with a segment per edge, painted over the whole area. Callers skip an empty list.
 function strokes(segments, color) {

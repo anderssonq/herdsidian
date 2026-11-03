@@ -10,9 +10,8 @@
 
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, Input, TextView } from "gpui-base";
-import { keycap } from "./graph-view.js";
 import { tokens } from "./tokens.js";
-import { icon, dot } from "./ui.js";
+import { icon, dot, needsPill, keycap } from "./ui.js";
 import { ROW, LIST_MAX } from "./palette.js";
 
 export const PLACEHOLDER = "Search notes, agents and commands…";
@@ -41,7 +40,7 @@ function agentRow(t, k, m, row, on) {
     .child(prog ?? div().flex_none().text_size(12.5).text_color(t.foreground).child(a.program?.name ?? row.label))
     .when(Boolean(a.space_name), (el) => el.child(div().flex_none().text_size(12.5).text_color(t.foreground).child(a.space_name)))
     .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(t.muted).child(a.title ? `— ${a.title}` : (row.detail ? `— ${row.detail}` : "")))
-    .when(a.status === "blocked", (el) => el.child(div().flex_none().text_size(11.5).text_color(t.blocked).child("needs you")))
+    .when(a.status === "blocked", (el) => el.child(needsPill(t, k, t.popover)))
     .when(Boolean(row.hint), (el) => el.child(keycap(t, row.hint)));
 }
 

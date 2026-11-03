@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 100 100">
+  <!-- 16-18 px variant: flat facets, wider crack (6) so the break still reads. Full color: image(). -->
+  <defs><clipPath id="hex"><path d="M55.2 9 L82.8 25 Q88 28 88 34 L88 66 Q88 72 82.8 75 L55.2 91 Q50 94 44.8 91 L17.2 75 Q12 72 12 66 L12 34 Q12 28 17.2 25 L44.8 9 Q50 6 55.2 9Z"/></clipPath></defs>
+  <g clip-path="url(#hex)">
+    <path d="M50 6 88 28 56 46Z" fill="#a3a9b1"/><path d="M88 28 88 72 56 46Z" fill="#6b7079"/>
+    <path d="M50 94 12 72 56 46Z" fill="#4a4e56"/><path d="M12 72 12 28 56 46Z" fill="#787d86"/>
+    <path d="M12 28 50 6 56 46Z" fill="#b4b9c0"/>
+  </g>
+  <g clip-path="url(#hex)"><path d="M88 72 50 94 56 46Z" fill="#33363c"/><path d="M56 46 88 72M56 46 50 94" fill="none" stroke="#16181b" stroke-width="6" stroke-linecap="round"/></g>
+</svg>

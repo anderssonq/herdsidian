@@ -96,20 +96,20 @@
                       "mod": "herdsidian-pane"
                     },
                     "reveal": "always",
-                    "height": 34,
+                    "height": 30,
                     "position": "top"
                   },
                   "background": "background",
                   "border": {
                     "width": 1,
-                    "color": "#ffffff12"
+                    "color": "border"
                   },
                   "focus": {
                     "width": 1,
                     "color": "accent"
                   },
-                  "radius": 12,
-                  "gap": 8,
+                  "radius": 8,
+                  "gap": 6,
                   "lone": true
                 }
               }
@@ -148,8 +148,8 @@
               "hidden": true
             }
           ],
-          "padding": 8,
-          "gap": 8
+          "padding": 4,
+          "gap": 6
         },
         {
           "id": "status",
@@ -186,12 +186,12 @@
     "angle": 160
   },
   "terminal_padding": [
-    14,
-    12
+    10,
+    6
   ],
   "divider": {
     "width": 1,
-    "color": "#ffffff12"
+    "color": "border"
   },
   "titlebar": "none",
   "traffic_lights": [

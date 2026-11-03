@@ -95,12 +95,20 @@ herdsidian: ~/code/acme-api
   Tabs: All, Notes, Agents, Commands, Settings. `↵` opens a note, focuses an agent or runs a
   command. `⌘↵` pastes the selected note's path into the agent you were working with.
   It never presses Enter. `⇥` previews the note.
-- **Shortcut guide.** Each space shows `⌃1…⌃9` and each agent `⌘⌥1…⌘⌥9`, so you
+- **Shortcut guide.** A hovered space shows `⌃1…⌃9` and each agent `⌘⌥1…⌘⌥9`, so you
   jump between agents without the mouse.
 - **Graphite glass look.** Tinted glass over a gradient of the theme, terminals as solid
   cards. Eight themes, every color derived from the theme:
   `hs_carbon` (default), `hs_midnight` (Tokyo Night), `hs_catppuccin` (Mocha),
-  `hs_nord`, and a light version of each.
+  `hs_nord`, and a light version of each. The 52 px header bands carry a fine dot texture,
+  and the sidebar header shows the Herdsidian icon.
+- **Quiet Spaces.** Each space is an avatar, its name and a few signals: ahead/behind pills,
+  a dot when blocked, and the `⌃N` key only on the hovered row. The branch is in the row's
+  tooltip.
+- **One "Needs you" signal.** A blocked agent shows the same pill with a "!" mark in the
+  agents list, the pane header, the status bar and the palette. The status bar pill
+  (with the count when more than one) jumps to the blocked agent.
+- **Working bar.** While an agent works, a thin moving bar runs along the top of its pane.
 
 ![The eight themes](docs/themes.png)
 
@@ -298,21 +306,21 @@ checks that the core it talks to is its own before it starts any agent, so your 
 settings and vault stay out of it. The README images come from it.
 
 Three files in `lib/` are canonical: `tokens.js` (theme colors with alpha), `ui.js` (top
-sheen, program icons, status dot) and `layout.js` (the `find` tree helper and the sidebar
+sheen, header dots, program icons, status dot, "Needs you" pill, working bar) and `layout.js` (the `find` tree helper and the sidebar
 rail helpers `narrow` and `toggleSidebar`; it imports Herdr). A mod folder installs on
 its own, so each mod that uses one carries a byte-identical copy. After editing one, copy
 it into every mod that has it; `npm run lint` fails if a copy differs.
 
 ```sh
 cp lib/tokens.js mods/<mod>/tokens.js
-cp lib/ui.js mods/<mod>/ui.js          # herdsidian, herdsidian-chrome, herdsidian-tabs, herdsidian-pane, guide-agents
+cp lib/ui.js mods/<mod>/ui.js          # herdsidian, herdsidian-chrome, herdsidian-tabs, herdsidian-pane, herdsidian-status, guide-agents, guide-spaces
 cp lib/layout.js mods/<mod>/layout.js  # herdsidian, herdsidian-chrome, herdsidian-tabs, guide-agents, guide-spaces
 cp lib/keys.js mods/<mod>/keys.js      # herdsidian, herdsidian-tabs, guide-agents, guide-spaces
 cp lib/settings.js mods/<mod>/settings.js  # herdsidian, herdsidian-tabs, guide-agents, guide-spaces
 ```
 
-Check mod changes in Herdr with `herdr-app check`. The "Needs you" chip (`foreground` on
-`blockedSoft`, 1 px `blocked` border) passes 4.5:1 contrast in all eight themes.
+Check mod changes in Herdr with `herdr-app check`. The "Needs you" pill is one shared
+helper (`needsPill` in `lib/ui.js`): a "!" mark and `blocked` text on `blockedSoft`, no border.
 
 </details>
 
