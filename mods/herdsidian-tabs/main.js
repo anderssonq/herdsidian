@@ -107,7 +107,7 @@ export default class Tabs extends View {
         .when(Boolean(c.status), el => el.child(dot(t, c.status, 6)))
         .when(Boolean(program?.icon), el => el.child(icon(program, 14, c.active ? t.foreground : t.muted)))
         .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
-        // The tab's key, always shown (the sidebar's ⌃1 shows only on hover).
+        // The tab's key, always shown.
         .when(Boolean(key), el => el.child(div().flex_none().text_size(11).text_color(t.muted).child(key)))
         .when(c.active, el => el.child(div().id(`close-${c.id}`).text_color(t.muted).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/herdsidian-tabs/close.svg").size(12))));
     };

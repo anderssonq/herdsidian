@@ -1,4 +1,4 @@
-// Spaces "quiet rows" (F3): git text in the tooltip, pills, hovered key cap, blocked dot, count.
+// Spaces "quiet rows" (F3): git text in the tooltip, pills, key cap on every row, blocked dot, count.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { state, fakeCx, element, walk } from "./support/mod-stubs.js";
@@ -61,39 +61,42 @@ test("ahead and behind pills appear only above zero", () => {
   assert.deepEqual(texts(row(none.view, none.cx, "a")).filter((s) => /[↑↓]/.test(s)), []);
 });
 
-test("the key cap shows only on the hovered row, and only with key hints on", () => {
+test("with key hints on the key cap shows on every row of the first nine, with no hover, and not on the tenth", () => {
   const { view, cx } = mount();
-  const cap = (id) => texts(row(view, cx, id)).includes("⌃" + (id === "a" ? 1 : 2));
-  assert.equal(cap("a"), false);
-  call(row(view, cx, "a"), "on_hover")[0](true, cx);
-  assert.equal(view.hovered, "a");
-  assert.equal(cap("a"), true);
-  assert.equal(cap("b"), false);
-  call(row(view, cx, "a"), "on_hover")[0](false, cx);
-  assert.equal(view.hovered, null);
-  assert.equal(cap("a"), false);
+  const cap = (id, n) => texts(row(view, cx, id)).includes("⌃" + n);
+  assert.equal(cap("a", 1), true);
+  assert.equal(cap("b", 2), true);
+
+  const extra = Array.from({ length: 8 }, (_, k) => ({ id: `x${k}`, name: `extra${k}`, folder: `/r/x${k}`, tabs: [], status: "idle" }));
+  SPACES.push(...extra);
+  for (const s of extra) view.shown.add(s.id); // new spaces stay hidden until their git is read
+  try {
+    assert.equal(cap("x6", 9), true); // the ninth space (index 8)
+    const tenth = texts(row(view, cx, "x7"));
+    assert.ok(!tenth.some((s) => s.startsWith("⌃")));
+  } finally {
+    SPACES.length = 2;
+  }
 
   state.shared["herdsidian.settings"] = { keyHints: false };
-  call(row(view, cx, "a"), "on_hover")[0](true, cx);
-  assert.equal(cap("a"), false);
+  assert.equal(cap("a", 1), false);
+  assert.equal(cap("b", 2), false);
   assert.equal(call(row(view, cx, "a"), "tooltip"), undefined);
 });
 
-test("on the hovered row the key cap replaces the pills; the blocked dot stays", () => {
+test("the key cap, both pills and the blocked dot show together on one row with no hover", () => {
   const { view, cx } = mount({ "/r/b": git({ ahead: 3, behind: 1 }) });
   const dot = (id) => walk(row(view, cx, id)).some((n) => call(n, "size")?.[0] === 6 && call(n, "bg"));
   const arrows = (id) => texts(row(view, cx, id)).filter((s) => /[↑↓]/.test(s));
   assert.deepEqual(arrows("b"), ["↑3", "↓1"]);
-  call(row(view, cx, "b"), "on_hover")[0](true, cx);
-  assert.deepEqual(arrows("b"), []);
   assert.ok(texts(row(view, cx, "b")).includes("⌃2"));
   assert.equal(dot("b"), true);
+  assert.equal(dot("a"), false); // the idle row has no dot, so the check is not vacuous
 });
 
-test("with key hints off the pills stay on the hovered row", () => {
+test("with key hints off the pills show with no hover and no key cap", () => {
   state.shared["herdsidian.settings"] = { keyHints: false };
   const { view, cx } = mount({ "/r/b": git({ ahead: 3 }) });
-  call(row(view, cx, "b"), "on_hover")[0](true, cx);
   const shown = texts(row(view, cx, "b"));
   assert.ok(shown.includes("↑3"));
   assert.ok(!shown.includes("⌃2"));
@@ -108,33 +111,6 @@ test("a stored space color that is unknown or short hex falls back to the accent
   state.shared["space.colors"] = { a: "ansi6", b: "#112233" };
   assert.equal(call(avatar("a"), "bg")[0], "#22a99a33");
   assert.equal(call(avatar("b"), "bg")[0], "#11223333");
-});
-
-test("a drop and folding the section clear the hovered row", () => {
-  const { view, cx } = mount();
-  call(row(view, cx, "a"), "on_hover")[0](true, cx);
-  assert.equal(view.hovered, "a");
-  const down = call(row(view, cx, "a"), "on_mouse_down")[1];
-  down();
-  const b = row(view, cx, "b");
-  call(b, "on_mouse_move")[0]({}, cx);
-  call(b, "on_mouse_up")[1]({}, cx);
-  assert.equal(view.hovered, null);
-  call(row(view, cx, "a"), "on_hover")[0](true, cx);
-  call(byId(view.render(cx), "spaces-fold"), "on_click")[0]({}, cx);
-  assert.equal(view.hovered, null);
-});
-
-test("hover notifies only when the hovered space changes", () => {
-  const { view, cx } = mount();
-  let n = 0;
-  cx.notify = () => { n++; };
-  const hover = (id, on) => call(row(view, cx, id), "on_hover")[0](on, cx);
-  hover("a", true);
-  hover("a", true);
-  hover("b", false);
-  hover("a", false);
-  assert.equal(n, 2);
 });
 
 test("a blocked space shows a 6 px dot, others do not", () => {

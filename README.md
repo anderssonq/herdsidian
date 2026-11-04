@@ -95,7 +95,7 @@ herdsidian: ~/code/acme-api
   Tabs: All, Notes, Agents, Commands, Settings. `↵` opens a note, focuses an agent or runs a
   command. `⌘↵` pastes the selected note's path into the agent you were working with.
   It never presses Enter. `⇥` previews the note.
-- **Shortcut guide.** A hovered space shows `⌃1…⌃9` and each agent `⌘⌥1…⌘⌥9`, so you
+- **Shortcut guide.** Each space shows `⌃1…⌃9` and each agent `⌘⌥1…⌘⌥9`, so you
   jump between agents without the mouse.
 - **Graphite glass look.** Tinted glass over a gradient of the theme, terminals as solid
   cards. Eight themes, every color derived from the theme:
@@ -103,7 +103,7 @@ herdsidian: ~/code/acme-api
   `hs_nord`, and a light version of each. The 52 px header bands carry a fine dot texture,
   and the sidebar header shows the Herdsidian icon.
 - **Quiet Spaces.** Each space is an avatar, its name and a few signals: ahead/behind pills,
-  a dot when blocked, and the `⌃N` key only on the hovered row. The branch is in the row's
+  a dot when blocked, and the `⌃N` key on the first nine rows. The branch is in the row's
   tooltip.
 - **One "Needs you" signal.** A blocked agent shows the same pill with a "!" mark in the
   agents list, the pane header, the status bar and the palette. The status bar pill

@@ -70,7 +70,6 @@ export default class Spaces extends View {
     this.born = {};
     this.pressed = null;
     this.over = null;
-    this.hovered = null; // the space id under the pointer: only its row shows the key cap
     this.machines = [];
     this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]"));
     this.sectionFolded = false; // the Spaces chevron: rows hidden, per copy
@@ -274,14 +273,14 @@ export default class Spaces extends View {
     });
   }
 
-  // Right of the name: ahead/behind pills, a dot when blocked, the key cap on the hovered row.
-  // The cap replaces the pills there (they are in the tooltip), so the name does not truncate.
+  // Right of the name: ahead/behind pills, a dot when blocked, and the key cap on every row
+  // while key hints are on.
   signals({ w, i, g }, t) {
-    const cap = this.hovered === w.id && i < 9 && settings().keyHints;
+    const cap = i < 9 && settings().keyHints;
     const pill = (text, c) => div().flex_none().h(18).px(6).rounded(5).flex().items_center().text_size(11).text_color(c).bg(alpha(c, 0.16)).child(text);
     return h_flex().flex_none().gap(5).items_center()
-      .when(!cap && Boolean(g) && g.ahead > 0, (el) => el.child(pill(`\u2191${g.ahead}`, t.ansi2)))
-      .when(!cap && Boolean(g) && g.behind > 0, (el) => el.child(pill(`\u2193${g.behind}`, t.ansi1)))
+      .when(Boolean(g) && g.ahead > 0, (el) => el.child(pill(`\u2191${g.ahead}`, t.ansi2)))
+      .when(Boolean(g) && g.behind > 0, (el) => el.child(pill(`\u2193${g.behind}`, t.ansi1)))
       .when(w.status === "blocked", (el) => el.child(div().size(6).rounded(3).flex_none().bg(t.blocked)))
       .when(cap, (el) => el.child(keycap(t, `\u2303${i + 1}`)));
   }
@@ -297,12 +296,6 @@ export default class Spaces extends View {
       .relative()
       .id(`space-${w.id}`)
       .when(Boolean(tip), (el) => el.tooltip(tip))
-      .on_hover((over, cx) => {
-        const next = over ? w.id : this.hovered === w.id ? null : this.hovered;
-        if (next === this.hovered) return;
-        this.hovered = next;
-        cx.notify();
-      })
       .px(8)
       .h(rowHeight({ tree }))
       .flex_none()
@@ -333,10 +326,7 @@ export default class Spaces extends View {
         const over = this.over;
         this.pressed = null;
         this.over = null;
-        if (from !== null && over === i && from !== i) {
-          this.hovered = null; // The rows move under the pointer: no row is hovered until it moves again.
-          run("space.move", { id: spaces()[from].id, index: i + 1 });
-        }
+        if (from !== null && over === i && from !== i) run("space.move", { id: spaces()[from].id, index: i + 1 });
         else if (from === i) run("space.select", { id: w.id });
         cx.notify();
       })
@@ -387,7 +377,7 @@ export default class Spaces extends View {
       .child(h_flex().h(24).flex_none().px(8).gap(8).items_center().text_size(11).text_color(t.muted)
         .when(!collapsed, el => el.child(h_flex().id("spaces-fold").gap(4).items_center().cursor_pointer()
           .when(settings().keyHints, el => el.tooltip("⌃ 1–9 · ⌘⌥[ ⌘⌥]"))
-          .on_click((_e, cx) => { this.sectionFolded = !this.sectionFolded; this.hovered = null; cx.notify(); })
+          .on_click((_e, cx) => { this.sectionFolded = !this.sectionFolded; cx.notify(); })
           .child(svg(`mods/workspace-chrome/chevron-${this.sectionFolded ? "right" : "down"}.svg`).size(11).flex_none())
           .child(div().font_semibold().child("Spaces")))
           .child(div().flex_1())

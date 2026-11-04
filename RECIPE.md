@@ -57,11 +57,9 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      background the mark color at 20 % (`alpha(mark, 0.2)`), the letter 11 px
      bold in `markLetter(mark, t)`. Signals: ahead/behind pills (h 18, radius 5,
      padding 0 6, 11 px): `↑N` in `ansi2` on `ansi2` at 16 %, `↓N` in `ansi1` on `ansi1`
-     at 16 %; a 6 px `blocked` dot when the space is blocked; and on the hovered
-     row only, the `⌃N` key cap (h 18, radius 4, 1 px `line` border, 10.5 px
-     `muted`; hidden when `keyHints` is off). With key hints on, the cap replaces the
-     ahead/behind pills on the hovered row (they are in the tooltip); the blocked dot
-     stays. With key hints off the pills stay on hover. The row tooltip is
+     at 16 %; a 6 px `blocked` dot when the space is blocked; and on each of the
+     first 9 rows, always, the `⌃N` key cap (h 18, radius 4, 1 px `line` border, 10.5 px
+     `muted`; hidden when `keyHints` is off). The row tooltip is
      `<repo> · <branch> · ↑2 ↓1 · ⌃N` (the branch always, the repo only when
      unusual, the parts that do not apply left out). The selected row keeps
      `accentSoft` and medium weight; hover keeps `pill`. Worktree rows are unchanged.
@@ -461,9 +459,9 @@ Look (layout root):
 - `lib/settings.js`: the global `settings` store. `settings()` reads
   `shared("herdsidian.settings")` through `readSettings`; `setSetting(name, value)`
   writes it, and every mod re-renders. Today one value: `keyHints` (default true) hides
-  the always-shown keys in `herdsidian-tabs` (tabs, New, Files, Changes, Search) and
-  `guide-agents` (`⌘⌥N`, header). In `guide-spaces` the `⌃N` cap shows only on hover and
-  the header hint is a tooltip; with `keyHints` off Spaces drops its keys from the
+  the always-shown keys in `herdsidian-tabs` (tabs, New, Files, Changes, Search),
+  `guide-agents` (`⌘⌥N`, header) and `guide-spaces` (the `⌃N` cap). In `guide-spaces` the
+  header hint is a tooltip; with `keyHints` off Spaces drops its keys from the
   tooltips too. Tooltips elsewhere keep their key. Changed from ⌘K → Settings, whose Layout section also toggles Notes
   (`layout.toggle`) and its width (`herdsidian.expand` / `herdsidian.rail`, handled by
   Notes' `nextCommand()`). Imports `herdr`; in `herdsidian-tabs` it is imported as
