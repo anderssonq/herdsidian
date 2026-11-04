@@ -99,15 +99,17 @@ for (const p of modFiles.filter((p) => p.endsWith(".js") && !shared(p))) {
   });
 }
 
-// Guards on the mod sources. Both report file and line.
+// Guards on the mod sources. Each reports file and line.
 // 1. herdr's `window` import shadows the gpui global (F2): paint_path must go through globalThis.
 // 2. Notes never submits to an agent: it pastes only (AC27), so no send/keys/Enter/task calls.
 // 3. The pure files stay testable under node: no herdr, gpui-kit or gpui-base import.
+// 4. Deletes go to the Trash through the host (AC49): no rm, rmdir or unlink in mods/herdsidian.
 // The no-submit rule (2) also covers palette-main.js, palette.js, palette-view.js and send.js.
-const pure = new Set(["notes", "context", "graph", "palette", "send"].map((n) => `mods/herdsidian/${n}.js`));
+const pure = new Set(["notes", "context", "graph", "palette", "send", "actions", "refs"].map((n) => `mods/herdsidian/${n}.js`));
 const hostImport = /\bfrom\s*["'](herdr|gpui-kit|gpui-base)["']|\bimport\s*["'](herdr|gpui-kit|gpui-base)["']/;
 const paintPath = /(?<!globalThis\.)\bwindow\.paint_path/;
 const submitCall = /terminal\.(send|keys)\b|hc\(\s*\[\s*["'](send|keys)["']|["']enter["']|\btask\s*:/;
+const destructive = /\b(?:exec\(|run\((?:\s*\w+\s*,)?)\s*["'`](?:[\w./-]*\/)?(rm|rmdir|unlink)["'`]|["'`][^"'`\n]*\brm -/;
 for (const p of modFiles.filter((p) => p.endsWith(".js"))) {
   const inNotes = /^mods\/herdsidian\/[^/]+\.js$/.test(relative(root, p));
   readFileSync(p, "utf8").split("\n").forEach((line, i) => {
@@ -116,6 +118,8 @@ for (const p of modFiles.filter((p) => p.endsWith(".js"))) {
     }
     if (pure.has(relative(root, p)) && hostImport.test(line)) fail(p, `line ${i + 1}: pure file must not import herdr, gpui-kit or gpui-base`);
     if (inNotes && submitCall.test(line)) fail(p, `line ${i + 1}: Send to agent must paste, never submit (AC27)`);
+    if (inNotes && destructive.test(line)) fail(p, `line ${i + 1}: no rm, rmdir or unlink: deletes go to the Trash through the host (AC49)`);
+    if (inNotes && /\btext_color\(\s*t\.dim\b/.test(line)) fail(p, `line ${i + 1}: dim is never a text color: use muted or foreground (ADR-0001)`);
   });
 }
 

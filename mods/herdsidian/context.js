@@ -52,6 +52,9 @@ const added = (list, note) => (list.includes(note) ? list : [...list, note]);
 // A new doc with one change applied to the entry of `where`; other entries and unknown keys stay.
 // change = { type: "link" | "unlink" | "exclude" | "scope", note, address?, agentOnly? }
 export function applyChange(doc, change, where, liveSpaceIds) {
+  // The path changes ignore `where`: they follow the vault, not one space.
+  if (change.type === "rename-paths") return renamePaths(doc, change.vault, change.from, change.to);
+  if (change.type === "remove-paths") return removePaths(doc, change.vault, change.path);
   const found = findEntry(doc, where, liveSpaceIds);
   if (!found && change.type === "unlink") return doc;
   const entry = {
@@ -84,6 +87,44 @@ export function applyChange(doc, change, where, liveSpaceIds) {
     }
   }
   return { ...doc, spaces: found ? doc.spaces.map((e) => (e === found ? entry : e)) : [...doc.spaces, entry] };
+}
+
+// True for an item and everything below it, not for a sibling with the same start.
+export const under = (path, item) => path === item || path.startsWith(`${item}/`);
+
+// A new doc where `fn` maps every path list of this vault's entries (notes, excluded, each agent's
+// list). The same doc comes back when nothing changed, so the caller can skip the write.
+function mapVaultPaths(doc, vault, fn) {
+  let touched = false;
+  const list = (paths) => {
+    const next = fn(paths);
+    if (next.some((p, i) => p !== paths[i]) || next.length !== paths.length) touched = true;
+    return next;
+  };
+  const spaces = doc.spaces.map((e) => {
+    if (e.vault !== vault) return e;
+    const out = { ...e };
+    for (const key of ["notes", "excluded"]) if (Array.isArray(e[key])) out[key] = list(e[key]);
+    if (isObject(e.agents)) {
+      out.agents = {};
+      for (const [address, paths] of Object.entries(e.agents)) {
+        const next = Array.isArray(paths) ? list(paths) : paths;
+        if (!Array.isArray(next) || next.length) out.agents[address] = next;
+      }
+    }
+    return out;
+  });
+  return touched ? { ...doc, spaces } : doc;
+}
+
+// A renamed note or folder keeps its links: `from` and everything under it move to `to`.
+export function renamePaths(doc, vault, from, to) {
+  return mapVaultPaths(doc, vault, (paths) => paths.map((p) => (under(p, from) ? to + p.slice(from.length) : p)));
+}
+
+// A deleted note or folder loses its links: `item` and everything under it go.
+export function removePaths(doc, vault, item) {
+  return mapVaultPaths(doc, vault, (paths) => paths.filter((p) => !under(p, item)));
 }
 
 // "~/x" to home + "/x"; an absolute path is kept; a relative path gives null.

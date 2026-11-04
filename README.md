@@ -26,8 +26,9 @@
 A [Herdr](https://herdr.dev) layout for people who run their coding agents from an
 Obsidian vault: agent briefs, standards, project notes and daily logs in Markdown, read by
 the agents and written back by them. Herdsidian opens that vault in a **Notes** sidebar
-beside your terminals. You read and edit notes while the agents work, link the right notes
-to each space, and hand them to an agent with one click.
+beside your terminals. You read and edit notes, and create, rename and delete notes and
+folders, while the agents work. You link the right notes to each space and hand them to an
+agent with one click.
 
 ![Herdsidian: a Claude Code agent at work, with the vault, the local graph and the notes linked to its space in the Notes sidebar](preview.png)
 
@@ -87,6 +88,8 @@ herdsidian: ~/code/acme-api
 - **Notes sidebar.** Folders, notes and search on the right. Read mode renders
   frontmatter, headings and links; `⌘E` switches to Edit and `⌘S` saves. A button copies the
   note's full path. Collapses to an icon rail. Any folder of Markdown files works; Obsidian is not needed.
+- **Right-click menu.** Create, rename and delete notes and folders from the tree. Delete
+  moves the item to the Trash. Rename updates the links to it in your other notes.
 - **Agent context.** Notes linked per space, with extras for one agent. Suggestions (the
   space's repo name, recent notes, alias or tag matches) show faded; one click pins them.
 - **Local graph.** The open note (or the first linked note) at 1 or 2 hops, up to 40
@@ -237,7 +240,8 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
 ## What it isn't
 
 - **Not an Obsidian replacement.** No tags view, no whole-vault graph, no image embeds
-  (`![[image.png]]` shows its file name). Rename, delete and new folders stay in Obsidian.
+  (`![[image.png]]` shows its file name). Attachments cannot be renamed or deleted one by
+  one: the tree shows only folders and notes.
 - **Not a sync tool.** It reads and writes the files in place. Obsidian, git and your
   agents see the same files.
 - **Not online.** Nothing reaches the network.

@@ -48,6 +48,12 @@ test("resolve prefers the linking note's folder", () => {
   assert.equal(resolve(all, "a/Index.md", "Git"), "a/Git.md");
 });
 
+test("resolve prefers the linking note's folder when that folder has a capital", () => {
+  const notes = ["02-Standards/Git.md", "03-Knowledge/Git.md", "03-Knowledge/Index.md"];
+  assert.equal(resolve(notes, "03-Knowledge/Index.md", "Git"), "03-Knowledge/Git.md");
+  assert.equal(resolve(notes, "03-Knowledge/Index.md", "git.md"), "03-Knowledge/Git.md");
+});
+
 test("resolve finds a note by path or by name anywhere", () => {
   assert.equal(resolve(all, "Home.md", "Projects/Herdr"), "Projects/Herdr.md");
   assert.equal(resolve(all, "Home.md", "deep"), "b/sub/Deep.md");

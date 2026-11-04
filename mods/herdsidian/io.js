@@ -10,6 +10,14 @@ import { parseContext, serializeContext, applyChange } from "./context.js";
 const FILE = "context.json";
 const TRIES = 3;
 
+// The last notes opened in the reader of one vault (suggestion source b).
+export const recentOf = (vault) => {
+  try { const list = JSON.parse(localStorage.getItem(`recent:${vault}`) ?? "[]"); return Array.isArray(list) ? list : []; } catch { return []; }
+};
+
+// The one writer of a vault's recent notes.
+export const storeRecent = (vault, list) => localStorage.setItem(`recent:${vault}`, JSON.stringify(list));
+
 // Where the context file lives: ${XDG_STATE_HOME:-$HOME/.local/state}/herdsidian.
 export async function stateDir() {
   const r = await exec("sh", ["-c", 'printf %s "${XDG_STATE_HOME:-$HOME/.local/state}"']);
@@ -50,11 +58,15 @@ export async function saveContext(dir, change, where, liveSpaceIds, deps = real)
       parsed = parseContext(null);
       previous = null;
     }
+    const paths = change.type === "rename-paths" || change.type === "remove-paths";
+    // A path change has nothing to fix in a missing file: no folder and no write.
+    if (paths && previous === null) return parsed.doc;
     if (previous === null) {
       const made = await run("mkdir", ["-p", dir]);
       if (made.code !== 0) throw new Error(`${ERR}: ${made.stderr || "cannot create the folder"}`);
     }
     const doc = applyChange(parsed.doc, change, where, liveSpaceIds);
+    if (paths && doc === parsed.doc) return doc;
     try {
       await write(file, serializeContext(doc), previous);
       return doc;
@@ -78,11 +90,13 @@ export async function indexNotes(vault, files) {
 
 export const MAX_NOTES = 5000;
 
+// The -name args of the pruned folders, shared with the file operations that must skip them.
+export const PRUNE = [...HIDDEN].flatMap((n, i) => [...(i ? ["-o"] : []), "-name", n]);
+
 // Every note in the vault, as paths relative to it, capped at MAX_NOTES: { notes, total, truncated }.
 // total counts all the notes found, so the cap can be shown. deps is for tests.
 export async function listNotes(vault, deps = { exec }) {
-  const prune = [...HIDDEN].flatMap((n, i) => [...(i ? ["-o"] : []), "-name", n]);
-  const r = await deps.exec("find", [vault, "(", ...prune, ")", "-prune", "-o", "-type", "f", "-iname", "*.md", "-print"]);
+  const r = await deps.exec("find", [vault, "(", ...PRUNE, ")", "-prune", "-o", "-type", "f", "-iname", "*.md", "-print"]);
   // find exits 1 on an unreadable subfolder yet still lists the rest: only no output at all is an error.
   if (r.code !== 0 && !r.stdout.trim()) throw new Error(r.stderr || "Cannot list the vault");
   const found = r.stdout.split("\n").filter(Boolean).map((p) => p.slice(vault.length + 1)).sort();

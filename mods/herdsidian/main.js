@@ -4,7 +4,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, TextView } from "gpui-base";
-import { HIDDEN, base, hidden, render, linkTarget, resolve } from "./notes.js";
+import { HIDDEN, base, dirOf, hidden, render, linkTarget, resolve } from "./notes.js";
 import { exec, readTextFile, writeTextFile, watchFolder, pickFolder, theme, settings, nextCommand, run, layout, window,
   agents, panes, spaces, focused, home, notify, props, shared, setShared } from "herdr";
 import { alpha, tokens } from "./tokens.js";
@@ -13,11 +13,13 @@ import { headerDots, keycap } from "./ui.js";
 import { buildIndex, updateIndex, missingRaw, neighborhood, layout as ringLayout, toScreen, zoomAt, sectionMessage, placeLabels, AREA } from "./graph.js";
 import { emptyDoc, findEntry, autoLinks, contextNotes, suggest, deliveryText, sendOrder, pickAgent, canSend, pushRecent, matchNotes,
   pendingRequest, shouldReload, changedJson } from "./context.js";
-import { stateDir, loadContext, saveContext, indexNotes, gitTop, listNotes, capNotice, backoffMs, touches, afterOutage, underVault } from "./io.js";
+import { stateDir, loadContext, saveContext, indexNotes, gitTop, listNotes, capNotice, backoffMs, touches, afterOutage, underVault, recentOf, storeRecent } from "./io.js";
 import { graphSection } from "./graph-view.js";
 import { sendText, sendToasts } from "./send.js";
 import { autoFromIndex, spaceWhere } from "./palette.js";
 import { Palette } from "./palette-main.js";
+import { VaultSurface } from "./actions-view.js";
+import { VaultActions } from "./actions-main.js";
 
 // The ⌘K palette is another copy of this mod; the two copies talk through shared() keys (ADR-0003).
 // A key is written only when its value changed, so a write never wakes the other copy for nothing.
@@ -29,11 +31,6 @@ const NO_META = new Map();
 // hidden() slices the vault off a path, so it only applies to paths under the vault.
 const isHidden = (vault, p) => underVault([p], vault) && hidden(vault, p);
 const leaf = (path) => (path ?? "").split("/").filter(Boolean).pop() ?? "";
-
-// The last notes opened in the reader of one vault (suggestion source b).
-const recentOf = (vault) => {
-  try { const list = JSON.parse(localStorage.getItem(`recent:${vault}`) ?? "[]"); return Array.isArray(list) ? list : []; } catch { return []; }
-};
 
 // Like the left sidebar: a rail of icons by width, not a flag, so dragging it narrow counts too.
 const width = () => find(layout(), "herdsidian")?.size?.px;
@@ -63,11 +60,12 @@ async function directory(path) {
 
 export default class Notes extends View {
   init(_props, cx) {
-    // The palette popup is a copy of this mod: it starts none of the Notes work below.
-    if (props()?.overlay) { this.palette = new Palette(cx); return; }
+    // The palette and the tree's menu and dialogs are copies of this mod: they start none of the Notes work below.
+    if (props()?.overlay) { this.overlay = props().vaultSurface ? new VaultSurface(cx) : new Palette(cx); return; }
     // No vault until one is chosen: the panel asks for it.
     this.vault = localStorage.getItem("vault");
     publish("herdsidian.vault", this.vault);
+    this.pathEpoch = 0; this.moving = false; this.actions = new VaultActions(this);
     // A fresh request is left to the first render; an old one was already handled.
     const request = shared("herdsidian.request");
     this.handled = pendingRequest(request, null, this.vault, Date.now()).action === "none" ? request?.id ?? null : null;
@@ -127,6 +125,7 @@ export default class Notes extends View {
   // What the palette asked for through shared(); a request id is handled once. Called from render,
   // so the work runs in a spawn after the render (no notify or state change inside it).
   handleShared(cx) {
+    this.actions.consume(cx);
     const request = shared("herdsidian.request");
     const { action, id } = pendingRequest(request, this.handled, this.vault, Date.now());
     if (request && id !== this.handled) {
@@ -153,23 +152,30 @@ export default class Notes extends View {
 
   // The tree's open folders and the note list. A folder gone since it was opened closes.
   load(cx, changed = null) {
-    const vault = this.vault;
+    const vault = this.vault, epoch = this.pathEpoch;
     if (!vault) return;
     cx.spawn(async (cx) => {
+      // A rename or delete since the start would bring old paths back: start over, and keep `changed`.
+      const stale = () => {
+        if (this.vault !== vault) return true;
+        if (this.pathEpoch === epoch) return false;
+        this.load(cx, changed);
+        return true;
+      };
       try {
         const root = await directory(vault);
-        if (this.vault !== vault) return;
+        if (stale()) return;
         this.entries.set("", root);
         const paths = [...this.folders];
         const lists = await Promise.all(paths.map((path) => directory(`${vault}/${path}`).catch(() => null)));
-        if (this.vault !== vault) return;
+        if (stale()) return;
         paths.forEach((path, i) => {
           if (!this.folders.has(path)) return; // closed during the await
           if (lists[i]) this.entries.set(path, lists[i]);
           else { this.folders.delete(path); this.entries.delete(path); }
         });
         const listed = await listNotes(vault);
-        if (this.vault !== vault) return;
+        if (stale()) return;
         this.all = listed.notes; this.error = null; this.notice = capNotice(listed);
         this.reindex(cx, changed);
       } catch (e) { if (this.vault === vault) this.error = String(e); }
@@ -311,21 +317,27 @@ export default class Notes extends View {
   }
 
   open(path, cx, mode = "read") {
-    if (path !== this.note) return this.leave((cx) => this.read(path, cx, mode), cx);
-    this.read(path, cx, mode);
+    // Also for the note already open: reading it again would drop the typed text.
+    this.leave((cx) => this.read(path, cx, mode), cx);
   }
 
   read(path, cx, mode) {
-    const vault = this.vault;
+    const vault = this.vault, epoch = this.pathEpoch;
     cx.spawn(async (cx) => {
       const text = await readTextFile(`${vault}/${path}`).catch(() => null);
       if (this.vault !== vault) return; // the vault changed during the read: that note is not in this one
-      if (text === null) { this.error = `Cannot read ${path}`; return cx.notify(); }
+      if (this.pathEpoch !== epoch) return; // a rename or delete during the read: the path may be dead
+      if (text === null) {
+        this.error = `Cannot read ${path}`;
+        // A Discard before this read cleared the mark: the old note stays open, so its text is still unsaved.
+        if (this.editor) this.dirty = this.editor.value() !== this.loaded;
+        return cx.notify();
+      }
       const asking = path === this.note ? this.asking : null;
       this.close();
       this.note = path; this.selected = path; this.loaded = text; this.error = null; this.asking = asking;
       this.recent = pushRecent(this.recent, path);
-      localStorage.setItem(`recent:${this.vault}`, JSON.stringify(this.recent));
+      storeRecent(this.vault, this.recent);
       const t = theme();
       this.editor = EditorState.new({ language: "markdown", value: text, soft_wrap: true, line_numbers: false, folding: false,
         font_family: settings().font_family, font_size: 13,
@@ -336,9 +348,9 @@ export default class Notes extends View {
     });
   }
 
-  // Also Herdr's teardown hook, called with cx when a popup copy closes: the palette answers first.
+  // Also Herdr's teardown hook, called with cx when a popup copy closes: the overlay answers first.
   close(cx) {
-    if (this.palette) return this.palette.closed(cx);
+    if (this.overlay) return this.overlay.closed(cx);
     this.editor?.release();
     this.editor = null; this.note = null; this.dirty = false; this.conflict = false; this.asking = null;
   }
@@ -352,17 +364,25 @@ export default class Notes extends View {
   // A write refused for a stale snapshot is a conflict; any other failure is an error.
   save(force, cx) {
     if (!this.note || (!this.dirty && !force)) return;
-    const note = this.note, path = `${this.vault}/${note}`, text = this.editor.value();
+    // A forced save reads nothing at a path that just moved, and would make the file again there (AC55, AC57).
+    const moving = () => notify({ title: "The note is moving. Save again in a moment.", level: "warning" });
+    if (this.moving) return moving();
+    const note = this.note, path = `${this.vault}/${note}`, editor = this.editor, text = editor.value(), epoch = this.pathEpoch;
     cx.spawn(async (cx) => {
       try {
         const expected = force ? await readTextFile(path) : this.loaded;
+        // The same risk if a rename or delete began during that read.
+        if (force && (this.moving || this.pathEpoch !== epoch)) return moving();
         await writeTextFile(path, text, expected);
       } catch (e) {
         const now = await readTextFile(path).catch(() => null);
         if (this.note === note) { if (now !== null && now !== this.loaded) this.conflict = true; else this.error = `Cannot save: ${e}`; }
+        // The same editor under another path: the note moved during the write. It stays dirty, with its text.
+        else if (this.editor === editor) notify({ title: "The note moved while saving. Save it again.", level: "warning" });
         return cx.notify();
       }
-      if (this.note !== note) return;
+      // The write landed before a move: the text moved with the file, and the editor is still that note.
+      if (this.note !== note && this.editor !== editor) return;
       this.loaded = text; this.dirty = this.editor.value() !== text; this.conflict = false; this.error = null;
       const next = this.asking; this.asking = null;
       if (next && !this.dirty) next(cx);
@@ -372,13 +392,7 @@ export default class Notes extends View {
 
   newNote(cx) {
     if (!this.vault) return this.chooseVault(cx);
-    const taken = new Set(this.all.map((p) => p.toLowerCase()));
-    let name = "Untitled.md";
-    for (let i = 2; taken.has(name.toLowerCase()); i++) name = `Untitled ${i}.md`;
-    cx.spawn(async (cx) => {
-      try { await writeTextFile(`${this.vault}/${name}`, "", null); this.all = [...this.all, name]; this.liveNotes = null; this.open(name, cx, "edit"); }
-      catch (e) { this.error = String(e); cx.notify(); }
-    });
+    this.actions.createNote("", cx);
   }
 
   // A link in the rendered note: another note, a web page, or a relative .md path.
@@ -398,10 +412,12 @@ export default class Notes extends View {
   }
 
   // `tone`: "folder" (foreground name), "note" (muted name) or "selected" (the last note opened).
-  row(id, t, depth, icon, label, action, extra, tone = "note") {
+  // `menu`: the right-click handler of this row.
+  row(id, t, depth, icon, label, action, extra, tone = "note", menu = null) {
     const selected = tone === "selected", tk = tokens(t);
     return h_flex().id(id).h(28).flex_none().pl(8 + depth * 16).pr(8).gap(8).items_center().rounded(7).cursor_pointer()
       .when(selected, (el) => el.bg(tk.accentSoft)).when(!selected, (el) => el.hover((s) => s.bg(tk.pill))).on_click(action)
+      .when(Boolean(menu), (el) => el.on_mouse_down("right", menu))
       .child(icon)
       .child(div().flex_1().min_w(0).truncate().text_color(tone === "note" ? t.muted : t.foreground).when(selected, (el) => el.font_medium()).child(label))
       .when(Boolean(extra), (el) => el.child(div().flex_none().text_size(11).text_color(t.muted).truncate().max_w(140).child(extra)));
@@ -417,7 +433,7 @@ export default class Notes extends View {
           : h_flex().gap(8).flex_none().items_center().child(div().w(9)).child(svg("mods/files/file.svg").size(14).text_color(selected ? t.accent : t.muted)),
         e.dir ? e.name : base(e.name),
         (_e, cx) => (e.dir ? this.toggle(path, cx) : this.open(path, cx)),
-        null, e.dir ? "folder" : selected ? "selected" : "note"));
+        null, e.dir ? "folder" : selected ? "selected" : "note", this.actions.rowMenu(path, e.dir ? "dir" : "note")));
       if (e.dir && open) this.rows(path, depth + 1, out, t);
     }
     return out;
@@ -428,7 +444,7 @@ export default class Notes extends View {
     const hits = matchNotes(this.all, q, 200);
     return hits.length
       ? hits.map((p) => this.row(`hit-${p}`, t, 0, svg("mods/files/file.svg").size(14).flex_none().text_color(p === this.selected ? t.accent : t.muted), base(p),
-        (_e, cx) => this.open(p, cx), p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : null, p === this.selected ? "selected" : "note"))
+        (_e, cx) => this.open(p, cx), dirOf(p) || null, p === this.selected ? "selected" : "note", this.actions.rowMenu(p, "note")))
       : [div().p(8).text_size(12).text_color(t.muted).child("No note matches")];
   }
 
@@ -470,6 +486,7 @@ export default class Notes extends View {
         .child(svg("mods/workspace-chrome/search.svg").size(13).flex_none().text_color(t.muted))
         .child(Input.new(this.search).flex_1().text_size(12.5).text_color(t.foreground)))))
       .child(v_flex().id("notes-tree").flex_1().min_h(0).px(6).pb(8).overflow_y_scrollbar()
+        .when(!this.query, (el) => el.on_mouse_down("right", this.actions.rowMenu("", "root")))
         .children(this.query ? this.found(t) : this.rows("", 0, [], t)));
   }
 
@@ -495,7 +512,7 @@ export default class Notes extends View {
         .child(this.pill("save", t, "Save", false, (_e, cx) => this.save(false, cx)))
         .child(keycap(t, "⌘S")))
       .when(this.conflict, (el) => el.child(banner("Changed outside Herdr since you opened it.", [
-        act("reload", "Reload", (_e, cx) => this.open(this.note, cx, this.mode)),
+        act("reload", "Reload", (_e, cx) => { this.asking = null; this.read(this.note, cx, this.mode); }),
         act("overwrite", "Overwrite", (_e, cx) => this.save(true, cx)),
       ])))
       .when(Boolean(this.asking) && !this.conflict, (el) => el.child(banner("Unsaved changes.", [
@@ -713,7 +730,7 @@ export default class Notes extends View {
   }
 
   render(cx) {
-    if (this.palette) return this.palette.render(cx);
+    if (this.overlay) return this.overlay.render(cx);
     this.handleShared(cx);
     const t = theme();
     if (narrow()) return this.rail(t);
