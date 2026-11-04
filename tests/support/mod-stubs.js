@@ -65,8 +65,21 @@ export const walk = (node, seen = []) => {
 export const findById = (tree, id) => walk(tree).find((n) => n.nodeId === id) ?? null;
 export const svgPaths = (tree) => walk(tree).filter((n) => n.kind === "svg").map((n) => n.arg);
 
+// The default hooks. exec answers an empty success. writeTextFile writes only while the file still
+// holds `expected` (null for a file that does not exist yet), so a stale save is refused.
+async function stubExec() { return { stdout: "", stderr: "", code: 0 }; }
+async function readFromFiles(path) { if (path in state.files) return state.files[path]; throw new Error(`no file ${path}`); }
+async function compareAndSwap(path, text, expected) {
+  const current = path in state.files ? state.files[path] : null;
+  if (current !== expected) throw new Error(`stale snapshot ${path}`);
+  state.files[path] = text;
+}
+
 // What a test sets and reads: `shared` values, the note text, and every run() and notify() call.
-export const state = { shared: {}, runs: [], toasts: [], layout: { id: "root", children: [] }, commands: [], files: {} };
+// `props` backs props(), `viewport` (null: none) backs viewport_size(), and `overlays` and `closed` record
+// openOverlay() and closeOverlay(). exec, readTextFile and writeTextFile are hooks a test can replace.
+export const state = { shared: {}, runs: [], toasts: [], layout: { id: "root", children: [] }, commands: [], files: {},
+  props: {}, viewport: null, overlays: [], closed: [], exec: stubExec, readTextFile: readFromFiles, writeTextFile: compareAndSwap };
 
 const never = () => new Promise(() => {});
 const color = new Proxy({}, { get: (_t, key) => (key === "then" ? undefined : "#808080") });
@@ -79,23 +92,48 @@ const herdr = {
   run: (name, args) => { state.runs.push([name, args]); },
   notify: (toast) => { state.toasts.push(toast); },
   nextCommand: () => (state.commands.length ? Promise.resolve(state.commands.shift()) : never()),
-  readTextFile: async (path) => { if (path in state.files) return state.files[path]; throw new Error(`no file ${path}`); },
-  exec: async () => ({ stdout: "", stderr: "", code: 0 }),
+  readTextFile: (path) => state.readTextFile(path),
+  writeTextFile: (path, text, expected) => state.writeTextFile(path, text, expected),
+  exec: (...args) => state.exec(...args),
+  openOverlay: (spec) => { const id = `overlay-${state.overlays.length + 1}`; state.overlays.push({ id, spec }); return id; },
+  closeOverlay: (id) => { state.closed.push(id); },
   watchFolder: never,
   spaces: () => [],
   panes: () => [],
   agents: () => [],
   keys: () => ({}),
   focused: () => null,
-  props: () => ({}),
+  props: () => state.props,
   window: () => ({ platform: "macos", titlebar: "none", fullscreen: false }),
   settings: () => ({ zoom: 1 }),
 };
 
+// The state behind an Input or an Editor: its value, the handlers a mod subscribes, and the calls made on it.
+function valueState(value) {
+  const handlers = new Map(), calls = [];
+  return {
+    calls,
+    value: () => value,
+    set_value: (next) => { value = next; calls.push(["set_value", next]); },
+    on: (name, fn) => { handlers.set(name, fn); },
+    fire: (name, event, cx) => handlers.get(name)?.(event, cx),
+    focus: () => { calls.push(["focus"]); },
+    set_selected_range: (...args) => { calls.push(["set_selected_range", ...args]); },
+    release: () => { calls.push(["release"]); },
+  };
+}
+
 const stubs = {
   herdr,
   "gpui-kit": { View: class {}, div: () => element("div"), svg: (path) => element("svg", path) },
-  "gpui-base": { h_flex: () => element("div"), v_flex: () => element("div") },
+  "gpui-base": {
+    h_flex: () => element("div"), v_flex: () => element("div"),
+    InputState: { new: (opts = {}) => valueState(opts.value ?? "") },
+    EditorState: { new: (opts = {}) => valueState(opts.value ?? "") },
+    Input: { new: (model) => element("input", model) },
+    Editor: { new: (model) => element("editor", model) },
+    TextView: { markdown: (id, text) => element("text-view", { id, markdown: text }) },
+  },
 };
 
 globalThis.__herdsidianStubs = stubs;
@@ -122,19 +160,32 @@ registerHooks({
   },
 });
 globalThis.__herdsidianAnything = anything;
-globalThis.window = anything(); // gpui's global, which lib/ui.js paints through
+// gpui's global, which lib/ui.js paints through. viewport_size() answers from state.viewport once a test sets it.
+const anyWindow = anything();
+globalThis.window = new Proxy(anyWindow, {
+  get: (_t, key) => (key === "viewport_size" && state.viewport ? () => state.viewport : anyWindow[key]),
+});
 
 // A stand-in for gpui's context: spawn runs its task; the clipboard and redraws are recorded.
+// Like sleep, timer.after never fires by default; a test can replace either.
 export function fakeCx() {
   const cx = {
     clipboard: [],
     notify() {},
     stop_propagation() {},
     write_to_clipboard(text) { cx.clipboard.push(text); },
+    focus_handle: () => anything(),
+    timer: { after() {} },
     sleep: never,
     spawn(task) { return Promise.resolve().then(() => task(cx)).catch(() => {}); },
   };
   return cx;
+}
+
+// Runs the right-mouse-down handler that a builder set on `node`, as a right click would.
+export function rightClick(node, event, cx) {
+  const [, [, handler]] = node.calls.find(([name, args]) => name === "on_mouse_down" && args[0] === "right");
+  return handler(event, cx);
 }
 
 // Lets started tasks finish their awaited stubs.

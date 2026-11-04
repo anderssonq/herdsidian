@@ -359,7 +359,7 @@ Look (layout root):
   `resolve`, `linkTarget`, `hidden`, `base`, `HIDDEN`, `WIKILINK` (the one wikilink
   pattern, also read by the graph), `isFileEmbed`, `mapProse`; wikilinks inside code
   (fenced blocks, inline spans) are ignored; tested by `tests/notes.test.js`),
-  and four new files:
+  and these further files:
   - `graph.js` (pure): the `awk` program and its output parser, `buildIndex`,
     `updateIndex`, `neighborhood` (cap `MAX_NODES` = 40), `layout`,
     `toScreen`, `zoomAt` (`ZOOM` 0.5 to 2), `sectionMessage`, `missingRaw`,
@@ -394,7 +394,23 @@ Look (layout root):
     - `palette-main.js`: the `Palette` controller (state, keys, actions). Notes
       creates it in `init` when `props().overlay` is set.
     - `palette-view.js`: `paletteCard`, the card as a function of a plain model.
-    - Tests for the Herdr-side additions are in `tests/io.test.js` (`allNotes`,
+  - The tree's right-click actions, six files:
+    - `actions.js` (pure): `MENU`, `ACTION_KEY` (`herdsidian.vault-action`), `menuItems`,
+      `placeMenu`, `validateName`, `noteFileName`, `takenName`, `nextUntitled`, `safeRel`,
+      `movePath`, `movedState`, `removedState`, `pendingAction`, `folderCounts`,
+      `deleteDetail`, `resultMessage`. Tested by `tests/actions.test.js`.
+    - `refs.js` (pure): reads links as `render()` and `follow()` do and rewrites them after
+      a rename. `indexFiles`, `findAttachment`, `buildRewrite`, `rewriteNote`, `utf8Length`.
+      Tested by `tests/refs.test.js`.
+    - `vault-io.js`: the disk side. `listNames`, `exists`, `countFolder`, `snapshotFiles`,
+      `makeFolder`, `makeNote`, `moveItem`, `moveSameItem`, `trashItem`. Paths go as
+      arguments, never in a shell string.
+    - `ref-update.js`: `updateReferences` writes the link changes to the other notes after
+      the move, one note at a time with `writeTextFile`.
+    - `actions-view.js`: `VaultSurface`, the menu, the name prompt and the delete
+      confirmation, each an overlay copy of `herdsidian`.
+    - `actions-main.js`: `VaultActions`, the Notes side that does the work.
+  - Tests for the Herdr-side additions are in `tests/io.test.js` (`allNotes`,
       `listNotes`, `noteTime`, `backoffMs`, `afterOutage`, `underVault`, `touches`) and `tests/lint.test.js` (the new rules).
   From `herdr`: `exec` (`sh` to list a folder and to read `XDG_STATE_HOME`,
   `find` for every note, `awk`, `git`, `open` for web links), `readTextFile`,
@@ -593,8 +609,28 @@ Look (layout root):
   - The palette files are under the no-submit lint rule like the rest of
     `mods/herdsidian`. `⌘↵` is read as `submit` with `secondary`, never as the string
     `"enter"`.
-  - `palette.js`, `send.js`, `notes.js`, `context.js` and `graph.js` must not import
-    `herdr`, `gpui-kit` or `gpui-base`. `npm run lint` reports the file and line.
+  - `palette.js`, `send.js`, `notes.js`, `context.js`, `graph.js`, `actions.js` and `refs.js`
+    must not import `herdr`, `gpui-kit` or `gpui-base`. `npm run lint` reports the file and line.
+  - Right-click menu on the tree. The menu rows are New note and New folder on a folder,
+    Rename and Delete on a note or a folder; the vault root offers only the two New rows.
+    The menu, the prompt and the confirmation are overlay copies that never touch the disk:
+    each posts one request in `shared("herdsidian.vault-action")` (`{ id, at, vault, op,
+    path, kind, name? }`), and Notes checks it again and does the work. An id runs once; a
+    stale request is ignored.
+  - Delete goes to the Trash with `/usr/bin/trash -s <absolute path>`. The item must be gone
+    afterwards, or the delete counts as failed. Nothing removes a file for good, and a
+    rename never overwrites an existing item.
+  - A rename moves the item first, then updates the links to it in the other notes
+    (wikilinks, Markdown links and embeds, and attachment links), and shows one message.
+    Limits: frontmatter, code (fenced blocks and inline spans) and reference-style
+    definitions stay as written. So do links the app opens that have no form to keep: a
+    Markdown link with no `.md` (`[t](Old)`, `[t](./Old)`, `[t](F/n)`), an absolute path
+    (`[t](/Old.md)`, `[[/Old]]`) and a URL-shaped wikilink (`[[https://a.com/Old]]`). When one
+    selects the renamed item, its note is listed under "Not updated". A note that cannot be
+    updated (read-only, changed on disk, or over 1 MiB once written) stays as it was and is
+    listed there too. The
+    message also reports links left as written, notes past the check cap and attachment
+    links that were not checked. Nothing is rolled back.
 - Herdr runs a single window (`window()` has no id and there is no new-window command), and `shared()` is app-wide, so palette requests are not scoped to a window. Revisit this if Herdr adds multi-window support.
 - The shipped `picker` is not removed. It stays reachable through the person's own
   `cmd-p` binding; only `layout:herdsidian`'s `cmd-k` changed.
