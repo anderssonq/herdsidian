@@ -63,6 +63,7 @@ export function tokens(t) {
     line: alpha(t.foreground, 0.07),
     pill: alpha(t.foreground, 0.06), // hover too
     accentSoft: alpha(t.accent, 0.18), // selected rows, folder fill
+    changeMark: alpha(t.accent, 0.12), // tint of a note block an outside program changed (the 2 px bar is t.accent)
     glow: alpha(t.foreground, 0.05), // top sheen, neutral
     glowEnd: alpha(t.foreground, 0),
     blockedSoft: alpha(t.blocked, 0.15),

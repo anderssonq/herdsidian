@@ -92,3 +92,23 @@ test("graph tokens carry their alpha suffixes", () => {
   assert.equal(k.edge, "#eeeeee38");
   assert.equal(k.edgeHot, "#eeeeee");
 });
+
+test("changeMark is the accent at an alpha of 0.18 at most", () => {
+  const k = tokens(theme);
+  assert.equal(k.changeMark, "#4c9df31f");
+  assert.ok(parseInt(k.changeMark.slice(7), 16) / 255 <= 0.18);
+});
+
+test("foreground over the changeMark tint keeps 4.5:1 on the background in every theme", () => {
+  const dir = new URL("../themes/", import.meta.url);
+  const files = readdirSync(dir).filter((f) => /^hs_.*\.json$/.test(f));
+  assert.equal(files.length, 8);
+  for (const f of files) {
+    const json = JSON.parse(readFileSync(new URL(f, dir), "utf8"));
+    const t = { ...json.colors, background: json.background, foreground: json.foreground };
+    const tint = tokens(t).changeMark;
+    const level = parseInt(tint.slice(7), 16) / 255;
+    const ratio = contrast(t.foreground, mix(t.background, tint.slice(0, 7), level));
+    assert.ok(ratio >= 4.5, `${f}: ${ratio.toFixed(2)}`);
+  }
+});
