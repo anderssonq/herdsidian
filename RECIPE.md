@@ -81,7 +81,9 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      rounded track holding the tabs as a segmented control (28 px tabs, radius
      7, the active one `raised` with a 1 px top highlight), a new-tab button,
      Files and Changes buttons (always on: it ignores Herdr's `workspace.panels`,
-     which the welcome can leave empty), a 220 px Search box with its key (`⌘K`), the Notes
+     which the welcome can leave empty), a **Usage** pill (30 px, radius 8, the word and a 14 px
+     icon per installed Claude Code / Codex / opencode; a hover card of 280 px with the
+     5 h and 7 d limits and when they reset, and opencode's 7-day cost), a 220 px Search box with its key (`⌘K`), the Notes
      toggle and the window buttons. The Search box opens the palette (item 4). Buttons are 30 px, radius 8. A 14 px
      program icon leads each tab name (`foreground` on the selected tab,
      `muted` otherwise for tinted SVGs; pictures as is). The top sheen fills the whole
@@ -546,6 +548,16 @@ Look (layout root):
   copies of Herdr's `tabs`, `pane` and `workspace-status` at version 0.1.10
   (`cloned_from` in each `mod.json`). Fixes in newer Herdr versions do not
   reach them: when Herdr updates, diff each clone with the shipped mod.
+- Disclosure: `herdsidian-tabs` runs programs, reads credentials and reaches the network
+  (the Usage hover, `usage.js`). On the first hover, and then at most every 5 minutes per
+  agent, it runs `/bin/sh -c` with `/usr/bin/security`, `/usr/bin/plutil`, `/usr/bin/curl`, `cat`, `find`, `stat`, `sort`,
+  `head`, `grep` and `tail`, and `opencode stats --days 7`. It reads Claude Code's login (Keychain
+  item `Claude Code-credentials`, else `~/.claude/.credentials.json`) and Codex's session
+  logs (`~/.codex/sessions`), and sends one `GET` to `https://api.anthropic.com/api/oauth/usage`.
+  The token is read and sent inside one constant shell pipeline (`curl -H @-`, so it is in
+  no argv); the mod never stores, logs, shows, refreshes or writes it. The cache is in
+  memory only. `usage.js` is pure (parsers, formatting, scripts, cache) and has Node tests
+  in `tests/usage.test.js` and `tests/usage-view.test.js`.
 - Never hard-code a color in a mod. `npm run lint` rejects any hex literal
   (3, 4, 6 or 8 digits) in `mods/**/*.js`, and alpha glued to a string
   (`+ "26"`, `` `${c}2e` ``). The only exception is the six space avatar
