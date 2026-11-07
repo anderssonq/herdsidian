@@ -5,12 +5,14 @@
 
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings, keys, nextCommand } from "herdr";
+import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings, keys, nextCommand, exec, knownAgents } from "herdr";
 import { alpha, tokens } from "./tokens.js";
 import { glow, headerDots, icon, dot } from "./ui.js";
 import { find } from "./layout.js";
 import { keyHint } from "./keys.js";
 import { settings as herdsidianSettings } from "./settings.js"; // herdr has its own settings()
+import { createUsage, providersFrom } from "./usage.js";
+import { usageCard, usageControl } from "./usage-view.js";
 
 // The toolbar's left edge in the window: the sidebar's width plus the root divider after it,
 // so the dot grid lines up across the seam. 0 when the sidebar is hidden.
@@ -21,6 +23,15 @@ export default class Tabs extends View {
   init(_props, cx) {
     this.pressed = null;
     this.panels = JSON.parse(localStorage.getItem("panels") ?? "{}");
+    // Usage: nothing is fetched until the pointer first enters the control (AC13). The cache is in memory.
+    this.cx = cx;
+    this.agents = null; this.agentsFailed = false; this.agentsLoad = null;
+    this.usage = createUsage({
+      exec,
+      after: (ms, fn) => { const task = this.cx.timer.after(ms, fn); return () => task.cancel(); },
+      onChange: () => this.cx.notify(),
+    });
+    this.loadAgents();
     // keys.json "layout:herdsidian": "cmd-shift-e": "herdsidian-tabs.files", "cmd-shift-g": "herdsidian-tabs.changes".
     cx.spawn(async (cx) => {
       for (;;) {
@@ -29,6 +40,27 @@ export default class Tabs extends View {
         cx.notify();
       }
     });
+  }
+
+  // The installed agents, asked again on every hover (Herdr caches the answer for a minute).
+  // A rejection leaves the list empty and `agentsFailed` set. Never rejects.
+  loadAgents() {
+    this.agentsLoad ??= (async () => {
+      await null; // so the assignment below lands before this clears it
+      try { this.agents = await knownAgents(); this.agentsFailed = false; }
+      catch { this.agents = null; this.agentsFailed = true; }
+      this.agentsLoad = null;
+      this.cx.notify();
+    })();
+    return this.agentsLoad;
+  }
+
+  // The pointer entered (or left) the Usage control: refresh the agents, then fetch what is stale.
+  async hoverUsage(hovered) {
+    if (!hovered) return;
+    await this.loadAgents();
+    this.usage.hover(providersFrom(this.agents).map((p) => p.key));
+    this.cx.notify();
   }
 
   // Shows the side panel on `id`, or hides it when it already shows `id`.
@@ -132,6 +164,12 @@ export default class Tabs extends View {
       .child(svg("mods/workspace-chrome/search.svg").size(14).flex_none())
       .child(div().flex_1().child("Search"))
       .when(Boolean(shownHint("mod.open:herdsidian")), el => el.child(div().text_size(11).child(shownHint("mod.open:herdsidian"))));
+    const providers = providersFrom(this.agents);
+    const usage = usageControl(t, k, {
+      providers,
+      onHover: hovered => { this.hoverUsage(hovered); },
+      card: usageCard(t, k, { providers, agentsKnown: this.agents !== null, failed: this.agentsFailed, view: key => this.usage.view(key), now: Date.now() }),
+    });
     return h_flex().size_full().min_w(0).relative().overflow_hidden().pr(12).pl(lightsPadding).gap(12).items_center().bg(k.mainGlass)
       .on_mouse_up("left", () => { this.pressed = null; })
       .on_scroll_wheel(e => { if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next"); })
@@ -143,6 +181,7 @@ export default class Tabs extends View {
       .child(panelButton("files", "Files", "mods/files/file.svg"))
       .child(panelButton("changes", "Changes", "mods/changes/changes.svg"))
       .child(div().flex_1().h_full())
+      .child(usage)
       .child(search)
       .child(button("notes-toggle", svg("mods/workspace-chrome/panel-right.svg").size(16), () => run("layout.toggle", { id: "herdsidian" }), notesOn, tipFor("Notes", "layout.toggle:herdsidian")))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/herdsidian-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))

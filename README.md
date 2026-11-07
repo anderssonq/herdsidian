@@ -275,6 +275,17 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
   and `herdsidian-status` are restyled copies of Herdr's `spaces`, `agents`,
   `workspace-chrome`, `tabs`, `pane` and `workspace-status` (0.1.10), with the same
   behavior. `guide-spaces` runs `git` and `hc machine ls` like the original.
+- **Usage** (`herdsidian-tabs`, beside Search). Hovering it shows the limits of your agent CLIs.
+  This mod runs programs, reads credentials and reaches the network, only on the first
+  hover and then at most every 5 minutes per agent. It runs `/bin/sh` with `/usr/bin/security`,
+  `/usr/bin/plutil`, `/usr/bin/curl`, `cat`, `find`, `stat`, `sort`, `head`, `grep` and `tail`, and `opencode stats --days 7`.
+  It reads Claude Code's login (the macOS Keychain item `Claude Code-credentials`, else
+  `~/.claude/.credentials.json`) and the last lines of Codex's session logs in
+  `~/.codex/sessions`. It sends one `GET` to `https://api.anthropic.com/api/oauth/usage` with
+  that token. The token goes from the Keychain to `curl` inside one shell pipeline: it is
+  never in a command line, stored, logged or shown, and the mod never refreshes or writes it.
+  Only Claude Code, Codex and opencode are covered, when installed. macOS can ask you to
+  allow the Keychain read the first time.
 
 ---
 

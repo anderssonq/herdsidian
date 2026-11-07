@@ -5,6 +5,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, TextView } from "gpui-base";
 import { HIDDEN, base, dirOf, hidden, render, linkTarget, resolve } from "./notes.js";
+import { changeMarks } from "./marks.js";
 import { exec, readTextFile, writeTextFile, watchFolder, pickFolder, theme, settings, nextCommand, run, layout, window,
   agents, panes, spaces, focused, home, notify, props, shared, setShared } from "herdr";
 import { alpha, tokens } from "./tokens.js";
@@ -71,7 +72,7 @@ export default class Notes extends View {
     this.handled = pendingRequest(request, null, this.vault, Date.now()).action === "none" ? request?.id ?? null : null;
     this.contextRev = shared("herdsidian.context-rev") ?? null;
     this.entries = new Map(); this.folders = new Set(); this.all = []; this.notice = null;
-    this.note = null; this.mode = "read"; this.query = ""; this.searching = false; this.generation = 0;
+    this.note = null; this.mode = "read"; this.marks = null; this.baseline = null; this.readFocus = cx.focus_handle(); this.query = ""; this.searching = false; this.generation = 0;
     this.search = InputState.new({ placeholder: "Find a note…" });
     this.search.on("change", (_e, cx) => { this.query = this.search.value().trim(); cx.notify(); });
 
@@ -272,8 +273,15 @@ export default class Notes extends View {
     cx.spawn(async (cx) => {
       const text = await readTextFile(`${this.vault}/${note}`).catch(() => null);
       if (text === null || this.note !== note || this.dirty || text === this.loaded) return;
+      const before = this.loaded;
       this.loaded = text;
       this.editor.set_value(text);
+      // Marks only in read mode; the baseline is the text shown before the first unmarked change.
+      if (this.mode === "read") {
+        const from = this.baseline ?? before;
+        this.marks = changeMarks(from, text);
+        this.baseline = this.marks ? from : null;
+      }
       this.setMode(this.mode);
       cx.notify();
     });
@@ -353,10 +361,18 @@ export default class Notes extends View {
     if (this.overlay) return this.overlay.closed(cx);
     this.editor?.release();
     this.editor = null; this.note = null; this.dirty = false; this.conflict = false; this.asking = null;
+    this.clearMarks();
+  }
+
+  // The person touched the read view (or left it): the marks go and the baseline is the text now.
+  clearMarks(cx) {
+    this.marks = null; this.baseline = null;
+    cx?.notify();
   }
 
   setMode(mode) {
     this.mode = mode;
+    if (mode !== "read") this.clearMarks();
     if (mode === "read" && this.editor) this.preview = render(this.editor.value());
   }
 
@@ -384,6 +400,7 @@ export default class Notes extends View {
       // The write landed before a move: the text moved with the file, and the editor is still that note.
       if (this.note !== note && this.editor !== editor) return;
       this.loaded = text; this.dirty = this.editor.value() !== text; this.conflict = false; this.error = null;
+      this.clearMarks(); // our own write is not an outside change (AC2)
       const next = this.asking; this.asking = null;
       if (next && !this.dirty) next(cx);
       cx.notify();
@@ -520,10 +537,27 @@ export default class Notes extends View {
         act("ask-discard", "Discard", (_e, cx) => { const next = this.asking; this.dirty = false; this.asking = null; next(cx); cx.notify(); }),
         act("ask-cancel", "Cancel", (_e, cx) => { this.asking = null; cx.notify(); }),
       ])))
-      .child(read
-        ? div().id("notes-read").flex_1().min_h(0).px(16).pb(16).overflow_y_scrollbar().text_size(13).text_color(t.foreground)
-          .child(TextView.markdown(`md-${this.note}`, this.preview).selectable(true).on_link_click((url, cx) => this.follow(url, cx)))
-        : div().flex_1().min_h(0).px(6).child(Editor.new(this.editor).size_full()));
+      .child(read ? this.readView(t) : div().flex_1().min_h(0).px(6).child(Editor.new(this.editor).size_full()));
+  }
+
+  // The rendered note: one TextView.markdown, or, while change marks show, one per block with the
+  // changed blocks tinted. Any scroll, key press or mouse release in the view clears the marks. A press
+  // must not: clearing swaps the TextViews, which would eat the click on a link.
+  readView(t) {
+    const frame = div().id("notes-read").flex_1().min_h(0).px(16).pb(16).overflow_y_scrollbar().text_size(13).text_color(t.foreground);
+    const view = (id, markdown) => TextView.markdown(id, markdown).selectable(true).on_link_click((url, cx) => this.follow(url, cx));
+    const marks = this.marks;
+    if (!marks) return frame.child(view(`md-${this.note}`, this.preview));
+    const tk = tokens(t), marked = new Set(marks.marked), clear = (_e, cx) => this.clearMarks(cx);
+    return frame.track_focus(this.readFocus).on_scroll_wheel(clear).on_key_down(clear)
+      .on_mouse_up("left", clear).on_mouse_up("right", clear).on_mouse_up("middle", clear)
+      .children(marks.blocks.map((_block, i) => {
+        const body = view(`md-${this.note}-${i}`, marks.rendered[i]);
+        // The bar floats over the block's left edge: it takes no width from the text.
+        return marked.has(i)
+          ? div().relative().bg(tk.changeMark).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)).child(body)
+          : div().child(body);
+      }));
   }
 
   // The focused agent, its space and its folder, read live (A3, F3). The memory of the last agent
