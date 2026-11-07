@@ -37,7 +37,10 @@ answers() { in_demo herdr-app status 2>/dev/null | grep -q '"layout"'; }
 is_demo_pid() {
   [[ -n ${1:-} ]] || return 1
   local env_words; env_words=$(ps eww -p "$1" 2>/dev/null || true)
-  (( ${${(s: :)env_words}[(Ie)HERDR_APP_HOME=$dir/app]} ))
+  (( ${${(s: :)env_words}[(Ie)HERDR_APP_HOME=$dir/app]} )) && return 0
+  # herdr-core 0.1.18 starts through launchd, so its environment is not ours: it is the
+  # demo's when it holds files (its socket, log and lock) inside the demo folder.
+  lsof -p "$1" -Fn 2>/dev/null | grep -qF "n$dir/"
 }
 # Ends a demo process and waits until it is gone. Prints yes or no.
 end_pid() {
