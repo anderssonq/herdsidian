@@ -119,27 +119,31 @@
               "type": "column",
               "children": [
                 {
-                  "id": "panel-body",
-                  "type": "stack",
-                  "children": [
-                    {
-                      "id": "files",
-                      "type": "block",
-                      "content": {
-                        "mod": "files"
-                      }
-                    },
-                    {
-                      "id": "changes",
-                      "type": "block",
-                      "content": {
-                        "mod": "changes"
-                      }
-                    }
-                  ],
-                  "active": "files"
+                  "id": "files",
+                  "type": "block",
+                  "content": {
+                    "mod": "herdsidian-files"
+                  },
+                  "size": {
+                    "weight": 1
+                  },
+                  "min": 120,
+                  "hidden": true
+                },
+                {
+                  "id": "changes",
+                  "type": "block",
+                  "content": {
+                    "mod": "changes"
+                  },
+                  "size": {
+                    "weight": 1
+                  },
+                  "min": 120,
+                  "hidden": true
                 }
               ],
+              "gap": 6,
               "size": {
                 "px": 368
               },

@@ -274,6 +274,7 @@ export class Palette {
     const tree = layout();
     const hasList = hasMod(tree, "guide-agents");
     const notesHidden = !isShown(tree, "herdsidian");
+    const filesHidden = !isShown(tree, "files"), changesHidden = !isShown(tree, "changes");
     // Notes is a rail under 160 px, as Notes itself decides (main.js narrow()).
     const notesRail = (find(tree, "herdsidian")?.size?.px ?? Infinity) < 160;
     const current = settings();
@@ -281,6 +282,7 @@ export class Palette {
     const inputs = modelKey({
       query: this.query, tab, notes: this.notes, notesError: this.notesError, doc: this.doc, linking: this.linking,
       starter: this.starter, agents: live, order, layoutName, bindings, notesHidden, hasList, settings: current, notesRail,
+      filesHidden, changesHidden,
     });
     if (this.memo && sameKey(this.memo.inputs, inputs)) return this.memo;
 
@@ -291,7 +293,7 @@ export class Palette {
     const list = buildList({
       query: this.query, tab, vault: this.vault, notes: this.notes, notesError: this.notesError, linked: sc.linked,
       contextPaths: sc.contextPaths, agents: live, commands, hintFor: (address) => agentHint(address, order, bindings, layoutName, hasList),
-      rankedNotes: this.rankedFor(tab, sc), settings: settingSections({ settings: current, notesHidden, notesRail }),
+      rankedNotes: this.rankedFor(tab, sc), settings: settingSections({ settings: current, notesHidden, notesRail, filesHidden, changesHidden }),
     });
     this.memo = { inputs, tab, scene: sc, list };
     return this.memo;

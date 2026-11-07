@@ -2,10 +2,11 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { state, fakeCx, settle, findById, svgPaths } from "./support/mod-stubs.js";
+import { state, fakeCx, settle, findById, svgPaths, walk } from "./support/mod-stubs.js";
 
 const { default: Tabs } = await import("../mods/herdsidian-tabs/main.js");
 const { default: Notes } = await import("../mods/herdsidian/main.js");
+const { default: Files } = await import("../mods/herdsidian-files/main.js");
 
 const repo = new URL("../", import.meta.url).pathname;
 
@@ -39,7 +40,8 @@ test("the toolbar keys open their panel when workspace.panels is empty", async (
   state.commands = ["changes"];
   await renderTabs();
   assert.deepEqual(state.runs, [
-    ["layout.select", { stack: "panel-body", child: "changes" }],
+    ["layout.hide", { id: "files" }],
+    ["layout.show", { id: "changes" }],
     ["layout.show", { id: "panel" }],
   ]);
 });
@@ -49,9 +51,57 @@ test("the Files button opens its panel when workspace.panels is empty", async ()
   const { tree } = await renderTabs();
   findById(tree, "panel-files").onClick();
   assert.deepEqual(state.runs, [
-    ["layout.select", { stack: "panel-body", child: "files" }],
+    ["layout.show", { id: "files" }],
+    ["layout.hide", { id: "changes" }],
     ["layout.show", { id: "panel" }],
   ]);
+});
+
+// The side column with Files on top and Changes below; `hidden` per id.
+const panelLayout = ({ panel = false, files = true, changes = true }) => ({ id: "root", children: [
+  { id: "panel", hidden: panel, children: [{ id: "files", hidden: files }, { id: "changes", hidden: changes }] },
+] });
+
+test("Changes opens beside an open Files, and each button shows its own state", async () => {
+  state.layout = panelLayout({ files: false });
+  const { tree } = await renderTabs();
+  findById(tree, "panel-changes").onClick();
+  assert.deepEqual(state.runs, [
+    ["layout.show", { id: "files" }],
+    ["layout.show", { id: "changes" }],
+    ["layout.show", { id: "panel" }],
+  ]);
+  state.layout = panelLayout({ files: false, changes: false });
+  const { tree: both } = await renderTabs();
+  for (const id of ["panel-files", "panel-changes"]) {
+    assert.ok(findById(both, id).calls.some(([name]) => name === "bg"), `${id} looks pressed`);
+  }
+});
+
+test("closing the last open panel hides the column", async () => {
+  state.layout = panelLayout({ changes: false });
+  const { tree } = await renderTabs();
+  findById(tree, "panel-changes").onClick();
+  assert.deepEqual(state.runs.at(-1), ["layout.hide", { id: "panel" }]);
+});
+
+test("Files and Changes sit right of Search, before the Notes toggle", async () => {
+  const { tree } = await renderTabs();
+  const order = walk(tree).map((n) => n.nodeId).filter((id) => ["tab-bar", "search", "panel-files", "panel-changes", "notes-toggle"].includes(id));
+  assert.deepEqual(order, ["tab-bar", "search", "panel-files", "panel-changes", "notes-toggle"]);
+});
+
+test("the Files panel draws folders with the vault's folder icon in the accent color", () => {
+  const view = new Files();
+  Object.assign(view, { root: "/repo", marks: {}, folders: new Set(),
+    entries: new Map([["", [{ name: "src", dir: true }, { name: "a.md", dir: false }]]]) });
+  const [folder, file] = view.rows("", 0, [], { accent: "accent", muted: "muted", dim: "dim", hover: "hover" });
+  const icon = (row) => walk(row).filter((n) => n.kind === "svg").at(-1);
+  assert.equal(icon(folder).arg, "mods/herdsidian-files/folder.svg");
+  assert.deepEqual(icon(folder).calls.find(([name]) => name === "text_color"), ["text_color", ["accent"]]);
+  assert.equal(icon(file).arg, "mods/files/file.svg");
+  assert.deepEqual(icon(file).calls.find(([name]) => name === "text_color"), ["text_color", ["muted"]]);
+  assert.ok(existsSync(`${repo}mods/herdsidian-files/folder.svg`));
 });
 
 const VAULT = "/vault/my notes", NOTE = "03-Knowledge/Git.md";
