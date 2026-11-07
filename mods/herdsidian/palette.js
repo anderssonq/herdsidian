@@ -111,11 +111,11 @@ export const agentSig = (agents) => agents
   .join("\n");
 
 // The list memo key: everything buildList and commandList read.
-export function modelKey({ query, tab, notes, notesError, doc, linking, starter, agents, order, layoutName, bindings, notesHidden, hasList, settings, notesRail }) {
+export function modelKey({ query, tab, notes, notesError, doc, linking, starter, agents, order, layoutName, bindings, notesHidden, hasList, settings, notesRail, filesHidden, changesHidden }) {
   return [
     query, tab, notes, notesError, doc, linking, starter, agentSig(agents),
     JSON.stringify(order ?? null), layoutName, JSON.stringify(bindings), notesHidden, hasList,
-    JSON.stringify(settings ?? null), notesRail,
+    JSON.stringify(settings ?? null), notesRail, filesHidden, changesHidden,
   ];
 }
 
@@ -157,12 +157,20 @@ export function commandList({ vault, notesHidden, space, starter, bindings, layo
 // The Settings tab: [{ title, rows }]. Each row's `action` is
 // { type: "setting", name, value } (the `settings` store) or { type: "run", name, args }.
 // `settings` comes from readSettings (keys.js); notesRail is only read when Notes is shown.
-export function settingSections({ settings, notesHidden, notesRail }) {
+// Files and Changes run the herdsidian-tabs toolbar commands (each toggles its own block);
+// a missing filesHidden/changesHidden counts as hidden, since the panels start hidden.
+export function settingSections({ settings, notesHidden, notesRail, filesHidden = true, changesHidden = true }) {
   const general = [{
     id: "key-hints", label: "Key hints", detail: settings.keyHints ? "On" : "Off",
     action: { type: "setting", name: "keyHints", value: !settings.keyHints },
   }];
   const layout = [{
+    id: "files-shown", label: "Files panel", detail: filesHidden ? "Hidden" : "Shown",
+    action: { type: "run", name: "herdsidian-tabs.files", args: {} },
+  }, {
+    id: "changes-shown", label: "Changes panel", detail: changesHidden ? "Hidden" : "Shown",
+    action: { type: "run", name: "herdsidian-tabs.changes", args: {} },
+  }, {
     id: "notes-shown", label: "Notes panel", detail: notesHidden ? "Hidden" : "Shown",
     action: { type: "run", name: "layout.toggle", args: { id: "herdsidian" } },
   }];

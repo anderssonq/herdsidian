@@ -721,7 +721,7 @@ test("readSettings fills defaults and ignores unknown or mistyped values", () =>
 });
 
 test("settingSections has General (key hints) and Layout (Notes panel, Notes width)", () => {
-  const s = settingSections({ settings: { keyHints: true }, notesHidden: false, notesRail: false });
+  const s = settingSections({ settings: { keyHints: true }, notesHidden: false, notesRail: false, filesHidden: false, changesHidden: false });
   assert.deepEqual(s.map((sec) => sec.title), ["General", "Layout"]);
   const [hints] = s[0].rows;
   assert.equal(hints.detail, "On");
@@ -729,15 +729,15 @@ test("settingSections has General (key hints) and Layout (Notes panel, Notes wid
   const off = settingSections({ settings: { keyHints: false }, notesHidden: false, notesRail: false })[0].rows[0];
   assert.equal(off.detail, "Off");
   assert.deepEqual(off.action, { type: "setting", name: "keyHints", value: true });
-  assert.deepEqual(s[1].rows.map((r) => [r.id, r.detail]), [["notes-shown", "Shown"], ["notes-width", "Expanded"]]);
-  assert.deepEqual(s[1].rows[0].action, { type: "run", name: "layout.toggle", args: { id: "herdsidian" } });
-  assert.equal(s[1].rows[1].action.name, "herdsidian.rail");
+  assert.deepEqual(s[1].rows.map((r) => [r.id, r.detail]), [["files-shown", "Shown"], ["changes-shown", "Shown"], ["notes-shown", "Shown"], ["notes-width", "Expanded"]]);
+  assert.deepEqual(s[1].rows[2].action, { type: "run", name: "layout.toggle", args: { id: "herdsidian" } });
+  assert.equal(s[1].rows[3].action.name, "herdsidian.rail");
 });
 
 test("settingSections offers Notes width only while Notes is shown, and expands a rail", () => {
-  const hidden = settingSections({ settings: { keyHints: true }, notesHidden: true, notesRail: false })[1].rows;
-  assert.deepEqual(hidden.map((r) => [r.id, r.detail]), [["notes-shown", "Hidden"]]);
-  const rail = settingSections({ settings: { keyHints: true }, notesHidden: false, notesRail: true })[1].rows[1];
+  const hidden = settingSections({ settings: { keyHints: true }, notesHidden: true, notesRail: false, filesHidden: false, changesHidden: false })[1].rows;
+  assert.deepEqual(hidden.map((r) => [r.id, r.detail]), [["files-shown", "Shown"], ["changes-shown", "Shown"], ["notes-shown", "Hidden"]]);
+  const rail = settingSections({ settings: { keyHints: true }, notesHidden: false, notesRail: true })[1].rows[3];
   assert.equal(rail.detail, "Rail");
   assert.equal(rail.action.name, "herdsidian.expand");
 });
@@ -747,7 +747,7 @@ test("buildList's Settings tab lists only the settings, filtered by label", () =
   const all = buildList({ ...base_(), tab: "settings", settings });
   assert.equal(all.top, null);
   assert.deepEqual(all.sections.map((sec) => sec.title), ["General", "Layout"]);
-  assert.deepEqual(all.pickable.map((r) => r.key), ["setting:key-hints", "setting:notes-shown", "setting:notes-width"]);
+  assert.deepEqual(all.pickable.map((r) => r.key), ["setting:key-hints", "setting:files-shown", "setting:changes-shown", "setting:notes-shown", "setting:notes-width"]);
   assert.ok(all.pickable.every((r) => r.kind === "setting"));
   const width = buildList({ ...base_(), tab: "settings", settings, query: "width" });
   assert.deepEqual(width.pickable.map((r) => r.key), ["setting:notes-width"]);
@@ -755,6 +755,28 @@ test("buildList's Settings tab lists only the settings, filtered by label", () =
   const none = buildList({ ...base_(), tab: "settings", settings, query: "zzz" });
   assert.equal(none.empty, 'No matches for "zzz"');
   assert.equal(buildList({ ...base_(), tab: "all", settings }).pickable.some((r) => r.kind === "setting"), false);
+});
+
+test("settingSections has Files and Changes panel rows that run the toolbar commands", () => {
+  const rows = (over) => settingSections({ settings: { keyHints: true }, notesHidden: false, notesRail: false, ...over })[1].rows;
+  const def = rows({});
+  assert.deepEqual(def.slice(0, 2).map((r) => [r.id, r.label, r.detail]),
+    [["files-shown", "Files panel", "Hidden"], ["changes-shown", "Changes panel", "Hidden"]]);
+  assert.deepEqual(def[0].action, { type: "run", name: "herdsidian-tabs.files", args: {} });
+  assert.deepEqual(def[1].action, { type: "run", name: "herdsidian-tabs.changes", args: {} });
+  const shown = rows({ filesHidden: false, changesHidden: false });
+  assert.deepEqual(shown.slice(0, 2).map((r) => r.detail), ["Shown", "Shown"]);
+  const mixed = rows({ filesHidden: false, changesHidden: true });
+  assert.deepEqual(mixed.slice(0, 2).map((r) => r.detail), ["Shown", "Hidden"]);
+});
+
+test("modelKey changes with the Files and Changes panels", () => {
+  const base = { query: "", tab: "settings", notes: null, notesError: null, doc: {}, linking: null, starter: null,
+    agents: [], order: [], layoutName: "herdsidian", bindings: [], notesHidden: false, hasList: true };
+  const make = (over) => modelKey({ ...base, filesHidden: true, changesHidden: true, ...over });
+  assert.ok(sameKey(make({}), make({})));
+  assert.ok(!sameKey(make({}), make({ filesHidden: false })));
+  assert.ok(!sameKey(make({}), make({ changesHidden: false })));
 });
 
 test("modelKey changes with the settings and the Notes width", () => {

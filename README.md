@@ -137,7 +137,7 @@ Then press `⌘⇧O` and **Choose a vault**.
 <summary>By hand</summary>
 
 1. Copy `layouts/herdsidian.json` and `layouts/herdsidian.svg` (its picture in
-   Settings → Look), the eight files in `themes/` and the seven folders in
+   Settings → Look), the eight files in `themes/` and the eight folders in
    `mods/` into `~/.config/herdr-app/` (same paths). If you installed an earlier
    version, remove the old `themes/herdsidian_*.json` files.
 2. Merge the `layout:herdsidian` and `mod:herdsidian` sections of `keys.json` into
@@ -145,7 +145,7 @@ Then press `⌘⇧O` and **Choose a vault**.
 3. Check the mods:
    ```sh
    cd ~/.config/herdr-app/mods
-   for m in herdsidian herdsidian-chrome guide-spaces guide-agents herdsidian-tabs herdsidian-pane herdsidian-status; do herdr-app check $m; done
+   for m in herdsidian herdsidian-chrome guide-spaces guide-agents herdsidian-tabs herdsidian-files herdsidian-pane herdsidian-status; do herdr-app check $m; done
    ```
 4. Switch to it: `herdr-app do layout.switch '{"name":"herdsidian"}'`, or Settings →
    Look, or Herdr's default `⌃⇧L`, which cycles layouts.
@@ -177,7 +177,7 @@ Then bind a key in `keys.json`, for example
 | Keys | What it does |
 |---|---|
 | `⌘⇧O` | Show or hide the Notes sidebar |
-| `⌘⇧E` / `⌘⇧G` | Show or hide the Files / Changes panel (their toolbar buttons are always on) |
+| `⌘⇧E` / `⌘⇧G` | Show or hide the Files / Changes panel. Both can be open: Files on top, Changes below, with a draggable border. Their toolbar buttons, right of Search, are always on |
 | `⌘L` | Link the open note to the focused agent's space (no note open: open the picker) |
 | `⌘K` | Open the Herdsidian palette (the toolbar's Search box does the same) |
 | `↵` | In the palette: open the note, focus the agent or run the command |
@@ -208,8 +208,9 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
   to 4 agents, 6 notes and 4 commands. A single tab shows up to 50.
 - **Settings.** The Settings tab changes Herdsidian's look in place (the palette stays
   open). General: **Key hints** On / Off shows or hides the keys beside tabs, toolbar
-  buttons, Search and the sidebar rows. Layout: **Notes panel** Shown / Hidden and, while
-  shown, **Notes width** Expanded / Rail. The values live in one store,
+  buttons, Search and the sidebar rows. Layout: **Files panel** and **Changes panel**
+  Shown / Hidden (always listed, whatever Herdr's own panel setting says), **Notes panel**
+  Shown / Hidden and, while shown, **Notes width** Expanded / Rail. The values live in one store,
   `herdsidian.settings`, that every mod reads.
 - **Search.** A note matches when its name contains the text; an exact name, then a
   prefix, then a word start rank first, and notes linked to the space win ties. Agents
@@ -275,6 +276,9 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
   and `herdsidian-status` are restyled copies of Herdr's `spaces`, `agents`,
   `workspace-chrome`, `tabs`, `pane` and `workspace-status` (0.1.10), with the same
   behavior. `guide-spaces` runs `git` and `hc machine ls` like the original.
+- `herdsidian-files` is a copy of Herdr's `files` (0.1.13) whose only change is the folder
+  icon: the vault's folder, in the accent color. It does not get later fixes to Herdr's
+  `files`; compare it with `~/.config/herdr-app/mods/files/main.js` after a Herdr update.
 
 ---
 
