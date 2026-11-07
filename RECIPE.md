@@ -79,12 +79,16 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
 2. **Work column**:
    - `herdsidian-tabs` toolbar (52 px, `window_drag`, `canvas` at 35 %): a
      rounded track holding the tabs as a segmented control (28 px tabs, radius
-     7, the active one `raised` with a 1 px top highlight), a new-tab button,
-     Files and Changes buttons (always on: it ignores Herdr's `workspace.panels`,
-     which the welcome can leave empty), a **Usage** pill (30 px, radius 8, the word and a 14 px
-     icon per installed Claude Code / Codex / opencode; a hover card of 280 px with the
-     5 h and 7 d limits and when they reset, and opencode's 7-day cost), a 220 px Search box with its key (`⌘K`), the Notes
-     toggle and the window buttons. The Search box opens the palette (item 4). Buttons are 30 px, radius 8. A 14 px
+     7, the active one `raised` with a 1 px top highlight), a new-tab button, then
+     at the right a **Usage** pill (30 px, radius 8, the word and a 14 px icon per
+     installed Claude Code / Codex / opencode; a hover card of 280 px with the 5 h and
+     7 d limits and when they reset, and opencode's 7-day cost), a 220 px Search box
+     with its key (`⌘K`), a Files | Changes pill (the tab track's look; each half is
+     its own toggle, `raised` with the top highlight while open, so both can be on),
+     the Notes toggle and the window buttons. The order follows the columns the
+     buttons open: Files/Changes, then Notes at the far right. Files and Changes are
+     always on: the toolbar ignores Herdr's `workspace.panels`, which the welcome can
+     leave empty. The Search box opens the palette (item 4). Buttons are 30 px, radius 8. A 14 px
      program icon leads each tab name (`foreground` on the selected tab,
      `muted` otherwise for tinted SVGs; pictures as is). The top sheen fills the whole
      toolbar (180°, `foreground` 5 % at the top to transparent at the bottom
@@ -124,7 +128,13 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
    - `herdsidian-status` bar: the blocked agents are a pill, a button: "Needs you",
      or "Needs you · N" when N is more than 1. A click focuses the first blocked
      agent (`pane.focus`). Tooltip "Go to the blocked agent".
-   - The hidden Files/Changes panel (368 px, min 280, max 900).
+   - The hidden Files/Changes panel (368 px, min 280, max 900): a column (`panel`,
+     gap 6) with the `files` block (`herdsidian-files`) on top and the `changes` block
+     (`changes`) below, weight 1 and min 120 each, both hidden at first. Each block
+     shows and hides on its own; the column shows while one is open, and the border
+     between them drags. `mods/herdsidian-tabs/panels.js` (pure) turns a toggle into
+     the `layout.show`/`layout.hide` calls, and the toolbar remembers
+     `{ files, changes }` per space (older `"files"`/`"changes"` values still read).
    - `herdsidian-status` bar (28 px, `canvas` at 35 %): machine, branch, the
      agent count or "N working" (and the "Needs you" pill), and the name of the
      active theme on the right. `⌘⇧P` still opens commands.
@@ -323,7 +333,7 @@ Look (layout root):
   `themes/hs_catppuccin_light.json` (Catppuccin Latte: background `#eff1f5`,
   foreground `#4c4f69`, accent `#8839ef`) and `themes/hs_nord_light.json`
   (Nord Snow Storm: background `#eceff4`, foreground `#2e3440`, accent
-  `#5e81ac`) as alternatives in Settings → Look, the seven mods, `lib/tokens.js`, and
+  `#5e81ac`) as alternatives in Settings → Look, the eight mods, `lib/tokens.js`, and
   `keys.json` to merge into the person's.
 - Themes: Nord's `chrome`, `muted` and `blocked` were adjusted so text and
   dots pass contrast on the glass. `idle` is lighter in the four dark themes so
@@ -342,7 +352,7 @@ Look (layout root):
   and a last root child
   `{ "id": "herdsidian", "type": "block", "hidden": true, "size": { "px": 380 },
   "min": 44, "max": 720, "content": { "mod": "herdsidian" } }`.
-- The seven mods:
+- The eight mods:
 
   | Mod | Role |
   |---|---|
@@ -351,6 +361,7 @@ Look (layout root):
   | `guide-spaces` | Spaces list with `⌃N` hints. Clone of `spaces`. |
   | `guide-agents` | Agents list with `⌘⌥N` hints. Clone of `agents`. |
   | `herdsidian-tabs` | The toolbar. Clone of `tabs`. |
+  | `herdsidian-files` | The Files panel. Clone of `files`; folders use the vault's folder icon in `accent`. |
   | `herdsidian-pane` | The pane header. Clone of `pane`. |
   | `herdsidian-status` | The status bar. Clone of `workspace-status`. |
 
@@ -480,7 +491,8 @@ Look (layout root):
   the always-shown keys in `herdsidian-tabs` (tabs, New, Files, Changes, Search),
   `guide-agents` (`⌘⌥N`, header) and `guide-spaces` (the `⌃N` cap). In `guide-spaces` the
   header hint is a tooltip; with `keyHints` off Spaces drops its keys from the
-  tooltips too. Tooltips elsewhere keep their key. Changed from ⌘K → Settings, whose Layout section also toggles Notes
+  tooltips too. Tooltips elsewhere keep their key. Changed from ⌘K → Settings, whose Layout section also toggles Files and Changes
+  (`herdsidian-tabs.files` / `.changes`, the toolbar's own commands), Notes
   (`layout.toggle`) and its width (`herdsidian.expand` / `herdsidian.rail`, handled by
   Notes' `nextCommand()`). Imports `herdr`; in `herdsidian-tabs` it is imported as
   `herdsidianSettings`, because Herdr's own `settings()` is used there too.
@@ -492,7 +504,7 @@ Look (layout root):
   `herdsidian`, `herdsidian-chrome`, `herdsidian-tabs`, `herdsidian-pane`, `herdsidian-status`, `guide-agents` and `guide-spaces`). `npm run lint` fails if a copy
   differs.
 - Icons: Herdr's `mods/workspace-chrome/*.svg` and `mods/files/*.svg`, plus
-  the SVGs inside `herdsidian`, `herdsidian-tabs` and `herdsidian-pane`.
+  the SVGs inside `herdsidian`, `herdsidian-tabs`, `herdsidian-files` and `herdsidian-pane`.
 - Keys: `layout:herdsidian` (`cmd-shift-o` → `layout.toggle:herdsidian`,
   `cmd-k` → `mod.open:herdsidian`, `cmd-alt-1..9` → `guide-agents.focus-N`,
   `ctrl-1..9` → `space.select:N`, `cmd-alt-[`/`]` → `space.prev`/`next`,
@@ -654,9 +666,9 @@ Look (layout root):
 
 - The eight `themes/hs_*.json` are in `~/.config/herdr-app/themes/`
   and show in Settings → Look.
-- `herdr-app check` passes for all seven mods: `herdsidian`,
+- `herdr-app check` passes for all eight mods: `herdsidian`,
   `herdsidian-chrome`, `guide-spaces`, `guide-agents`, `herdsidian-tabs`,
-  `herdsidian-pane` and `herdsidian-status`.
+  `herdsidian-files`, `herdsidian-pane` and `herdsidian-status`.
 - `layout.switch herdsidian` shows the glass look, hints on spaces and
   agents, and no errors in `herdr-app status`.
 - Each theme gives the glass its own tint (`app.theme` with each name).

@@ -1,5 +1,5 @@
 // Herdsidian's toolbar: a restyled clone of Herdr's shipped `tabs` mod (0.1.10).
-// Tabs as a segmented control, Search, the Notes toggle, Files / Changes and the window buttons.
+// Tabs as a segmented control, Search, the Files / Changes toggles, the Notes toggle and the window buttons.
 // Colors come from theme() through ./tokens.js (ADR-0001). The panel / drag / rename / menu
 // code is the shipped code; only the render chain is restyled.
 
@@ -10,6 +10,7 @@ import { alpha, tokens } from "./tokens.js";
 import { glow, headerDots, icon, dot } from "./ui.js";
 import { find } from "./layout.js";
 import { keyHint } from "./keys.js";
+import { PANELS, shownPanels, toggled, panelCommands, readChoice, sameChoice } from "./panels.js";
 import { settings as herdsidianSettings } from "./settings.js"; // herdr has its own settings()
 import { createUsage, providersFrom } from "./usage.js";
 import { usageCard, usageControl } from "./usage-view.js";
@@ -63,37 +64,39 @@ export default class Tabs extends View {
     this.cx.notify();
   }
 
-  // Shows the side panel on `id`, or hides it when it already shows `id`.
-  togglePanel(id) {
-    const root = layout(), panel = find(root, "panel"), body = find(root, "panel-body");
-    if (panel && !panel.hidden && body?.active === id) run("layout.hide", { id: "panel" });
-    else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
+  // Files and Changes as the layout shows them now: { files, changes }.
+  shown(root = layout()) {
+    return shownPanels(find(root, "panel"), Object.fromEntries(PANELS.map(id => [id, find(root, id)])));
   }
 
-  // The side panel is remembered per space: switching shows that space's choice
-  // (closed if it never had one), and opening or closing it records it.
-  syncPanel(space, panel, body) {
-    if (!space || !panel) return;
-    const now = panel.hidden ? null : body?.active ?? null;
+  // Opens or closes Files or Changes; the other one stays as it is.
+  togglePanel(id) {
+    for (const [name, args] of panelCommands(toggled(this.shown(), id))) run(name, args);
+  }
+
+  // Files and Changes are remembered per space: switching shows that space's choice
+  // (both closed if it never had one), and opening or closing either records it.
+  syncPanel(space, root) {
+    if (!space || !find(root, "panel")) return;
+    const now = this.shown(root);
     if (space.id !== this.space) {
       const first = this.space === undefined;
       this.space = space.id; this.pending = null;
       if (!(first && !(space.id in this.panels))) {
-        const want = this.panels[space.id] ?? null;
-        if (want !== now) {
+        const want = readChoice(this.panels[space.id]);
+        if (!sameChoice(want, now)) {
           this.pending = { want, until: Date.now() + 1000 };
-          if (want) { run("layout.select", { stack: "panel-body", child: want }); run("layout.show", { id: "panel" }); }
-          else run("layout.hide", { id: "panel" });
+          for (const [name, args] of panelCommands(want)) run(name, args);
           return;
         }
       }
     }
     // Until the restore lands (or something else won), the old state isn't a choice.
     if (this.pending) {
-      if (this.pending.want !== now && Date.now() < this.pending.until) return;
+      if (!sameChoice(this.pending.want, now) && Date.now() < this.pending.until) return;
       this.pending = null;
     }
-    if (this.panels[space.id] === now) return;
+    if (space.id in this.panels && sameChoice(readChoice(this.panels[space.id]), now)) return;
     this.panels[space.id] = now;
     localStorage.setItem("panels", JSON.stringify(this.panels));
   }
@@ -114,7 +117,7 @@ export default class Tabs extends View {
     const keyed = (icon, action) => { const key = shownHint(action);
       return h_flex().gap(6).items_center().child(icon).when(Boolean(key), el => el.child(div().text_size(11).child(key))); };
     const hover = s => s.bg(k.pill).text_color(t.foreground);
-    // A 30 px muted icon button; `on` is the pressed look (Files / Changes / Notes).
+    // A 30 px muted icon button; `on` is the pressed look (Notes).
     const button = (id, label, action, on = false, tip = null) => div().id(id).h(30).min_w(30).px(7).flex_none().flex().items_center().justify_center().rounded(8)
       .text_color(on ? t.foreground : t.muted).cursor_pointer().when(on, el => el.bg(k.pill)).hover(s => on ? s.bg(alpha(t.foreground, 0.10)).text_color(t.foreground) : hover(s))
       .when(tip, el => el.tooltip(tip))
@@ -148,14 +151,21 @@ export default class Tabs extends View {
     const lightsPadding = w?.platform === "macos" && w.titlebar === "none" && !w.fullscreen && root?.traffic_lights
       ? Math.max(16, (root.traffic_lights[0] + 64) / settings().zoom - (sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0))
       : 16;
-    const panel = find(root, "panel"), body = find(root, "panel-body");
     // Files and Changes are always on here. Herdr's "workspace.panels" is ignored: its welcome
     // writes [] when none is picked, which would hide them after an install.
-    this.syncPanel(space, panel, body);
-    const panelButton = (id, label, icon) => {
-      const on = panel && !panel.hidden && body?.active === id;
-      return button(`panel-${id}`, keyed(svg(icon).size(16), `herdsidian-tabs.${id}`), () => this.togglePanel(id), on, label);
-    };
+    this.syncPanel(space, root);
+    const open = this.shown(root);
+    // One segment of the Files | Changes pill. Each is its own toggle: both can be open.
+    const panelButton = (id, label, icon) => h_flex().id(`panel-${id}`).h(28).px(9).gap(6).rounded(7).items_center().flex_none()
+      .border_t(1).border_color(open[id] ? k.highlight : alpha(t.foreground, 0))
+      .text_color(open[id] ? t.foreground : t.muted).cursor_pointer().tooltip(tipFor(label, `herdsidian-tabs.${id}`))
+      .when(open[id], el => el.bg(t.raised))
+      .when(!open[id], el => el.hover(hover))
+      .on_mouse_down("left", stop).on_click(() => this.togglePanel(id))
+      .child(keyed(svg(icon).size(16), `herdsidian-tabs.${id}`));
+    const panels = h_flex().id("panels").p(3).gap(2).flex_none().items_center().rounded(10).bg(k.pill)
+      .child(panelButton("files", "Files", "mods/files/file.svg"))
+      .child(panelButton("changes", "Changes", "mods/changes/changes.svg"));
     const notes = find(root, "herdsidian");
     const notesOn = Boolean(notes) && !notes.hidden;
     const search = h_flex().id("search").w(220).h(30).flex_none().px(10).gap(8).items_center().rounded(8).bg(k.pill).text_size(12.5).text_color(t.muted)
@@ -178,11 +188,10 @@ export default class Tabs extends View {
       .child(h_flex().id("tab-bar").min_w(0).p(3).gap(2).items_center().rounded(10).bg(k.pill)
         .child(h_flex().id("tab-scroll").flex_1().min_w(0).items_center().gap(2).overflow_x_scrollbar().children(shown.map(item))))
       .child(button("tab-new", keyed(svg("mods/workspace-chrome/plus.svg").size(16), "tab.new"), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }), false, "New tab"))
-      .child(panelButton("files", "Files", "mods/files/file.svg"))
-      .child(panelButton("changes", "Changes", "mods/changes/changes.svg"))
       .child(div().flex_1().h_full())
       .child(usage)
       .child(search)
+      .child(panels)
       .child(button("notes-toggle", svg("mods/workspace-chrome/panel-right.svg").size(16), () => run("layout.toggle", { id: "herdsidian" }), notesOn, tipFor("Notes", "layout.toggle:herdsidian")))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/herdsidian-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
         .child(button("maximize", w.platform === "windows" ? svg(`mods/herdsidian-tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
