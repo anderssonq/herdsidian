@@ -139,8 +139,8 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      pane in full (12 px icon, main percent, a 40×4 bar, window label), a divider, then
      every other installed provider compact. Hover or click opens a 280 px card above the
      bar with every provider, the focused one first and tagged "focused pane", and opencode's
-     7-day cost. From 90 % the percent and the bar use `blocked`. The theme name is not
-     here (it lives in Settings). `⇧⌘P` still opens commands.
+     7-day cost, Kiro's and Grok's monthly use. From 90 % the percent and the bar use
+     `blocked`. The theme name is not here (it lives in Settings). `⇧⌘P` still opens commands.
 3. **Right sidebar** (the `herdsidian` block), 380 px (min 44, max 720), hidden until
    `⇧⌘O`, `⇧⌘E` or `⇧⌘G`. Same glass as the left sidebar. Header 52 px with a
    segmented control of three equal tabs, **Notes · Files · Changes**, then the
@@ -519,8 +519,9 @@ Look (layout root):
   settings store. Pure, so Node tests import it.
 - `lib/settings.js`: the global `settings` store. `settings()` reads
   `shared("herdsidian.settings")` through `readSettings`; `setSetting(name, value)`
-  writes it, and every mod re-renders. Two values: `keyHints` (`"modifier"`, labeled "On hover", the default; `"always"`; `"off"`;
-  old booleans read as always / off) and `usageInStatus` (default on). "On hover" shows
+  writes it, and every mod re-renders. Three values: `keyHints` (`"modifier"`, labeled "On hover", the default; `"always"`; `"off"`;
+  old booleans read as always / off), `usageInStatus` (default on) and `contextInSidebar`
+  (default on; "Context in the sidebar", the context ring on each agent row). "On hover" shows
   the keys of `herdsidian-tabs` (tabs), `guide-agents` (`⌥⌘N`) and `guide-spaces` (the
   `⌃N` cap) on the row under the pointer, because a mod cannot see modifier keys while a
   terminal has the keyboard. "Off" hides them; header hints are tooltips. Tooltips
@@ -601,8 +602,30 @@ Look (layout root):
   logs (`~/.codex/sessions`), and sends one `GET` to `https://api.anthropic.com/api/oauth/usage`.
   The token is read and sent inside one constant shell pipeline (`curl -H @-`, so it is in
   no argv); the mod never stores, logs, shows, refreshes or writes it. The cache is in
-  memory only. `usage.js` is pure (parsers, formatting, scripts, cache) and has Node tests
+  memory only. Kiro and Grok add no new network host and no credential read. Kiro: one
+  read-only `/bin/sh` with `find` and `stat` lists `<kiro>/sessions/cli/*.json` (`<kiro>` is
+  `$KIRO_HOME` when it is an absolute path that is not `/`, not `$HOME` and not a parent of
+  `$HOME`, else `~/.kiro`), and `readTextFile` reads each one (cwd, timestamps, credit counts;
+  the title is never kept). Grok: the same listing and reads for the hook's state files,
+  `${XDG_STATE_HOME:-~/.local/state}/herdsidian/grok/*.json`. `usage.js` is pure (parsers, formatting, scripts, cache) and has Node tests
   in `tests/usage.test.js` and `tests/usage-view.test.js`.
+- Disclosure: `guide-agents` reads agent files (the Context window on each agent row; nothing
+  runs with "Context in the sidebar" off). Every 30 s while agents are listed it runs read-only
+  `/bin/sh -c` with `find`, `stat`, `sort`, `head`, `tail` and `grep`. For Claude Code
+  (`~/.claude/projects`) and Codex (`~/.codex/sessions`) it looks only at the last 256 KiB of the
+  newest session log of the agent's folder and keeps numbers, model ids and folders in memory.
+  For Kiro it reads `<kiro>/sessions/cli/*.json`, and for Grok `herdsidian/grok/*.json` in the
+  state folder, with `readTextFile`. No new network host, no credential read, no
+  `kiro-cli` or `grok` run. `agent-context.js` is pure; the parsers shared with Usage live in
+  `lib/agent-files.js` (copied into `herdsidian-status` and `guide-agents`, lint checks the copies).
+- Grok hook: `scripts/grok-status-line.sh` (macOS; only `/bin/sh` and `/usr/bin/plutil`) is
+  installed by hand in `~/.grok/config.toml` as `[ui.status_line]` with `type = "command"`;
+  Herdsidian never edits that file. It writes only
+  `${XDG_STATE_HOME:-~/.local/state}/herdsidian/grok/<session id>.json` (folder 0700, file 0600,
+  11 keys, temp file then `mv`), never deletes, and has no network or `git` use. Contract: `v`,
+  `session_id`, `cwd`, `model`, `updated_at` (ms), `cost_usd`, `context_window_size`,
+  `context_tokens`, `used_percentage`, `session_input_tokens`, `session_output_tokens`; `null`
+  for what Grok did not send.
 - Never hard-code a color in a mod. `npm run lint` rejects any hex literal
   (3, 4, 6 or 8 digits) in `mods/**/*.js`, and alpha glued to a string
   (`+ "26"`, `` `${c}2e` ``). The only exception is the six space avatar

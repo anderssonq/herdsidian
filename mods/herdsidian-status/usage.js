@@ -1,8 +1,12 @@
-// Usage beside Search: the providers, the three parsers, the formatting, the fetch scripts and
-// the cache. Pure: no herdr / gpui-kit imports, so Node tests import it. Programs run: /bin/sh
-// (with /usr/bin/security, /usr/bin/plutil, /usr/bin/curl, cat, find, stat, sort, head, grep, tail) and opencode. Network: api.anthropic.com only.
+// Usage beside Search: the providers, the parsers, the formatting, the fetch scripts and the cache.
+// Pure: no herdr / gpui-kit imports, so Node tests import it. Programs run: /bin/sh (with
+// /usr/bin/security, /usr/bin/plutil, /usr/bin/curl, cat, find, stat, sort, head, grep, tail) and opencode.
+// Read-only files: ~/.codex/sessions; <kiro>/sessions/cli/*.json (<kiro> is $KIRO_HOME by Kiro's
+// rule, else ~/.kiro); ${XDG_STATE_HOME:-~/.local/state}/herdsidian/grok/*.json (the Grok hook's files).
+// Network: api.anthropic.com only.
+import { MONTH_NOTES, fetchGrok, fetchKiro } from "./usage-month.js";
 
-export const PROVIDER_KEYS = ["claude", "codex", "opencode"]; // S1: the order everywhere
+export const PROVIDER_KEYS = ["claude", "codex", "opencode", "kiro", "grok"]; // S1: the order everywhere
 export const FETCH_LIMIT_MS = 15000; // S3, below exec's own 30 s
 export const CACHE_MS = 5 * 60 * 1000; // D6
 
@@ -13,7 +17,9 @@ export const ERROR_TEXT = {
   timeout: "Timed out.",
   unavailable: "Usage unavailable.",
 };
-export const EMPTY_NONE = "No supported agent CLI is installed. Usage covers Claude Code, Codex and opencode.";
+// The card text for an error key: ERROR_TEXT, then the month notes, else "unavailable".
+export const errorText = (key) => (Object.hasOwn(ERROR_TEXT, key) ? ERROR_TEXT[key] : Object.hasOwn(MONTH_NOTES, key) ? MONTH_NOTES[key] : ERROR_TEXT.unavailable);
+export const EMPTY_NONE = "No supported agent CLI is installed. Usage covers Claude Code, Codex, opencode, Kiro and Grok.";
 export const EMPTY_FAILED = "Cannot list the installed agents.";
 
 // The knownAgents() entries that are installed and supported, in S1 order, one per key.
@@ -171,9 +177,15 @@ export function parseOpencode(text) {
 
 // ---- fetching ----
 
-// One provider's reading: {data} or {error}. Never throws.
-export async function fetchProvider(key, exec) {
+// One provider's reading: {data} or {error}. Never throws. `io` = { readTextFile, now } for the
+// month readers (Kiro, Grok); without readTextFile they are unavailable.
+export async function fetchProvider(key, exec, io = {}) {
   try {
+    if (key === "kiro" || key === "grok") {
+      if (typeof io.readTextFile !== "function") return { error: "unavailable" };
+      const month = await (key === "kiro" ? fetchKiro : fetchGrok)(exec, io.readTextFile, io.now);
+      return month.error ? { error: month.error } : { data: month };
+    }
     if (key === "claude") {
       const res = await exec("/bin/sh", ["-c", CLAUDE_SCRIPT]);
       return res.code === 0 ? parseClaudeOutput(res.stdout) : { error: "unavailable" };
@@ -192,7 +204,7 @@ export async function fetchProvider(key, exec) {
 
 // The in-memory cache (S4). `exec(command, args)` runs a program; `after(ms, fn)` starts a timer and
 // returns its cancel function; `onChange()` asks for a redraw. Only the parsed readings are kept.
-export function createUsage({ exec, after, now = Date.now, onChange = () => {}, limitMs = FETCH_LIMIT_MS, ttlMs = CACHE_MS }) {
+export function createUsage({ exec, readTextFile, after, now = Date.now, onChange = () => {}, limitMs = FETCH_LIMIT_MS, ttlMs = CACHE_MS }) {
   const entries = new Map();
   const running = new Set(); // providers whose process has not settled, even past the limit
   let serial = 0;
@@ -213,7 +225,7 @@ export function createUsage({ exec, after, now = Date.now, onChange = () => {}, 
     entries.set(key, entry);
     entry.cancel = after(limitMs, () => finish(key, id, { error: "timeout" }));
     running.add(key);
-    fetchProvider(key, exec).then((result) => { running.delete(key); finish(key, id, result); });
+    fetchProvider(key, exec, { readTextFile, now: now() }).then((result) => { running.delete(key); finish(key, id, result); });
   };
 
   return {

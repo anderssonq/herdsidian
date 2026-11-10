@@ -3,7 +3,9 @@ import { div } from "gpui-kit";
 import { h_flex, v_flex, HoverCard } from "gpui-base";
 import { RADIUS } from "./tokens.js";
 import { alertMark, icon } from "./ui.js";
-import { EMPTY_FAILED, EMPTY_NONE, ERROR_TEXT, formatAge, windowView } from "./usage.js";
+import { EMPTY_FAILED, EMPTY_NONE, errorText, formatAge, windowView } from "./usage.js";
+import { formatTokens } from "./agent-files.js";
+import { GROK_NOTE, formatUsd, twoDecimals } from "./usage-month.js";
 import { reading } from "./usage-status.js";
 
 const BAR_WIDTH = 56;
@@ -23,14 +25,27 @@ const row = (t, k, w, now, zeroPast) => {
 
 const note = (t, text) => div().text_size(12).text_color(t.muted).child(text);
 
+// A label and its value; `width` is the label column.
+const line = (t, label, value, width = 44) => h_flex().gap(8).text_size(12).child(div().w(width).flex_none().text_color(t.muted).child(label)).child(div().child(value));
+
 // What one provider shows under its name.
 function body(t, k, key, entry, now) {
   if (entry.state === "loading") return [note(t, "Loading…")];
-  if (entry.state === "error") return [note(t, ERROR_TEXT[entry.error] ?? ERROR_TEXT.unavailable)];
+  if (entry.state === "error") return [note(t, errorText(entry.error))];
   const d = entry.data;
   if (d.kind === "stats") {
-    const line = (label, value) => h_flex().gap(8).text_size(12).child(div().w(44).flex_none().text_color(t.muted).child(label)).child(div().child(value));
-    return [note(t, "Last 7 days, no usage limits"), line("Cost", d.cost), line("Input", d.input), line("Output", d.output)];
+    return [note(t, "Last 7 days, no usage limits"), line(t, "Cost", d.cost), line(t, "Input", d.input), line(t, "Output", d.output)];
+  }
+  if (d.kind === "month") {
+    const age = formatAge(d.at, now);
+    const lines = key === "kiro"
+      ? [line(t, "Credits", twoDecimals(d.credits), 52), line(t, "Sessions", String(d.sessions), 52), line(t, "Turns", String(d.turns), 52)]
+      : [d.costUsd === null ? div().text_size(12).child("Cost unknown") : line(t, "Cost", formatUsd(d.costUsd), 52), line(t, "Tokens", formatTokens(d.tokens ?? 0), 52), line(t, "Sessions", String(d.sessions), 52)];
+    return [note(t, "This month, no usage limits"),
+      ...(key === "grok" ? [note(t, GROK_NOTE)] : []),
+      ...lines,
+      ...(age ? [div().text_size(11).text_color(t.muted).child(age)] : []),
+      ...(key === "kiro" && d.skipped > 0 ? [div().text_size(11).text_color(t.muted).child(d.skipped === 1 ? "1 file skipped" : `${d.skipped} files skipped`)] : [])];
   }
   const age = key === "codex" ? formatAge(d.at, now) : "";
   return [...d.windows.map((w) => row(t, k, w, now, key === "codex")),

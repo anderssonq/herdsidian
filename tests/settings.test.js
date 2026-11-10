@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { KEY_HINT_VALUES, SETTING_DEFAULTS, SIDEBAR_TABS, keyHintLabel, nextKeyHints, readSettings, settingSections, showKeyHint } from "../lib/keys.js";
 
 test("defaults: key hints on hover, usage in the status bar on", () => {
-  assert.deepEqual(SETTING_DEFAULTS, { keyHints: "modifier", usageInStatus: true });
+  assert.deepEqual(SETTING_DEFAULTS, { keyHints: "modifier", usageInStatus: true, contextInSidebar: true });
   assert.deepEqual(readSettings(undefined), SETTING_DEFAULTS);
   assert.deepEqual(readSettings(null), SETTING_DEFAULTS);
   assert.deepEqual(readSettings("on"), SETTING_DEFAULTS);
@@ -26,7 +26,7 @@ test("readSettings falls back to the default for anything else", () => {
 });
 
 test("readSettings ignores unknown keys", () => {
-  assert.deepEqual(readSettings({ other: 1, keyHints: "off" }), { keyHints: "off", usageInStatus: true });
+  assert.deepEqual(readSettings({ other: 1, keyHints: "off" }), { keyHints: "off", usageInStatus: true, contextInSidebar: true });
 });
 
 test("nextKeyHints cycles modifier, always, off", () => {
@@ -61,7 +61,7 @@ test("settingSections: General has the key hints row", () => {
 
 test("settingSections: Layout rows and actions", () => {
   const rows = settingSections(base)[1].rows;
-  assert.deepEqual(rows.map((r) => r.id), ["right-sidebar", "sidebar-tab", "sidebar-width", "usage-in-status"]);
+  assert.deepEqual(rows.map((r) => r.id), ["right-sidebar", "sidebar-tab", "sidebar-width", "usage-in-status", "context-in-sidebar"]);
   const [side, tab, width, usage] = rows;
   assert.equal(side.label, "Right sidebar");
   assert.equal(side.detail, "Shown");
@@ -100,7 +100,7 @@ test("settingSections: rail and usage off", () => {
 
 test("settingSections: a hidden sidebar omits the width row", () => {
   const rows = settingSections({ ...base, sidebarHidden: true })[1].rows;
-  assert.deepEqual(rows.map((r) => r.id), ["right-sidebar", "sidebar-tab", "usage-in-status"]);
+  assert.deepEqual(rows.map((r) => r.id), ["right-sidebar", "sidebar-tab", "usage-in-status", "context-in-sidebar"]);
   assert.equal(rows[0].detail, "Hidden");
 });
 

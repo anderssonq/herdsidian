@@ -5,7 +5,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, agents, panes, focused, keys, shared, theme, run, exec, knownAgents } from "herdr";
+import { spaces, agents, panes, focused, keys, shared, theme, run, exec, readTextFile, knownAgents } from "herdr";
 import { tokens } from "./tokens.js";
 import { keycap, needsPill } from "./ui.js";
 import { keyHint } from "./keys.js";
@@ -34,6 +34,7 @@ export default class Status extends View {
     this.agents = null; this.agentsFailed = false; this.agentsLoad = null;
     this.usage = createUsage({
       exec,
+      readTextFile,
       after: (ms, fn) => { const task = this.cx.timer.after(ms, fn); return () => task?.cancel(); },
       onChange: () => this.cx.notify(),
     });

@@ -719,11 +719,11 @@ test("spaceWhere builds the write target, with the address only for an agent, an
 // The settings store's values (lib/keys.js readSettings) and the palette's Settings tab
 
 test("readSettings fills the v2 defaults and ignores unknown or mistyped values", () => {
-  assert.deepEqual(SETTING_DEFAULTS, { keyHints: "modifier", usageInStatus: true });
-  assert.deepEqual(readSettings(undefined), { keyHints: "modifier", usageInStatus: true });
-  assert.deepEqual(readSettings(null), { keyHints: "modifier", usageInStatus: true });
-  assert.deepEqual(readSettings("on"), { keyHints: "modifier", usageInStatus: true });
-  assert.deepEqual(readSettings({ keyHints: "no", usageInStatus: "yes", other: 1 }), { keyHints: "modifier", usageInStatus: true });
+  assert.deepEqual(SETTING_DEFAULTS, { keyHints: "modifier", usageInStatus: true, contextInSidebar: true });
+  assert.deepEqual(readSettings(undefined), { keyHints: "modifier", usageInStatus: true, contextInSidebar: true });
+  assert.deepEqual(readSettings(null), { keyHints: "modifier", usageInStatus: true, contextInSidebar: true });
+  assert.deepEqual(readSettings("on"), { keyHints: "modifier", usageInStatus: true, contextInSidebar: true });
+  assert.deepEqual(readSettings({ keyHints: "no", usageInStatus: "yes", other: 1 }), { keyHints: "modifier", usageInStatus: true, contextInSidebar: true });
 });
 
 const sidebarInputs = (over = {}) => ({
@@ -735,7 +735,7 @@ test("the palette has no settingSections of its own: it uses lib/keys.js", () =>
   const s = settingSections(sidebarInputs());
   assert.deepEqual(s.map((sec) => sec.title), ["General", "Layout"]);
   assert.deepEqual(s[0].rows.map((r) => [r.id, r.detail]), [["key-hints", "On hover"]]);
-  assert.deepEqual(s[1].rows.map((r) => r.id), ["right-sidebar", "sidebar-tab", "sidebar-width", "usage-in-status"]);
+  assert.deepEqual(s[1].rows.map((r) => r.id), ["right-sidebar", "sidebar-tab", "sidebar-width", "usage-in-status", "context-in-sidebar"]);
 });
 
 test("paletteSettings puts the Theme section, then Appearance, before the shared sections", () => {
@@ -784,7 +784,7 @@ test("buildList's Settings tab lists the Theme rows, Appearance and the shared r
   assert.deepEqual(all.sections.map((sec) => sec.title), ["Theme", "Appearance", "General", "Layout"]);
   assert.deepEqual(all.pickable.map((r) => r.key),
     ["setting:theme-carbon", "setting:theme-midnight", "setting:theme-catppuccin", "setting:theme-nord", "setting:appearance",
-      "setting:key-hints", "setting:right-sidebar", "setting:sidebar-tab", "setting:sidebar-width", "setting:usage-in-status"]);
+      "setting:key-hints", "setting:right-sidebar", "setting:sidebar-tab", "setting:sidebar-width", "setting:usage-in-status", "setting:context-in-sidebar"]);
   assert.ok(all.pickable.every((r) => r.kind === "setting"));
   const width = buildList({ ...base_(), tab: "settings", settings, query: "width" });
   assert.deepEqual(width.pickable.map((r) => r.key), ["setting:sidebar-width"]);
