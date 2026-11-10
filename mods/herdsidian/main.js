@@ -7,15 +7,22 @@ import { v_flex, h_flex, Editor, EditorState, InputState, Input, TextView } from
 import { HIDDEN, base, dirOf, hidden, render, linkTarget, resolve } from "./notes.js";
 import { changeMarks } from "./marks.js";
 import { exec, readTextFile, writeTextFile, watchFolder, pickFolder, theme, settings, nextCommand, run, layout, window,
-  agents, panes, spaces, focused, home, notify, props, shared, setShared } from "herdr";
-import { alpha, tokens } from "./tokens.js";
+  agents, panes, spaces, focused, home, notify, props, shared, setShared, keys } from "herdr";
+import { alpha, tokens, RADIUS } from "./tokens.js";
 import { find } from "./layout.js";
 import { headerDots, keycap } from "./ui.js";
+import { SIDEBAR_STORE, readSidebar } from "./sidebar.js";
+import { tabControl, railTabs, changeCount, tabTips } from "./sidebar-view.js";
+import { FilesTab } from "./files-view.js";
+import { ChangesTab, ChangesWatch } from "./changes-view.js";
+import { keyHint } from "./keys.js";
+import { settings as herdsidianSettings } from "./settings.js"; // herdr has its own settings()
 import { buildIndex, updateIndex, missingRaw, neighborhood, layout as ringLayout, toScreen, zoomAt, sectionMessage, placeLabels, AREA } from "./graph.js";
 import { emptyDoc, findEntry, autoLinks, contextNotes, suggest, deliveryText, sendOrder, pickAgent, canSend, pushRecent, matchNotes,
   pendingRequest, shouldReload, changedJson } from "./context.js";
 import { stateDir, loadContext, saveContext, indexNotes, gitTop, listNotes, capNotice, backoffMs, touches, afterOutage, underVault, recentOf, storeRecent } from "./io.js";
 import { graphSection } from "./graph-view.js";
+import { graphFold, foldClick } from "./fold.js";
 import { sendText, sendToasts } from "./send.js";
 import { autoFromIndex, spaceWhere } from "./palette.js";
 import { Palette } from "./palette-main.js";
@@ -67,6 +74,12 @@ export default class Notes extends View {
     this.vault = localStorage.getItem("vault");
     publish("herdsidian.vault", this.vault);
     this.pathEpoch = 0; this.moving = false; this.actions = new VaultActions(this);
+    // What the Files and Changes tab objects (Files made in init, Changes on its first render) may call back.
+    this.host = { cx, selectTab: (tab) => setShared(SIDEBAR_STORE, { tab }), files: () => this.tabBody("files"), vault: () => this.vault, changes: () => this.changesWatch };
+    // The git watch starts with the mod, not with the tab: its count feeds the Changes tab badge.
+    this.changesWatch = new ChangesWatch(this.host);
+    // The Files tab object is made here too: its 10 s timer needs init's cx. It does no work while the tab is not shown.
+    this.filesTab = new FilesTab(this.host);
     // A fresh request is left to the first render; an old one was already handled.
     const request = shared("herdsidian.request");
     this.handled = pendingRequest(request, null, this.vault, Date.now()).action === "none" ? request?.id ?? null : null;
@@ -81,6 +94,7 @@ export default class Notes extends View {
     this.graph = null; this.graphKey = null; this.suggestions = [];
     this.view = { panX: 0, panY: 0, zoom: 1 }; this.area = { ...AREA }; this.hover = null; this.drag = null;
     this.hidden = localStorage.getItem("graph.hidden") === "1";
+    this.foldOverride = null; // the note whose graph the person unfolded by a click (V6); never saved
     this.hops = localStorage.getItem("graph.hops") === "1" ? 1 : 2;
     this.recent = this.vault ? recentOf(this.vault) : [];
     // The Agent context: the focused agent per space, the repo folder per cwd, the context file.
@@ -94,7 +108,7 @@ export default class Notes extends View {
 
     this.load(cx);
     this.watch(cx);
-    // keys.json "mod:herdsidian": "cmd-s": "herdsidian.save", "cmd-e": "herdsidian.mode".
+    // keys.json "mod:herdsidian": "cmd-s": "herdsidian.save", "cmd-e": "herdsidian.mode", "cmd-enter": "herdsidian.send".
     // "layout:herdsidian": "cmd-l": "herdsidian.link" (works while an agent terminal has the keyboard).
     cx.spawn(async (cx) => {
       for (;;) {
@@ -103,6 +117,8 @@ export default class Notes extends View {
         if (c === "mode" && this.note) this.setMode(this.mode === "read" ? "edit" : "read");
         // Links the open note; with none open, opens the picker without taking the keyboard (none in the rail).
         if (c === "link") { if (this.note) this.linkCurrent(cx); else if (!narrow()) this.openPicker(cx, false); }
+        // ⌘↵ (keys.json "mod:herdsidian"): the Send to agent button's action; it pastes, never submits (ADR-0002).
+        if (c === "send") this.send(cx);
         // From ⌘K → Settings → Layout: Notes width.
         if ((c === "expand" && narrow()) || (c === "rail" && !narrow())) this.collapse();
         cx.notify();
@@ -360,7 +376,7 @@ export default class Notes extends View {
   close(cx) {
     if (this.overlay) return this.overlay.closed(cx);
     this.editor?.release();
-    this.editor = null; this.note = null; this.dirty = false; this.conflict = false; this.asking = null;
+    this.editor = null; this.note = null; this.foldOverride = null; this.dirty = false; this.conflict = false; this.asking = null;
     this.clearMarks();
   }
 
@@ -423,7 +439,7 @@ export default class Notes extends View {
   }
 
   button(id, t, icon, tip, action) {
-    return div().id(id).size(28).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.muted)
+    return div().id(id).size(28).flex_none().flex().items_center().justify_center().rounded(RADIUS.control).text_color(t.muted)
       .hover((s) => s.bg(tokens(t).pill).text_color(t.foreground)).cursor_pointer().tooltip(tip).on_click(action)
       .child(svg(icon.includes("/") ? icon : `mods/workspace-chrome/${icon}.svg`).size(14));
   }
@@ -432,7 +448,7 @@ export default class Notes extends View {
   // `menu`: the right-click handler of this row.
   row(id, t, depth, icon, label, action, extra, tone = "note", menu = null) {
     const selected = tone === "selected", tk = tokens(t);
-    return h_flex().id(id).h(28).flex_none().pl(8 + depth * 16).pr(8).gap(8).items_center().rounded(7).cursor_pointer()
+    return h_flex().id(id).h(28).flex_none().pl(8 + depth * 16).pr(8).gap(8).items_center().rounded(RADIUS.card).cursor_pointer()
       .when(selected, (el) => el.bg(tk.accentSoft)).when(!selected, (el) => el.hover((s) => s.bg(tk.pill))).on_click(action)
       .when(Boolean(menu), (el) => el.on_mouse_down("right", menu))
       .child(icon)
@@ -482,9 +498,11 @@ export default class Notes extends View {
     cx.notify();
   }
 
-  rail(t) {
-    return v_flex().id("herdsidian").size_full().pt(8).gap(4).items_center().bg(tokens(t).glass)
-      .child(this.button("notes-expand", t, "panel-right", "Expand notes", () => this.collapse()))
+  rail(t, tab) {
+    const k = tokens(t);
+    return v_flex().id("herdsidian").size_full().pt(8).gap(4).items_center().bg(k.glass)
+      .child(this.button("notes-expand", t, "panel-right", "Expand sidebar", () => this.collapse()))
+      .children(railTabs(t, k, { tab, onSelect: (id) => { this.host.selectTab(id); this.collapse(); } }))
       .when(Boolean(this.vault), (el) => el.child(this.button("notes-search-rail", t, "search", "Find a note", (_e, cx) => this.toggleSearch(cx))))
       .when(!this.note, (el) => el.child(this.button("notes-new-rail", t, "square-pen", "New note", (_e, cx) => { this.collapse(); this.newNote(cx); })));
   }
@@ -496,10 +514,10 @@ export default class Notes extends View {
   browser(t) {
     if (!this.vault) return v_flex().flex_1().flex_basis(0).min_h(120).p(16).gap(10).text_size(12.5).text_color(t.muted)
       .child("Choose a folder of Markdown notes, or create an empty one to start. An Obsidian vault works too; Obsidian is not needed.")
-      .child(div().id("notes-choose").self_start().px(10).h(28).flex().items_center().rounded(7).bg(t.solid).text_color(t.solid_foreground)
+      .child(div().id("notes-choose").self_start().px(10).h(28).flex().items_center().rounded(RADIUS.card).bg(t.solid).text_color(t.solid_foreground)
         .cursor_pointer().on_click((_e, cx) => this.chooseVault(cx)).child("Choose a vault"));
     return v_flex().flex_1().flex_basis(0).min_h(120)
-      .when(this.searching, (el) => el.child(div().px(10).pb(6).flex_none().child(h_flex().h(30).px(8).gap(6).items_center().rounded(8).bg(tokens(t).pill)
+      .when(this.searching, (el) => el.child(div().px(10).pb(6).flex_none().child(h_flex().h(30).px(8).gap(6).items_center().rounded(RADIUS.card).bg(tokens(t).pill)
         .child(svg("mods/workspace-chrome/search.svg").size(13).flex_none().text_color(t.muted))
         .child(Input.new(this.search).flex_1().text_size(12.5).text_color(t.foreground)))))
       .child(v_flex().id("notes-tree").flex_1().min_h(0).px(6).pb(8).overflow_y_scrollbar()
@@ -508,16 +526,16 @@ export default class Notes extends View {
   }
 
   pill(id, t, label, on, action) {
-    return div().id(id).px(8).h(22).flex().items_center().rounded(5).text_size(11.5).cursor_pointer()
+    return div().id(id).px(8).h(22).flex().items_center().rounded(RADIUS.control).text_size(11.5).cursor_pointer()
       .text_color(on ? t.foreground : t.muted).when(on, (el) => el.bg(t.raised)).hover((s) => s.text_color(t.foreground))
       .on_click(action).child(label);
   }
 
   reader(t) {
     const read = this.mode === "read";
-    const banner = (text, actions) => v_flex().mx(10).mb(6).px(10).py(8).gap(6).flex_none().rounded(7)
+    const banner = (text, actions) => v_flex().mx(10).mb(6).px(10).py(8).gap(6).flex_none().rounded(RADIUS.card)
       .bg(alpha(t.blocked, 0.12)).text_size(12).text_color(t.foreground).child(div().child(text)).child(h_flex().gap(6).children(actions));
-    const act = (id, label, action) => div().id(id).px(8).h(22).flex().items_center().rounded(5).bg(t.raised).cursor_pointer()
+    const act = (id, label, action) => div().id(id).px(8).h(22).flex().items_center().rounded(RADIUS.control).bg(t.raised).cursor_pointer()
       .hover((s) => s.bg(tokens(t).pill)).on_click(action).child(label);
     return v_flex().flex_1().flex_basis(0).min_h(120)
       .child(h_flex().h(34).px(10).gap(6).flex_none().items_center()
@@ -525,7 +543,7 @@ export default class Notes extends View {
         .child(this.pill("mode-edit", t, "Edit", !read, (_e, cx) => { this.setMode("edit"); cx.notify(); }))
         .child(keycap(t, "⌘E"))
         .child(div().flex_1())
-        .when(this.dirty, (el) => el.child(div().size(7).rounded(4).bg(t.working)))
+        .when(this.dirty, (el) => el.child(div().size(7).rounded_full().bg(t.working)))
         .child(this.pill("save", t, "Save", false, (_e, cx) => this.save(false, cx)))
         .child(keycap(t, "⌘S")))
       .when(this.conflict, (el) => el.child(banner("Changed outside Herdr since you opened it.", [
@@ -598,7 +616,7 @@ export default class Notes extends View {
   // The neighborhood, layout, git folder and suggestions come from refresh(), never from here (AC17).
   graphModel(cx) {
     const m = {
-      hidden: this.hidden, hops: this.hops, count: 0, omitted: 0, message: null, error: null,
+      hidden: this.hidden, folded: false, foldDetail: null, hops: this.hops, count: 0, omitted: 0, message: null, error: null,
       nodes: [], labels: [], area: this.area, segments: [], hotSegments: [], hover: this.hover,
       agentLabel: null, agentOnlyAllowed: false, chips: [], suggestions: [],
       canAddCurrent: Boolean(this.note), send: { ok: false, reason: null },
@@ -615,7 +633,11 @@ export default class Notes extends View {
     }
 
     const g = this.graph;
-    if (g) {
+    if (g) { m.count = g.nodes.length; m.omitted = g.omitted; }
+    // Reading a note folds the graph to its header (V6); the header still needs the count.
+    const fold = graphFold({ hidden: this.hidden, note: this.note, override: this.foldOverride, count: m.count });
+    m.folded = fold.folded; m.foldDetail = fold.detail;
+    if (g && !fold.folded) {
       const screen = toScreen(g.positions, g.edges, this.view, this.area);
       m.segments = screen.segments;
       if (this.hover) m.hotSegments = toScreen(g.positions, g.edges.filter(([a, b]) => a === this.hover || b === this.hover), this.view, this.area).segments;
@@ -629,7 +651,6 @@ export default class Notes extends View {
       }
       // Hop-2 labels only on hover or at zoom >= 1.5 (D3); the rest are culled by priority so none overlap.
       m.labels = placeLabels(m.nodes.filter((n) => n.kind !== "far" || far || n.hovered), undefined, this.area);
-      m.count = g.nodes.length; m.omitted = g.omitted;
     }
     m.message = sectionMessage({ vault: this.vault, error: this.indexError, index: this.index, center, graph: g });
     m.error = this.indexError ?? this.ctxError;
@@ -679,8 +700,12 @@ export default class Notes extends View {
   callbacks() {
     return {
       toggle: (cx) => {
-        this.hidden = !this.hidden;
-        if (this.hidden) localStorage.setItem("graph.hidden", "1"); else localStorage.removeItem("graph.hidden");
+        const next = foldClick({ hidden: this.hidden, note: this.note, override: this.foldOverride });
+        this.foldOverride = next.override;
+        if (next.hidden !== this.hidden) {
+          this.hidden = next.hidden;
+          if (this.hidden) localStorage.setItem("graph.hidden", "1"); else localStorage.removeItem("graph.hidden");
+        }
         this.hover = null; this.drag = null; this.picking = false;
         cx.notify();
       },
@@ -767,12 +792,29 @@ export default class Notes extends View {
     if (this.overlay) return this.overlay.render(cx);
     this.handleShared(cx);
     const t = theme();
-    if (narrow()) return this.rail(t);
-    const title = this.note ? base(this.note) : this.vault?.split("/").pop() ?? "Notes";
-    return v_flex().id("herdsidian").size_full().min_h(0).bg(tokens(t).glass).text_color(t.foreground).text_size(13)
-      .child(h_flex().h(52).flex_none().relative().overflow_hidden().pl(16).pr(8).gap(4).items_center()
+    const tab = readSidebar(shared(SIDEBAR_STORE)).tab;
+    if (narrow()) return this.rail(t, tab);
+    const k = tokens(t);
+    return v_flex().id("herdsidian").size_full().min_h(0).bg(k.glass).text_color(t.foreground).text_size(13)
+      .child(h_flex().h(52).flex_none().relative().overflow_hidden().pl(12).pr(8).gap(8).items_center()
         // The block's left edge is the window width minus Notes' own width, so the grid lines up with the toolbar's.
-        .child(headerDots(tokens(t), "herdsidian", blockX()))
+        .child(headerDots(k, "herdsidian", blockX()))
+        .child(tabControl(t, k, { tab, count: changeCount(shared("herdsidian.changes")), tips: tabTips(keys(), shared("layout"), herdsidianSettings().keyHints), onSelect: (id, cx) => { this.host.selectTab(id); cx.notify(); } }))
+        .child(this.button("notes-collapse", t, "panel-right", "Collapse to rail", () => this.collapse())))
+      .child(tab === "notes" ? this.notesTab(t, cx) : this.tabBody(tab).render(t, cx));
+  }
+
+  // The Files tab object is made in init (its timer needs init's cx); the Changes one on the first render of that tab.
+  tabBody(tab) {
+    if (tab === "files") return (this.filesTab ??= new FilesTab(this.host));
+    return (this.changesTab ??= new ChangesTab(this.host));
+  }
+
+  // Notes: its own sub-header under the tabs (back, title and path, copy, search, new, vault), then the tree or reader and the graph.
+  notesTab(t, cx) {
+    const title = this.note ? base(this.note) : this.vault?.split("/").pop() ?? "Notes";
+    return v_flex().flex_1().min_h(0)
+      .child(h_flex().flex_none().pt(2).pr(8).pb(6).pl(8).gap(4).items_center()
         .when(Boolean(this.note), (el) => el.child(this.button("notes-back", t, "chevron-left", "Back to the notes",
           (_e, cx) => this.leave((cx) => { this.close(); cx.notify(); }, cx))))
         .child(v_flex().flex_1().min_w(0)
@@ -783,11 +825,9 @@ export default class Notes extends View {
           notify({ title: "Path copied", level: "success" });
         })))
         .when(!this.note, (el) => el
-          .child(div().mr(4).child(keycap(t, "\u2318\u21e7O")))
           .when(Boolean(this.vault), (el) => el.child(this.button("notes-search", t, "search", "Find a note", (_e, cx) => this.toggleSearch(cx))))
           .child(this.button("notes-new", t, "square-pen", "New note", (_e, cx) => this.newNote(cx)))
-          .child(this.button("notes-vault", t, "folder", "Choose the vault", (_e, cx) => this.chooseVault(cx))))
-        .child(this.button("notes-collapse", t, "panel-right", "Collapse notes (⌘⇧O hides them)", () => this.collapse())))
+          .child(this.button("notes-vault", t, "folder", "Choose the vault", (_e, cx) => this.chooseVault(cx)))))
       .when(Boolean(this.error), (el) => el.child(div().px(12).pb(6).text_size(11.5).text_color(t.blocked).child(this.error)))
       .when(Boolean(this.notice), (el) => el.child(div().px(12).pb(6).text_size(11.5).text_color(t.muted).child(this.notice)))
       .child(this.note ? this.reader(t) : this.browser(t))

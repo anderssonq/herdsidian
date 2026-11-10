@@ -79,7 +79,7 @@ async function compareAndSwap(path, text, expected) {
 // `props` backs props(), `viewport` (null: none) backs viewport_size(), and `overlays` and `closed` record
 // openOverlay() and closeOverlay(). exec, readTextFile and writeTextFile are hooks a test can replace.
 export const state = { shared: {}, runs: [], toasts: [], layout: { id: "root", children: [] }, commands: [], files: {},
-  props: {}, viewport: null, overlays: [], closed: [], exec: stubExec, readTextFile: readFromFiles, writeTextFile: compareAndSwap };
+  props: {}, viewport: null, keys: {}, overlays: [], closed: [], exec: stubExec, readTextFile: readFromFiles, writeTextFile: compareAndSwap };
 
 const never = () => new Promise(() => {});
 const color = new Proxy({}, { get: (_t, key) => (key === "then" ? undefined : "#808080") });
@@ -101,7 +101,7 @@ const herdr = {
   spaces: () => [],
   panes: () => [],
   agents: () => [],
-  keys: () => ({}),
+  keys: () => state.keys,
   focused: () => null,
   props: () => state.props,
   window: () => ({ platform: "macos", titlebar: "none", fullscreen: false }),
@@ -167,7 +167,7 @@ globalThis.window = new Proxy(anyWindow, {
 });
 
 // A stand-in for gpui's context: spawn runs its task; the clipboard and redraws are recorded.
-// Like sleep, timer.after never fires by default; a test can replace either.
+// Like sleep, timer.after and timer.every never fire by default; a test can replace them.
 export function fakeCx() {
   const cx = {
     clipboard: [],
@@ -175,7 +175,7 @@ export function fakeCx() {
     stop_propagation() {},
     write_to_clipboard(text) { cx.clipboard.push(text); },
     focus_handle: () => anything(),
-    timer: { after() {} },
+    timer: { after() {}, every() {} },
     sleep: never,
     spawn(task) { return Promise.resolve().then(() => task(cx)).catch(() => {}); },
   };

@@ -8,7 +8,7 @@ const root = new URL("..", import.meta.url).pathname;
 const errors = [];
 const files = (dir) => readdirSync(dir).flatMap((n) => {
   const p = join(dir, n);
-  if ([".git", "node_modules", ".kit-backup", ".spec"].includes(n)) return [];
+  if ([".git", "node_modules", ".kit-backup", ".spec", "_to_delete"].includes(n)) return [];
   return statSync(p).isDirectory() ? files(p) : [p];
 });
 const all = files(root).filter((p) => !p.endsWith("jsconfig.json"));
@@ -60,7 +60,7 @@ for (const m of mods) if (!ours.includes(m) && !shipped.includes(m)) errors.push
 // Shared copies (ADR-0001): every mods/*/<name>.js equals lib/<name>.js, and a mod that
 // imports ./<name>.js has the file. .kit-backup/ and .spec/ are skipped.
 const modFiles = all.filter((p) => relative(root, p).startsWith("mods/"));
-for (const name of ["tokens", "ui", "layout", "keys", "settings"]) {
+for (const name of ["tokens", "ui", "layout", "keys", "settings", "sidebar", "blocked"]) {
   const canonicalPath = join(root, `lib/${name}.js`);
   let canonical = null;
   try { canonical = readFileSync(canonicalPath, "utf8"); }
@@ -105,7 +105,9 @@ for (const p of modFiles.filter((p) => p.endsWith(".js") && !shared(p))) {
 // 3. The pure files stay testable under node: no herdr, gpui-kit or gpui-base import.
 // 4. Deletes go to the Trash through the host (AC49): no rm, rmdir or unlink in mods/herdsidian.
 // The no-submit rule (2) also covers palette-main.js, palette.js, palette-view.js and send.js.
-const pure = new Set(["notes", "context", "graph", "palette", "send", "actions", "refs"].map((n) => `mods/herdsidian/${n}.js`));
+const pure = new Set(["notes", "context", "graph", "palette", "send", "actions", "refs", "files-tree", "changes", "fold", "theme-pick", "sidebar"].map((n) => `mods/herdsidian/${n}.js`));
+// Pure files of other mods (checked: none imports herdr, gpui-kit or gpui-base).
+for (const p of ["mods/herdsidian-status/usage-status.js", "mods/herdsidian-status/blocked.js", "mods/guide-agents/blocked.js"]) pure.add(p);
 const hostImport = /\bfrom\s*["'](herdr|gpui-kit|gpui-base)["']|\bimport\s*["'](herdr|gpui-kit|gpui-base)["']/;
 const paintPath = /(?<!globalThis\.)\bwindow\.paint_path/;
 const submitCall = /terminal\.(send|keys)\b|hc\(\s*\[\s*["'](send|keys)["']|["']enter["']|\btask\s*:/;
@@ -122,6 +124,17 @@ for (const p of modFiles.filter((p) => p.endsWith(".js"))) {
     if (inNotes && /\btext_color\(\s*t\.dim\b/.test(line)) fail(p, `line ${i + 1}: dim is never a text color: use muted or foreground (ADR-0001)`);
   });
 }
+
+// Corner radii: a .rounded(<n>) literal other than 6, 8, 14 only warns (RADIUS.x and non-literals pass).
+const warnings = [];
+for (const p of modFiles.filter((p) => p.endsWith(".js"))) {
+  readFileSync(p, "utf8").split("\n").forEach((line, i) => {
+    for (const m of line.matchAll(/\.rounded\(\s*(\d+(?:\.\d+)?)\s*\)/g)) {
+      if (![6, 8, 14].includes(Number(m[1]))) warnings.push(`warn: ${relative(root, p)}:${i + 1}: rounded(${m[1]}) — use RADIUS.control|card|overlay`);
+    }
+  });
+}
+if (warnings.length) console.log(warnings.join("\n"));
 
 // Nothing personal in what gets shared.
 for (const p of all.filter((p) => /\.(js|json|md)$/.test(p))) {

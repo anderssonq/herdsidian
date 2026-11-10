@@ -7,7 +7,7 @@ import { state, findById } from "./support/mod-stubs.js";
 let listed = [];
 globalThis.__herdsidianStubs.herdr.agents = () => listed;
 
-const { default: Status, needsLabel, firstBlocked } = await import("../mods/herdsidian-status/main.js");
+const { default: Status, needsLabel } = await import("../mods/herdsidian-status/main.js");
 const { STATUS_TEXT } = await import("../mods/guide-agents/main.js");
 
 beforeEach(() => {
@@ -40,11 +40,6 @@ test("clicking the pill focuses the first blocked agent's pane", () => {
   listed = [agent("p1", "working"), agent("p2", "blocked"), agent("p3", "blocked")];
   findById(render(), "status-needs").onClick();
   assert.deepEqual(state.runs, [["pane.focus", { pane: "p2" }]]);
-  assert.equal(firstBlocked(listed).pane, "p2");
-});
-
-test("firstBlocked finds nothing when no agent is blocked", () => {
-  assert.equal(firstBlocked([agent("p1", "done")]), undefined);
 });
 
 test("the Agents list words blocked as Needs you", () => {

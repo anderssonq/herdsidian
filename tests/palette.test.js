@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import {
-  LIMITS, tier, rankNotes, rankAgents, rankCommands, settingSections, hasMod, agentHint, commandList,
+  LIMITS, tier, rankNotes, rankAgents, rankCommands, paletteSettings, hasMod, agentHint, commandList,
   scene, autoFromIndex, autoMeta, isFreshRequest, buildList, relativeTime, breadcrumb, topFolder, topMeta,
   wrap, sendState, planSend, rankNoteRows, footer, visibleWindow, isShown, targetAgent, sameKey, rankKey, modelKey,
 } from "../mods/herdsidian/palette.js";
-import { formatChord, keyHint, readSettings, SETTING_DEFAULTS } from "../lib/keys.js";
+import { formatChord, keyHint, readSettings, SETTING_DEFAULTS, settingSections } from "../lib/keys.js";
+import * as paletteModule from "../mods/herdsidian/palette.js";
 import { matchNotes, contextNotes, findEntry, autoLinks, deliveryText } from "../mods/herdsidian/context.js";
 import { tokens } from "../mods/herdsidian/tokens.js";
 
@@ -21,7 +22,7 @@ const BINDINGS = [
   { section: "layout:herdsidian", keys: "cmd-l", action: "herdsidian.link" },
   { section: "layout:other", keys: "cmd-j", action: "only.other" },
   { section: "global", keys: "cmd-shift-p", action: "app.palette" },
-  { section: "layout:herdsidian", keys: "cmd-shift-o", action: "layout.toggle:herdsidian" },
+  { section: "layout:herdsidian", keys: "cmd-shift-o", action: "herdsidian-tabs.notes" },
   { section: "layout:herdsidian", keys: "cmd-alt-1", action: "guide-agents.focus-1" },
   { section: "layout:herdsidian", keys: "cmd-alt-2", action: "guide-agents.focus-2" },
 ];
@@ -188,7 +189,7 @@ test("modelKey is stable for the same inputs and changes with each input the lis
   const inputs = () => ({
     query: "", tab: "all", notes: null, notesError: null, doc: {}, linking: null, starter: null,
     agents: [agent("t1", "Claude Code", "s", "t", "title")], order: ["t1"], layoutName: "herdsidian",
-    bindings: [{ section: "global", action: "x", keys: "cmd-k" }], notesHidden: false, hasList: true,
+    bindings: [{ section: "global", action: "x", keys: "cmd-k" }], sidebarHidden: false, hasList: true,
   });
   const shared = { notes: null, doc: inputs().doc };
   const make = (over) => modelKey({ ...inputs(), ...shared, ...over });
@@ -196,7 +197,8 @@ test("modelKey is stable for the same inputs and changes with each input the lis
   assert.ok(!sameKey(make({}), make({ order: ["t2", "t1"] })));
   assert.ok(!sameKey(make({}), make({ bindings: [{ section: "global", action: "x", keys: "cmd-j" }] })));
   assert.ok(!sameKey(make({}), make({ layoutName: "other" })));
-  assert.ok(!sameKey(make({}), make({ notesHidden: true })));
+  assert.ok(!sameKey(make({}), make({ sidebarHidden: true })));
+  assert.ok(sameKey(make({}), make({ notesHidden: true })), "notesHidden is no longer an input: sidebarHidden is");
   assert.ok(!sameKey(make({}), make({ agents: [agent("t1", "Claude Code", "s", "t", "new title")] })));
   assert.ok(!sameKey(make({}), make({ agents: [agent("t1", "Codex", "s", "t", "title")] })));
   assert.ok(!sameKey(make({}), make({ agents: [{ ...agent("t1", "Claude Code", "s", "t", "title"), program: { name: "Claude Code", key: "claude" } }] })));
@@ -224,7 +226,7 @@ test("agentHint gives nothing past 9, without a binding or without the agents li
 
 const SPACE = { id: "s1", name: "work", folder: "/r/work" };
 const STARTER = { name: "Claude Code", run: ["claude"] };
-const cmdArgs = (extra) => ({ vault: "/v", notesHidden: false, space: SPACE, starter: STARTER, bindings: BINDINGS, layoutName: "herdsidian", ...extra });
+const cmdArgs = (extra) => ({ vault: "/v", sidebarHidden: false, sidebarTab: "notes", space: SPACE, starter: STARTER, bindings: BINDINGS, layoutName: "herdsidian", ...extra });
 
 test("commandList has exactly the five command kinds", () => {
   const ids = [
@@ -257,12 +259,16 @@ test("commandList names the new agent row after the starter and space, with no h
   assert.equal(commandList(cmdArgs({ starter: null })).some((c) => c.id === "new-agent"), false);
 });
 
-test("commandList toggles Show or Hide Notes with the layout key", () => {
+test("commandList runs herdsidian-tabs.notes, labelled Hide Notes only when the sidebar is shown on its Notes tab", () => {
   const hide = commandList(cmdArgs({})).find((c) => c.id === "notes");
   assert.equal(hide.label, "Hide Notes");
   assert.equal(hide.hint, "⇧⌘O");
-  assert.deepEqual(hide.action, { type: "run", name: "layout.toggle", args: { id: "herdsidian" } });
-  assert.equal(commandList(cmdArgs({ notesHidden: true })).find((c) => c.id === "notes").label, "Show Notes");
+  assert.deepEqual(hide.action, { type: "run", name: "herdsidian-tabs.notes", args: {} });
+  const label = (extra) => commandList(cmdArgs(extra)).find((c) => c.id === "notes").label;
+  assert.equal(label({ sidebarHidden: true }), "Show Notes");
+  assert.equal(label({ sidebarHidden: true, sidebarTab: "notes" }), "Show Notes");
+  assert.equal(label({ sidebarTab: "files" }), "Show Notes");
+  assert.equal(label({ sidebarTab: "settings" }), "Show Notes");
 });
 
 test("commandList runs Herdr's own palette for All Herdr commands", () => {
@@ -712,80 +718,110 @@ test("spaceWhere builds the write target, with the address only for an agent, an
 
 // The settings store's values (lib/keys.js readSettings) and the palette's Settings tab
 
-test("readSettings fills defaults and ignores unknown or mistyped values", () => {
-  assert.deepEqual(readSettings(undefined), SETTING_DEFAULTS);
-  assert.deepEqual(readSettings(null), { keyHints: true });
-  assert.deepEqual(readSettings("on"), { keyHints: true });
-  assert.deepEqual(readSettings({ keyHints: false }), { keyHints: false });
-  assert.deepEqual(readSettings({ keyHints: "no", other: 1 }), { keyHints: true });
+test("readSettings fills the v2 defaults and ignores unknown or mistyped values", () => {
+  assert.deepEqual(SETTING_DEFAULTS, { keyHints: "modifier", usageInStatus: true });
+  assert.deepEqual(readSettings(undefined), { keyHints: "modifier", usageInStatus: true });
+  assert.deepEqual(readSettings(null), { keyHints: "modifier", usageInStatus: true });
+  assert.deepEqual(readSettings("on"), { keyHints: "modifier", usageInStatus: true });
+  assert.deepEqual(readSettings({ keyHints: "no", usageInStatus: "yes", other: 1 }), { keyHints: "modifier", usageInStatus: true });
 });
 
-test("settingSections has General (key hints) and Layout (Notes panel, Notes width)", () => {
-  const s = settingSections({ settings: { keyHints: true }, notesHidden: false, notesRail: false, filesHidden: false, changesHidden: false });
+const sidebarInputs = (over = {}) => ({
+  settings: readSettings(undefined), sidebarHidden: false, sidebarRail: false, sidebarTab: "settings", ...over,
+});
+
+test("the palette has no settingSections of its own: it uses lib/keys.js", () => {
+  assert.equal(paletteModule.settingSections, undefined);
+  const s = settingSections(sidebarInputs());
   assert.deepEqual(s.map((sec) => sec.title), ["General", "Layout"]);
-  const [hints] = s[0].rows;
-  assert.equal(hints.detail, "On");
-  assert.deepEqual(hints.action, { type: "setting", name: "keyHints", value: false });
-  const off = settingSections({ settings: { keyHints: false }, notesHidden: false, notesRail: false })[0].rows[0];
-  assert.equal(off.detail, "Off");
-  assert.deepEqual(off.action, { type: "setting", name: "keyHints", value: true });
-  assert.deepEqual(s[1].rows.map((r) => [r.id, r.detail]), [["files-shown", "Shown"], ["changes-shown", "Shown"], ["notes-shown", "Shown"], ["notes-width", "Expanded"]]);
-  assert.deepEqual(s[1].rows[2].action, { type: "run", name: "layout.toggle", args: { id: "herdsidian" } });
-  assert.equal(s[1].rows[3].action.name, "herdsidian.rail");
+  assert.deepEqual(s[0].rows.map((r) => [r.id, r.detail]), [["key-hints", "On hover"]]);
+  assert.deepEqual(s[1].rows.map((r) => r.id), ["right-sidebar", "sidebar-tab", "sidebar-width", "usage-in-status"]);
 });
 
-test("settingSections offers Notes width only while Notes is shown, and expands a rail", () => {
-  const hidden = settingSections({ settings: { keyHints: true }, notesHidden: true, notesRail: false, filesHidden: false, changesHidden: false })[1].rows;
-  assert.deepEqual(hidden.map((r) => [r.id, r.detail]), [["files-shown", "Shown"], ["changes-shown", "Shown"], ["notes-shown", "Hidden"]]);
-  const rail = settingSections({ settings: { keyHints: true }, notesHidden: false, notesRail: true })[1].rows[3];
-  assert.equal(rail.detail, "Rail");
-  assert.equal(rail.action.name, "herdsidian.expand");
+test("paletteSettings puts the Theme section, then Appearance, before the shared sections", () => {
+  const sections = paletteSettings(sidebarInputs());
+  assert.deepEqual(sections.map((sec) => sec.title), ["Theme", "Appearance", "General", "Layout"]);
+  assert.deepEqual(sections[0].rows.map((r) => [r.id, r.label]),
+    [["theme-carbon", "Carbon"], ["theme-midnight", "Midnight"], ["theme-catppuccin", "Catppuccin"], ["theme-nord", "Nord"]]);
+  assert.deepEqual(sections[0].rows.map((r) => r.action), ["carbon", "midnight", "catppuccin", "nord"].map((family) => ({ type: "theme", family })));
+  assert.deepEqual(sections.slice(2), settingSections(sidebarInputs()));
 });
 
-test("buildList's Settings tab lists only the settings, filtered by label", () => {
-  const settings = settingSections({ settings: { keyHints: true }, notesHidden: false, notesRail: false });
+test("the Appearance row names the setting and where it is set; unreadable gives no value", () => {
+  const detail = (appearance) => paletteSettings(sidebarInputs({ appearance }))[1].rows[0].detail;
+  assert.equal(detail("dark"), "Dark · set in Herdr Settings ↗");
+  assert.equal(detail("light"), "Light · set in Herdr Settings ↗");
+  assert.equal(detail("system"), "System · set in Herdr Settings ↗");
+  assert.equal(detail(null), "set in Herdr Settings ↗");
+  assert.equal(detail(undefined), "set in Herdr Settings ↗");
+  const [row] = paletteSettings(sidebarInputs())[1].rows;
+  assert.equal(row.id, "appearance");
+  assert.equal(row.label, "Light / dark");
+  assert.deepEqual(row.action, { type: "run", name: "app.settings", args: { section: "look" } });
+});
+
+const HS = ["carbon", "midnight", "catppuccin", "nord"].flatMap((f, i) => [
+  { name: `hs_${f}`, colors: { chrome: `c${i}d`, canvas: `v${i}d`, accent: `a${i}d`, foreground: `f${i}d` } },
+  { name: `hs_${f}_light`, colors: { chrome: `c${i}l`, canvas: `v${i}l`, accent: `a${i}l`, foreground: `f${i}l` } },
+]);
+
+test("each theme row carries the dark and light colors of its family from themes(), and a check on the current one", () => {
+  const rows = paletteSettings(sidebarInputs({ themes: HS, family: "midnight" }))[0].rows;
+  assert.deepEqual(rows.map((r) => r.selected), [false, true, false, false]);
+  assert.equal(rows[1].swatch.dark.to, "v1d");
+  assert.equal(rows[1].swatch.dark.dot, "a1d");
+  assert.equal(rows[1].swatch.light.to, "v1l");
+  assert.equal(rows[1].swatch.light.dot, "a1l");
+  assert.equal(rows[3].swatch.dark.to, "v3d");
+  const none = paletteSettings(sidebarInputs({ themes: HS, family: null }))[0].rows;
+  assert.deepEqual(none.map((r) => r.selected), [false, false, false, false]);
+});
+
+test("buildList's Settings tab lists the Theme rows, Appearance and the shared rows, filtered by label", () => {
+  const settings = paletteSettings(sidebarInputs());
   const all = buildList({ ...base_(), tab: "settings", settings });
   assert.equal(all.top, null);
-  assert.deepEqual(all.sections.map((sec) => sec.title), ["General", "Layout"]);
-  assert.deepEqual(all.pickable.map((r) => r.key), ["setting:key-hints", "setting:files-shown", "setting:changes-shown", "setting:notes-shown", "setting:notes-width"]);
+  assert.deepEqual(all.sections.map((sec) => sec.title), ["Theme", "Appearance", "General", "Layout"]);
+  assert.deepEqual(all.pickable.map((r) => r.key),
+    ["setting:theme-carbon", "setting:theme-midnight", "setting:theme-catppuccin", "setting:theme-nord", "setting:appearance",
+      "setting:key-hints", "setting:right-sidebar", "setting:sidebar-tab", "setting:sidebar-width", "setting:usage-in-status"]);
   assert.ok(all.pickable.every((r) => r.kind === "setting"));
   const width = buildList({ ...base_(), tab: "settings", settings, query: "width" });
-  assert.deepEqual(width.pickable.map((r) => r.key), ["setting:notes-width"]);
+  assert.deepEqual(width.pickable.map((r) => r.key), ["setting:sidebar-width"]);
   assert.deepEqual(width.sections.map((sec) => sec.title), ["Layout"]);
   const none = buildList({ ...base_(), tab: "settings", settings, query: "zzz" });
   assert.equal(none.empty, 'No matches for "zzz"');
   assert.equal(buildList({ ...base_(), tab: "all", settings }).pickable.some((r) => r.kind === "setting"), false);
 });
 
-test("settingSections has Files and Changes panel rows that run the toolbar commands", () => {
-  const rows = (over) => settingSections({ settings: { keyHints: true }, notesHidden: false, notesRail: false, ...over })[1].rows;
-  const def = rows({});
-  assert.deepEqual(def.slice(0, 2).map((r) => [r.id, r.label, r.detail]),
-    [["files-shown", "Files panel", "Hidden"], ["changes-shown", "Changes panel", "Hidden"]]);
-  assert.deepEqual(def[0].action, { type: "run", name: "herdsidian-tabs.files", args: {} });
-  assert.deepEqual(def[1].action, { type: "run", name: "herdsidian-tabs.changes", args: {} });
-  const shown = rows({ filesHidden: false, changesHidden: false });
-  assert.deepEqual(shown.slice(0, 2).map((r) => r.detail), ["Shown", "Shown"]);
-  const mixed = rows({ filesHidden: false, changesHidden: true });
-  assert.deepEqual(mixed.slice(0, 2).map((r) => r.detail), ["Shown", "Hidden"]);
+test("the Appearance row is the only palette settings row that closes the palette", () => {
+  const rows = paletteSettings(sidebarInputs()).flatMap((sec) => sec.rows);
+  assert.deepEqual(rows.filter((r) => r.closes).map((r) => r.id), ["appearance"]);
+  assert.ok(!rows.some((r) => r.id === "theme" || r.label === "Theme…"));
 });
 
-test("modelKey changes with the Files and Changes panels", () => {
+test("modelKey changes with the sidebar's hidden, rail and tab, with the settings, and with the theme inputs", () => {
   const base = { query: "", tab: "settings", notes: null, notesError: null, doc: {}, linking: null, starter: null,
-    agents: [], order: [], layoutName: "herdsidian", bindings: [], notesHidden: false, hasList: true };
-  const make = (over) => modelKey({ ...base, filesHidden: true, changesHidden: true, ...over });
+    agents: [], order: [], layoutName: "herdsidian", bindings: [], hasList: true };
+  const make = (over) => modelKey({ ...base, settings: readSettings(undefined), sidebarHidden: false, sidebarRail: false, sidebarTab: "notes", ...over });
   assert.ok(sameKey(make({}), make({})));
-  assert.ok(!sameKey(make({}), make({ filesHidden: false })));
-  assert.ok(!sameKey(make({}), make({ changesHidden: false })));
+  assert.ok(!sameKey(make({}), make({ sidebarHidden: true })));
+  assert.ok(!sameKey(make({}), make({ sidebarRail: true })));
+  assert.ok(!sameKey(make({}), make({ sidebarTab: "settings" })));
+  assert.ok(!sameKey(make({}), make({ settings: readSettings({ keyHints: "always" }) })));
+  assert.ok(!sameKey(make({}), make({ settings: readSettings({ usageInStatus: false }) })));
+  assert.ok(sameKey(make({ family: "nord", appearance: "dark" }), make({ family: "nord", appearance: "dark" })));
+  assert.ok(!sameKey(make({}), make({ family: "nord" })));
+  assert.ok(!sameKey(make({ family: "nord" }), make({ family: "carbon" })));
+  assert.ok(!sameKey(make({}), make({ appearance: "light" })));
+  assert.ok(!sameKey(make({ appearance: "dark" }), make({ appearance: "light" })));
 });
 
-test("modelKey changes with the settings and the Notes width", () => {
+test("modelKey no longer reads filesHidden or changesHidden", () => {
   const base = { query: "", tab: "settings", notes: null, notesError: null, doc: {}, linking: null, starter: null,
-    agents: [], order: [], layoutName: "herdsidian", bindings: [], notesHidden: false, hasList: true };
-  const make = (over) => modelKey({ ...base, settings: { keyHints: true }, notesRail: false, ...over });
-  assert.ok(sameKey(make({}), make({})));
-  assert.ok(!sameKey(make({}), make({ settings: { keyHints: false } })));
-  assert.ok(!sameKey(make({}), make({ notesRail: true })));
+    agents: [], order: [], layoutName: "herdsidian", bindings: [], hasList: true };
+  assert.ok(sameKey(modelKey({ ...base, filesHidden: true }), modelKey({ ...base, filesHidden: false })));
+  assert.ok(sameKey(modelKey({ ...base, changesHidden: true }), modelKey({ ...base, changesHidden: false })));
 });
 
 test("footer names the Enter action Change on a setting", () => {

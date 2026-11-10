@@ -48,9 +48,9 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      there; a mod cannot correct it. Notes draws it only when expanded, not on the rail.
    - Spaces header: 24 px high, `Spaces` (11 px semibold `muted`), then the
      number of spaces (11 px `muted`) and a 22 px `+` button. The hint
-     `⌃ 1–9 · ⌘⌥[ ⌘⌥]` is the tooltip of the `Spaces` title (with key hints on).
-   - Agents header: `Agents` + `⌘⌥ 1–9 · ⌘[ ⌘]`. Each of the first 9 agent
-     rows shows `⌘⌥N` in 11 px `muted` text, under the status pill or the
+     `⌃ 1–9 · ⌥⌘[ ⌥⌘]` is the tooltip of the `Spaces` title (with key hints on).
+   - Agents header: `Agents` + `⌥⌘ 1–9 · ⌘[ ⌘]`. Each of the first 9 agent
+     rows shows `⌥⌘N` in 11 px `muted` text, under the status pill or the
      duration.
    - Spaces row (quiet rows): 32 px (28 px for a worktree), radius 8: avatar,
      name (flex 1, truncates), signals on the right. Avatar 20 px, radius 6,
@@ -79,16 +79,16 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
 2. **Work column**:
    - `herdsidian-tabs` toolbar (52 px, `window_drag`, `canvas` at 35 %): a
      rounded track holding the tabs as a segmented control (28 px tabs, radius
-     7, the active one `raised` with a 1 px top highlight), a new-tab button, then
-     at the right a **Usage** pill (30 px, radius 8, the word and a 14 px icon per
-     installed Claude Code / Codex / opencode; a hover card of 280 px with the 5 h and
-     7 d limits and when they reset, and opencode's 7-day cost), a 220 px Search box
-     with its key (`⌘K`), a Files | Changes pill (the tab track's look; each half is
-     its own toggle, `raised` with the top highlight while open, so both can be on),
-     the Notes toggle and the window buttons. The order follows the columns the
-     buttons open: Files/Changes, then Notes at the far right. Files and Changes are
-     always on: the toolbar ignores Herdr's `workspace.panels`, which the welcome can
-     leave empty. The Search box opens the palette (item 4). Buttons are 30 px, radius 8. A 14 px
+     7, the active one `raised` with a 1 px top highlight), a new-tab button, a spacer, then
+     at the right a 220 px Search box (`⌘K`), one 30 px icon
+     button (radius `RADIUS.control`, id `sidebar-toggle`, the `panel-right` icon) that
+     shows or hides the right sidebar (`layout.toggle` on `herdsidian`), and the window
+     buttons. It is lit (`foreground` at 10 %, `foreground` icon) while the sidebar is
+     shown, else `muted`. There are no Files or Changes icons and no Changes dot: those
+     are tabs of the sidebar. The tooltip is "Right sidebar", with no key (the tab keys are in the
+     sidebar's tab tooltips). There is no
+     Usage control in the toolbar (it moved to the status bar). The Search box opens
+     the palette (item 4). A 14 px
      program icon leads each tab name (`foreground` on the selected tab,
      `muted` otherwise for tinted SVGs; pictures as is). The top sheen fills the whole
      toolbar (180°, `foreground` 5 % at the top to transparent at the bottom
@@ -126,21 +126,45 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      (the full-width pill; the compact one is a 14 px "!" mark), the status bar and
      the palette's agent row. Blocked reads without color, by the "!" shape.
    - `herdsidian-status` bar: the blocked agents are a pill, a button: "Needs you",
-     or "Needs you · N" when N is more than 1. A click focuses the first blocked
-     agent (`pane.focus`). Tooltip "Go to the blocked agent".
-   - The hidden Files/Changes panel (368 px, min 280, max 900): a column (`panel`,
-     gap 6) with the `files` block (`herdsidian-files`) on top and the `changes` block
-     (`changes`) below, weight 1 and min 120 each, both hidden at first. Each block
-     shows and hides on its own; the column shows while one is open, and the border
-     between them drags. `mods/herdsidian-tabs/panels.js` (pure) turns a toggle into
-     the `layout.show`/`layout.hide` calls, and the toolbar remembers
-     `{ files, changes }` per space (older `"files"`/`"changes"` values still read).
+     or "Needs you · N" when N is more than 1, with a `⌘J` key cap. A click does what
+     `⌘J` does: it focuses the next blocked agent (`guide-agents.next-blocked`, after the
+     focused one, wrapping). Tooltip "Go to the blocked agent".
+   - There is no second right column. Files and Changes are tabs of the right sidebar
+     (item 3); the layout has no `panel` column. `mods/herdsidian-tabs/sidebar.js` and
+     `lib/sidebar.js` turn `herdsidian-tabs.files`/`.changes`/`.notes` into
+     `layout.show`/`layout.hide` of the `herdsidian` block plus the selected tab.
    - `herdsidian-status` bar (28 px, `canvas` at 35 %): machine, branch, the
-     agent count or "N working" (and the "Needs you" pill), and the name of the
-     active theme on the right. `⌘⇧P` still opens commands.
-3. **Notes**, 380 px (min 44, max 720), hidden until `⌘⇧O`. Same glass as the
-   sidebar.
-   - Header 52 px, with the dot texture (expanded only): vault folder name (semibold), a `⌘⇧O` key cap, then 28 px
+     agent count or "N working" (and the "Needs you" pill), and on the right the
+     **Usage** control (h 20, radius `RADIUS.control`, 11 px): the provider of the focused
+     pane in full (12 px icon, main percent, a 40×4 bar, window label), a divider, then
+     every other installed provider compact. Hover or click opens a 280 px card above the
+     bar with every provider, the focused one first and tagged "focused pane", and opencode's
+     7-day cost. From 90 % the percent and the bar use `blocked`. The theme name is not
+     here (it lives in Settings). `⇧⌘P` still opens commands.
+3. **Right sidebar** (the `herdsidian` block), 380 px (min 44, max 720), hidden until
+   `⇧⌘O`, `⇧⌘E` or `⇧⌘G`. Same glass as the left sidebar. Header 52 px with a
+   segmented control of three equal tabs, **Notes · Files · Changes**, then the
+   collapse button. Each tab's tooltip carries its key ("Notes  ⇧⌘O", none when Key hints
+   is Off). The Changes tab shows a count badge when there are changes. The chosen
+   tab is remembered (stored in `shared("herdsidian.sidebar")` and kept across restarts, default Notes; a stored `settings` reads as Notes).
+   The rail (44 px) shows one icon per tab.
+   The key of the tab already shown hides the sidebar. The palette row "Right sidebar tab"
+   cycles the tabs.
+   - **Files tab**: the file tree and preview, code moved from Herdr's `files` mod into
+     `files-view.js` and `files-tree.js` (a mod cannot host another mod's view). The folder
+     path is a 30 px `muted` line under the tabs.
+   - **Changes tab**: our own list from `git status --porcelain=v1 -z` and `git diff
+     --numstat` for the focused pane's repo: path, +N in `ansi2`, −N in `ansi1`, rows
+     28 px. A click opens the file in the Files tab.
+   - **Settings** are in ⌘K → Settings, not in the sidebar: **Theme** (four family rows,
+     Carbon, Midnight, Catppuccin and Nord, each showing its dark and light half; a row runs
+     `app.theme` for `hs_<family>` and `hs_<family>_light`, so both halves are set; one
+     appearance row opens Herdr Settings → Look, because a mod cannot set light or dark),
+     **General** (Key hints: Always / On hover / Off; "On hover" because a mod cannot see
+     modifier keys while a terminal has the keyboard) and **Layout** (Right sidebar with no
+     key cap, its tab, Sidebar width, Usage in the status bar On / Off).
+   - **Notes tab** (below).
+   - Header (Notes tab) with the dot texture (expanded only): vault folder name (semibold), then 28 px
      icon buttons: search, new note, choose vault, collapse (`panel-right`).
    - No vault yet: the title is "Notes", the search button is hidden, and the
      body reads "Choose a folder of Markdown notes, or create an empty one to
@@ -164,10 +188,16 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      on hover or at zoom 1.5 or more.
    - Agent context block: the focused agent's label, its linked notes (chips
      with unlink), faded suggestions (one click pins), "Add current note", a
-     picker (`Find a note to link…`) and a Send button.
+     picker (`Find a note to link…`, which also holds "Add current note ⌘L") and the
+     **Send to agent** button: `+ Add note` (raised, h 28) on the left, Send on the
+     right (h 28, `solid` background, `solid_foreground` weight 600, a `⌘↵` key cap).
+     Disabled, it is a muted pill with the reason as its tooltip.
+   - The graph folds to its 32 px header ("Graph · N notes · folded while reading")
+     while a note is open; back at the tree it returns to the person's own choice.
+     The fold is not saved; `graph.hidden` stays the explicit setting.
 4. **The ⌘K palette**, a popup (`mod.json` `overlay`: `kind: "popup"`, `at: "top"`,
    `offset: 40`, `width: 680`, `frame: "none"`). It is the `herdsidian` mod started a
-   second time with `props().overlay` set. The card is 680 px wide, radius 18, padding 16,
+   second time with `props().overlay` set. The card is 680 px wide, radius 14 (`RADIUS.overlay`), padding 16,
    the opaque theme `popover` color, a 1 px `line` border. Its height fits the content.
    - Header: a 14 px search icon and the search field (placeholder "Search notes, agents
      and commands…"), then the tabs All / Notes / Agents / Commands / Settings (24 px, radius 6;
@@ -191,7 +221,7 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      agent", "⇥ Preview" and "esc Close". A key that does nothing for the selected row
      is `muted` at half opacity, with the reason as a tooltip.
    - Lines in `muted` 12 px: "Loading notes…", "No agents running", "No matches for
-     "<text>"", and "Open Notes once (⌘⇧O) to choose a vault". Errors are `blocked`.
+     "<text>"", and "Open Notes once (⇧⌘O) to choose a vault". Errors are `blocked`.
 
 Look (layout root):
 - Theme `hs_carbon` (default): background `#181818`, foreground
@@ -215,7 +245,7 @@ Look (layout root):
 - Agent statuses are Herdr's own (`guide-agents` is a clone of `agents`):
   working spinner, blocked "Needs you" (the shared pill), done dot, idle ring (1.5 px, in the
   theme's `idle`).
-- `⌘⌥N` focuses the N-th agent of the list as shown (pinned first, then the
+- `⌥⌘N` focuses the N-th agent of the list as shown (pinned first, then the
   sort order). Numbers follow the whole list, so folding a group hides rows
   but keeps the numbering.
 - `⌘K` opens the Herdsidian palette (`mod.open:herdsidian`), the same as the toolbar's
@@ -254,7 +284,7 @@ Look (layout root):
   - `⇥` on a note toggles the preview. On other rows it does nothing.
   - Commands: "Link note to current agent…" (with a vault and a space), "New <agent> in
     <space>" (`tab.new` with the first installed `knownAgents()` entry, no task, no
-    key), "Show Notes" / "Hide Notes" (`layout.toggle`), "Choose vault…" (only with no
+    key), "Show Notes" / "Hide Notes" (`herdsidian-tabs.notes`, `⇧⌘O`), "Choose vault…" (only with no
     vault) and "All Herdr commands…" (`app.palette`, `⇧⌘P`). Only Herdsidian's own
     commands are listed. There is no "New agent" key: `⌘N` is Herdr's `space.new`.
   - Key hints come only from `keys()`: the `layout:<name>` section first, then
@@ -266,7 +296,7 @@ Look (layout root):
     `saveContext` as `⌘L`, bumps `herdsidian.context-rev` so Notes reloads the file,
     toasts "Linked <note> to <space>." and closes.
   - No vault: no Notes tab, no Link command, "Choose vault…" is offered, agents and
-    commands work, and the line "Open Notes once (⌘⇧O) to choose a vault" shows. The
+    commands work, and the line "Open Notes once (⇧⌘O) to choose a vault" shows. The
     vault comes from `herdsidian.vault`, which Notes publishes, so Notes must have
     started once.
   - Loading: agents and commands show at once. Notes show "Loading notes…" until the
@@ -356,14 +386,16 @@ Look (layout root):
 
   | Mod | Role |
   |---|---|
-  | `herdsidian` | The Notes sidebar. |
+  | `herdsidian` | The right sidebar: Notes, Files and Changes tabs, and the ⌘K palette (with Settings). |
   | `herdsidian-chrome` | Sidebar header (hide button over the top sheen) and footer. Clone of `workspace-chrome`. |
   | `guide-spaces` | Spaces list with `⌃N` hints. Clone of `spaces`. |
-  | `guide-agents` | Agents list with `⌘⌥N` hints. Clone of `agents`. |
-  | `herdsidian-tabs` | The toolbar. Clone of `tabs`. |
-  | `herdsidian-files` | The Files panel. Clone of `files`; folders use the vault's folder icon in `accent`. |
+  | `guide-agents` | Agents list with `⌥⌘N` hints. Clone of `agents`. |
+  | `herdsidian-tabs` | The toolbar, with the sidebar toggle. Clone of `tabs`. |
   | `herdsidian-pane` | The pane header. Clone of `pane`. |
-  | `herdsidian-status` | The status bar. Clone of `workspace-status`. |
+  | `herdsidian-status` | The status bar, with Usage. Clone of `workspace-status`. |
+
+  The Files tab is the code of Herdr's `files` mod, moved into `herdsidian` (`files-view.js`,
+  `files-tree.js`); there is no `herdsidian-files` mod.
 
 - `guide-agents` stores the shown list in `this.order` and reads
   `nextCommand()` for `focus-N`. After each order change it publishes the first 9
@@ -457,9 +489,9 @@ Look (layout root):
   Tests: `tests/tokens.test.js`.
 - `lib/ui.js`: `icon(p, size, color)`, a program's icon (a tinted SVG in
   `color`, else the picture as is; null without one), used by `guide-agents`,
-  `herdsidian-tabs` and `herdsidian-pane`. `dot(t, status, size, margin = 0)`, the
-  round status dot (fill or ring, pulse for working, `mx(margin)` only when
-  positive), used by `herdsidian` (palette), `guide-agents`, `herdsidian-tabs` and
+  `herdsidian-tabs` and `herdsidian-pane`. `dot(t, status, size, margin = 0, { pulse = true })`, the
+  round status dot (fill or ring, pulse for working unless `pulse: false`, `mx(margin)` only when
+  positive; the toolbar's tab dot passes `pulse: false`), used by `herdsidian` (palette), `guide-agents`, `herdsidian-tabs` and
   `herdsidian-pane`. And `glow(k)`, the top sheen shared
   by `herdsidian-chrome` and `herdsidian-tabs`. It paints the full size of its block with
   `GLOW_ANGLE` from `k.glow` (top) to `k.glowEnd` (bottom edge, fully
@@ -487,14 +519,15 @@ Look (layout root):
   settings store. Pure, so Node tests import it.
 - `lib/settings.js`: the global `settings` store. `settings()` reads
   `shared("herdsidian.settings")` through `readSettings`; `setSetting(name, value)`
-  writes it, and every mod re-renders. Today one value: `keyHints` (default true) hides
-  the always-shown keys in `herdsidian-tabs` (tabs, New, Files, Changes, Search),
-  `guide-agents` (`⌘⌥N`, header) and `guide-spaces` (the `⌃N` cap). In `guide-spaces` the
-  header hint is a tooltip; with `keyHints` off Spaces drops its keys from the
-  tooltips too. Tooltips elsewhere keep their key. Changed from ⌘K → Settings, whose Layout section also toggles Files and Changes
-  (`herdsidian-tabs.files` / `.changes`, the toolbar's own commands), Notes
-  (`layout.toggle`) and its width (`herdsidian.expand` / `herdsidian.rail`, handled by
-  Notes' `nextCommand()`). Imports `herdr`; in `herdsidian-tabs` it is imported as
+  writes it, and every mod re-renders. Two values: `keyHints` (`"modifier"`, labeled "On hover", the default; `"always"`; `"off"`;
+  old booleans read as always / off) and `usageInStatus` (default on). "On hover" shows
+  the keys of `herdsidian-tabs` (tabs), `guide-agents` (`⌥⌘N`) and `guide-spaces` (the
+  `⌃N` cap) on the row under the pointer, because a mod cannot see modifier keys while a
+  terminal has the keyboard. "Off" hides them; header hints are tooltips. Tooltips
+  elsewhere keep their key. Changed from ⌘K → Settings, whose Layout
+  section also selects the right sidebar tab (`herdsidian-tabs.notes` / `.files` /
+  `.changes`), the sidebar width (`herdsidian.expand` / `herdsidian.rail`, handled by
+  Notes' `nextCommand()`) and Usage in the status bar. Imports `herdr`; in `herdsidian-tabs` it is imported as
   `herdsidianSettings`, because Herdr's own `settings()` is used there too.
 - Copy rule: `lib/tokens.js`, `lib/ui.js`, `lib/layout.js`, `lib/keys.js` and `lib/settings.js` are the
   canonical files. Each mod that uses one carries a byte-identical
@@ -504,13 +537,13 @@ Look (layout root):
   `herdsidian`, `herdsidian-chrome`, `herdsidian-tabs`, `herdsidian-pane`, `herdsidian-status`, `guide-agents` and `guide-spaces`). `npm run lint` fails if a copy
   differs.
 - Icons: Herdr's `mods/workspace-chrome/*.svg` and `mods/files/*.svg`, plus
-  the SVGs inside `herdsidian`, `herdsidian-tabs`, `herdsidian-files` and `herdsidian-pane`.
-- Keys: `layout:herdsidian` (`cmd-shift-o` → `layout.toggle:herdsidian`,
+  the SVGs inside `herdsidian`, `herdsidian-tabs` and `herdsidian-pane`.
+- Keys: `layout:herdsidian` (`cmd-shift-o` → `herdsidian-tabs.notes`,
   `cmd-k` → `mod.open:herdsidian`, `cmd-alt-1..9` → `guide-agents.focus-N`,
   `ctrl-1..9` → `space.select:N`, `cmd-alt-[`/`]` → `space.prev`/`next`,
   `cmd-[`/`]` → `agent.prev`/`next`, `cmd-l` → `herdsidian.link`,
   `cmd-shift-e`/`g` → `herdsidian-tabs.files`/`changes` (the toolbar's `nextCommand()`
-  toggles that panel), so every shortcut the sidebar and the toolbar show works) and `mod:herdsidian` (`cmd-s` →
+  routes the sidebar to that tab), so every shortcut the sidebar and the toolbar show works) and `mod:herdsidian` (`cmd-s` →
   `herdsidian.save`, `cmd-e` → `herdsidian.mode`). Inside the palette, `⌘↵` and `⇥`
   are not in `keys.json`: the search field's `submit` event (with `secondary` set for
   `⌘↵`) and the key handler read them.
@@ -560,8 +593,8 @@ Look (layout root):
   copies of Herdr's `tabs`, `pane` and `workspace-status` at version 0.1.10
   (`cloned_from` in each `mod.json`). Fixes in newer Herdr versions do not
   reach them: when Herdr updates, diff each clone with the shipped mod.
-- Disclosure: `herdsidian-tabs` runs programs, reads credentials and reaches the network
-  (the Usage hover, `usage.js`). On the first hover, and then at most every 5 minutes per
+- Disclosure: `herdsidian-status` runs programs, reads credentials and reaches the network
+  (the Usage hover, `usage.js`; nothing runs with "Usage in the status bar" off). On the first hover, and then at most every 5 minutes per
   agent, it runs `/bin/sh -c` with `/usr/bin/security`, `/usr/bin/plutil`, `/usr/bin/curl`, `cat`, `find`, `stat`, `sort`,
   `head`, `grep` and `tail`, and `opencode stats --days 7`. It reads Claude Code's login (Keychain
   item `Claude Code-credentials`, else `~/.claude/.credentials.json`) and Codex's session
@@ -615,7 +648,7 @@ Look (layout root):
 - The palette is a second copy of the `herdsidian` mod, so:
   - `localStorage` is not shared between the Notes copy and the popup copy. The popup
     reads the vault from `shared("herdsidian.vault")`, so Notes must have started once
-    (shown with `⌘⇧O`) before the palette knows the vault, the auto links and the
+    (shown with `⇧⌘O`) before the palette knows the vault, the auto links and the
     agent memory.
   - Module-level state is per copy. Do not keep palette state in a module variable.
   - `herdsidian.<command>` keys (`link`, `save`, `mode`) reach shown copies only. The
@@ -666,19 +699,19 @@ Look (layout root):
 
 - The eight `themes/hs_*.json` are in `~/.config/herdr-app/themes/`
   and show in Settings → Look.
-- `herdr-app check` passes for all eight mods: `herdsidian`,
+- `herdr-app check` passes for all seven mods: `herdsidian`,
   `herdsidian-chrome`, `guide-spaces`, `guide-agents`, `herdsidian-tabs`,
-  `herdsidian-files`, `herdsidian-pane` and `herdsidian-status`.
+  `herdsidian-pane` and `herdsidian-status`.
 - `layout.switch herdsidian` shows the glass look, hints on spaces and
   agents, and no errors in `herdr-app status`.
 - Each theme gives the glass its own tint (`app.theme` with each name).
-- `⌘⇧O` shows Notes; a first run offers Choose a vault. `⌘K` opens the Herdsidian palette.
+- `⇧⌘O` shows Notes; a first run offers Choose a vault. `⌘K` opens the Herdsidian palette.
 - `⌘K` opens a popup 40 px from the top, 680 px wide, and the search field has the
   keyboard at once. `⌘K` again, `Esc` or a click outside closes it, and typing then
   lands in the terminal that had the keyboard.
 - The palette shows All / Notes / Agents / Commands / Settings. `↵` opens a note, focuses an agent,
   runs a command or changes a setting (the palette stays open). `⇥` previews a note. With no vault it says "Open Notes once
-  (⌘⇧O) to choose a vault".
+  (⇧⌘O) to choose a vault".
 - `⌘↵` on a note pastes its path into the agent that was focused at open, never
   presses Enter, and leaves the agent `idle`. With no agent it does nothing and the
   footer says why.

@@ -3,7 +3,8 @@
 import { base } from "./notes.js";
 import { matchNotes, canSend, contextNotes, findEntry, autoLinks, deliveryText } from "./context.js";
 import { sendToasts } from "./send.js";
-import { keyHint } from "./keys.js";
+import { keyHint, settingSections } from "./keys.js";
+import { FAMILIES, cardColors } from "./theme-pick.js";
 
 export const LIMITS = { agents: 4, notes: 6, commands: 4, single: 50 };
 export const ROW = { top: 56, row: 32, title: 24 }; // px, shared by the view and visibleWindow
@@ -111,11 +112,12 @@ export const agentSig = (agents) => agents
   .join("\n");
 
 // The list memo key: everything buildList and commandList read.
-export function modelKey({ query, tab, notes, notesError, doc, linking, starter, agents, order, layoutName, bindings, notesHidden, hasList, settings, notesRail, filesHidden, changesHidden }) {
+export function modelKey({ query, tab, notes, notesError, doc, linking, starter, agents, order, layoutName, bindings, hasList, settings, sidebarHidden, sidebarRail, sidebarTab, themes, family, appearance }) {
   return [
     query, tab, notes, notesError, doc, linking, starter, agentSig(agents),
-    JSON.stringify(order ?? null), layoutName, JSON.stringify(bindings), notesHidden, hasList,
-    JSON.stringify(settings ?? null), notesRail, filesHidden, changesHidden,
+    JSON.stringify(order ?? null), layoutName, JSON.stringify(bindings), hasList,
+    JSON.stringify(settings ?? null), sidebarHidden, sidebarRail, sidebarTab,
+    JSON.stringify(themes ?? null), family, appearance,
   ];
 }
 
@@ -128,7 +130,7 @@ export function agentHint(address, order, bindings, layoutName, hasAgentsList) {
 }
 
 // The palette's own commands. action: run | link | request.
-export function commandList({ vault, notesHidden, space, starter, bindings, layoutName }) {
+export function commandList({ vault, sidebarHidden, sidebarTab, space, starter, bindings, layoutName }) {
   const hint = (action) => keyHint(bindings, action, layoutName);
   const out = [];
   if (vault && space) {
@@ -140,9 +142,10 @@ export function commandList({ vault, notesHidden, space, starter, bindings, layo
       action: { type: "run", name: "tab.new", args: { space: space.id, argv: starter.run } },
     });
   }
+  // "Hide" only when pressing it would hide the sidebar: it is shown and already on its Notes tab.
   out.push({
-    id: "notes", label: notesHidden ? "Show Notes" : "Hide Notes", hint: hint("layout.toggle:herdsidian"),
-    action: { type: "run", name: "layout.toggle", args: { id: "herdsidian" } },
+    id: "notes", label: !sidebarHidden && sidebarTab === "notes" ? "Hide Notes" : "Show Notes", hint: hint("herdsidian-tabs.notes"),
+    action: { type: "run", name: "herdsidian-tabs.notes", args: {} },
   });
   if (!vault) {
     out.push({ id: "vault", label: "Choose vault…", hint: null, action: { type: "request", op: "choose-vault" } });
@@ -154,33 +157,25 @@ export function commandList({ vault, notesHidden, space, starter, bindings, layo
   return out;
 }
 
-// The Settings tab: [{ title, rows }]. Each row's `action` is
-// { type: "setting", name, value } (the `settings` store) or { type: "run", name, args }.
-// `settings` comes from readSettings (keys.js); notesRail is only read when Notes is shown.
-// Files and Changes run the herdsidian-tabs toolbar commands (each toggles its own block);
-// a missing filesHidden/changesHidden counts as hidden, since the panels start hidden.
-export function settingSections({ settings, notesHidden, notesRail, filesHidden = true, changesHidden = true }) {
-  const general = [{
-    id: "key-hints", label: "Key hints", detail: settings.keyHints ? "On" : "Off",
-    action: { type: "setting", name: "keyHints", value: !settings.keyHints },
-  }];
-  const layout = [{
-    id: "files-shown", label: "Files panel", detail: filesHidden ? "Hidden" : "Shown",
-    action: { type: "run", name: "herdsidian-tabs.files", args: {} },
-  }, {
-    id: "changes-shown", label: "Changes panel", detail: changesHidden ? "Hidden" : "Shown",
-    action: { type: "run", name: "herdsidian-tabs.changes", args: {} },
-  }, {
-    id: "notes-shown", label: "Notes panel", detail: notesHidden ? "Hidden" : "Shown",
-    action: { type: "run", name: "layout.toggle", args: { id: "herdsidian" } },
-  }];
-  if (!notesHidden) {
-    layout.push({
-      id: "notes-width", label: "Notes width", detail: notesRail ? "Rail" : "Expanded",
-      action: { type: "run", name: notesRail ? "herdsidian.expand" : "herdsidian.rail", args: {} },
-    });
-  }
-  return [{ title: "General", rows: general }, { title: "Layout", rows: layout }];
+const APPEARANCE_LABEL = { dark: "Dark", light: "Light", system: "System" };
+const APPEARANCE_NOTE = "set in Herdr Settings ↗";
+
+// The palette's Settings tab: [{ title, rows }]. Four theme rows (swatches from themes(), a check on `family`),
+// one Appearance row that points at Herdr Settings and closes the palette, then settingSections (keys.js).
+// Each row's `action` is { type: "theme", family }, { type: "setting", name, value } (the `settings` store)
+// or { type: "run", name, args }. `appearance` is parseAppearance's value (null: unreadable).
+export function paletteSettings(inputs) {
+  const { themes, family = null, appearance = null } = inputs;
+  const themeRows = FAMILIES.map((f) => ({
+    id: `theme-${f.id}`, label: f.label, detail: "", swatch: cardColors(themes, f.id), selected: f.id === family,
+    action: { type: "theme", family: f.id },
+  }));
+  const look = APPEARANCE_LABEL[appearance];
+  const appearanceRow = {
+    id: "appearance", label: "Light / dark", detail: look ? `${look} · ${APPEARANCE_NOTE}` : APPEARANCE_NOTE, closes: true,
+    action: { type: "run", name: "app.settings", args: { section: "look" } },
+  };
+  return [{ title: "Theme", rows: themeRows }, { title: "Appearance", rows: [appearanceRow] }, ...settingSections(inputs)];
 }
 
 // The target space's context: { where, linked: Set, contextPaths }. target = { agent, space, liveIds? }.

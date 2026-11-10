@@ -1,7 +1,8 @@
 {
   "mod:herdsidian": {
     "cmd-s": "herdsidian.save",
-    "cmd-e": "herdsidian.mode"
+    "cmd-e": "herdsidian.mode",
+    "cmd-enter": "herdsidian.send"
   },
   "layout:herdsidian": {
     "cmd-alt-1": "guide-agents.focus-1",
@@ -13,9 +14,10 @@
     "cmd-alt-7": "guide-agents.focus-7",
     "cmd-alt-8": "guide-agents.focus-8",
     "cmd-alt-9": "guide-agents.focus-9",
-    "cmd-shift-o": "layout.toggle:herdsidian",
+    "cmd-shift-o": "herdsidian-tabs.notes",
     "cmd-shift-e": "herdsidian-tabs.files",
     "cmd-shift-g": "herdsidian-tabs.changes",
+    "cmd-j": "guide-agents.next-blocked",
     "cmd-k": "mod.open:herdsidian",
     "cmd-l": "herdsidian.link",
     "ctrl-1": "space.select:1",

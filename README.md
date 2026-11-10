@@ -85,20 +85,40 @@ herdsidian: ~/code/acme-api
 
 ## Features
 
-- **Notes sidebar.** Folders, notes and search on the right. Read mode renders
+- **One right sidebar, three tabs.** **Notes · Files · Changes**, 380 px, so the
+  terminal keeps its room. `⇧⌘E` opens Files, `⇧⌘G` Changes and `⇧⌘O` Notes. The key of the
+  tab already shown hides the sidebar. Each tab's tooltip shows its key. The tab you chose is remembered. It collapses to a 44 px rail with one icon per tab.
+- **Notes tab.** Folders, notes and search. Read mode renders
   frontmatter, headings and links; `⌘E` switches to Edit and `⌘S` saves. A button copies the
-  note's full path. Collapses to an icon rail. Any folder of Markdown files works; Obsidian is not needed.
+  note's full path. Any folder of Markdown files works; Obsidian is not needed.
+- **Files and Changes tabs.** Files browses and previews the files of the focused pane's
+  folder. Changes lists the changed files of its repo (from `git status` and `git diff
+  --numstat`) with +N / −N, and a count badge on the tab; a click opens the file in Files.
+- **Toolbar sidebar toggle.** One icon button right of Search shows or hides the right
+  sidebar. It is lit while the sidebar is shown. It is the only sidebar control in the toolbar; its tooltip shows no key.
+- **Usage in the status bar.** The limits of your agent CLIs sit at the right of the status
+  bar: the provider of the focused pane in full, the others compact. Hover opens the usage
+  card. An off switch in Settings (**Usage in the status bar**) hides it and stops every fetch.
+- **Settings in `⌘K`.** **Theme**: four family rows (Carbon, Midnight, Catppuccin, Nord) that set
+  the dark and the light half together; one appearance row opens Herdr Settings → Look,
+  because a mod cannot set light or dark. **Key hints**: Always / On hover / Off. **Layout**:
+  right sidebar, its tab, sidebar width, Usage in the status bar.
+- **Next blocked agent.** `⌘J` focuses the next agent that needs you, after the focused one,
+  and wraps. The status bar pill shows `⌘J` and does the same on click.
 - **Right-click menu.** Create, rename and delete notes and folders from the tree. Delete
   moves the item to the Trash. Rename updates the links to it in your other notes.
 - **Agent context.** Notes linked per space, with extras for one agent. Suggestions (the
   space's repo name, recent notes, alias or tag matches) show faded; one click pins them.
 - **Local graph.** The open note (or the first linked note) at 1 or 2 hops, up to 40
-  nodes. Drag to pan, scroll to zoom, click to open. Hide it if you don't need it.
+  nodes. Drag to pan, scroll to zoom, click to open. It folds while you read a note and
+  comes back when you return to the tree; hide it yourself if you don't need it.
+- **Send to agent.** The main button of the context strip, with a `⌘↵` key cap. `+ Add note`
+  sits at its left; "Add current note" (`⌘L`) is in its picker.
 - **⌘K palette.** One search for notes, agents and commands, in a popup at the top.
   Tabs: All, Notes, Agents, Commands, Settings. `↵` opens a note, focuses an agent or runs a
   command. `⌘↵` pastes the selected note's path into the agent you were working with.
   It never presses Enter. `⇥` previews the note.
-- **Shortcut guide.** Each space shows `⌃1…⌃9` and each agent `⌘⌥1…⌘⌥9`, so you
+- **Shortcut guide.** Each space shows `⌃1…⌃9` and each agent `⌥⌘1…⌥⌘9`, so you
   jump between agents without the mouse.
 - **Graphite glass look.** Tinted glass over a gradient of the theme, terminals as solid
   cards. Eight themes, every color derived from the theme:
@@ -131,13 +151,13 @@ git clone https://github.com/anderssonq/herdsidian.git herdsidian
 
 > Read ~/.config/herdr-app/AGENTS.md, then add the Herdr layout in ./herdsidian.
 
-Then press `⌘⇧O` and **Choose a vault**.
+Then press `⇧⌘O` and **Choose a vault**.
 
 <details>
 <summary>By hand</summary>
 
 1. Copy `layouts/herdsidian.json` and `layouts/herdsidian.svg` (its picture in
-   Settings → Look), the eight files in `themes/` and the eight folders in
+   Settings → Look), the eight files in `themes/` and the seven folders in
    `mods/` into `~/.config/herdr-app/` (same paths). If you installed an earlier
    version, remove the old `themes/herdsidian_*.json` files.
 2. Merge the `layout:herdsidian` and `mod:herdsidian` sections of `keys.json` into
@@ -145,7 +165,7 @@ Then press `⌘⇧O` and **Choose a vault**.
 3. Check the mods:
    ```sh
    cd ~/.config/herdr-app/mods
-   for m in herdsidian herdsidian-chrome guide-spaces guide-agents herdsidian-tabs herdsidian-files herdsidian-pane herdsidian-status; do herdr-app check $m; done
+   for m in herdsidian herdsidian-chrome guide-spaces guide-agents herdsidian-tabs herdsidian-pane herdsidian-status; do herdr-app check $m; done
    ```
 4. Switch to it: `herdr-app do layout.switch '{"name":"herdsidian"}'`, or Settings →
    Look, or Herdr's default `⌃⇧L`, which cycles layouts.
@@ -176,20 +196,21 @@ Then bind a key in `keys.json`, for example
 
 | Keys | What it does |
 |---|---|
-| `⌘⇧O` | Show or hide the Notes sidebar |
-| `⌘⇧E` / `⌘⇧G` | Show or hide the Files / Changes panel. Both can be open: Files on top, Changes below, with a draggable border. Their toolbar buttons, right of Search, are always on |
+| `⇧⌘O` | Show the right sidebar on Notes; pressed on Notes, hide it |
+| `⇧⌘E` / `⇧⌘G` | Show the right sidebar on Files / Changes; pressed on that tab, hide it |
+| `⌘J` | Focus the next agent that needs you (wraps) |
 | `⌘L` | Link the open note to the focused agent's space (no note open: open the picker) |
 | `⌘K` | Open the Herdsidian palette (the toolbar's Search box does the same) |
 | `↵` | In the palette: open the note, focus the agent or run the command |
-| `⌘↵` | In the palette: paste the selected note's path into the agent that was focused when you pressed `⌘K` (no Enter) |
+| `⌘↵` | On a note's context strip: Send to agent. In the palette: paste the selected note's path into the agent that was focused when you pressed `⌘K` (no Enter) |
 | `⇥` | In the palette: preview the selected note |
 | `↑` / `↓` | In the palette: move the selection |
 | `Esc` | Close the palette |
 | `⌘E` / `⌘S` | In a note: switch Read and Edit / save |
 | `⌘/` | Herdr's list of every shortcut (`app.help`) |
 | `⌃1` … `⌃9` | Go to space 1–9 |
-| `⌘⌥[` / `⌘⌥]` | Previous / next space |
-| `⌘⌥1` … `⌘⌥9` | Go to agent 1–9 |
+| `⌥⌘[` / `⌥⌘]` | Previous / next space |
+| `⌥⌘1` … `⌥⌘9` | Go to agent 1–9 |
 | `⌘[` / `⌘]` | Previous / next agent |
 
 `⌘E` and `⌘S` live in the `mod:herdsidian` section and work only while the Notes panel
@@ -207,10 +228,12 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
   Top hit (a note shows its folder, "linked to <space>" and when it was edited), then up
   to 4 agents, 6 notes and 4 commands. A single tab shows up to 50.
 - **Settings.** The Settings tab changes Herdsidian's look in place (the palette stays
-  open). General: **Key hints** On / Off shows or hides the keys beside tabs, toolbar
-  buttons, Search and the sidebar rows. Layout: **Files panel** and **Changes panel**
-  Shown / Hidden (always listed, whatever Herdr's own panel setting says), **Notes panel**
-  Shown / Hidden and, while shown, **Notes width** Expanded / Rail. The values live in one store,
+  open). Theme: four family rows (a pick keeps the palette open) and an Appearance row that
+  closes the palette and opens Herdr Settings → Look. General: **Key hints**
+  Always / On hover / Off. "On hover" shows the keys on the row under the pointer, because a
+  mod cannot see modifier keys while a terminal has the keyboard. Layout: **Right sidebar**
+  Shown / Hidden, **Right sidebar tab** and, while shown, **Sidebar width** Expanded / Rail,
+  and **Usage in the status bar** On / Off. The Right sidebar row shows no key. The values live in one store,
   `herdsidian.settings`, that every mod reads.
 - **Search.** A note matches when its name contains the text; an exact name, then a
   prefix, then a word start rank first, and notes linked to the space win ties. Agents
@@ -231,7 +254,7 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
   "All Herdr commands… `⇧⌘P`".
 - **Link mode.** "Link note to current agent…" turns the palette into a note finder for
   the space. `↵` links the note, as `⌘L` does, and closes.
-- **No vault.** Agents and commands still work. The palette says "Open Notes once (⌘⇧O)
+- **No vault.** Agents and commands still work. The palette says "Open Notes once (⇧⌘O)
   to choose a vault".
 - **Missing vault.** If the vault folder is gone or cannot be listed, the Notes section
   shows the error instead of an empty list.
@@ -276,7 +299,8 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
   and `herdsidian-status` are restyled copies of Herdr's `spaces`, `agents`,
   `workspace-chrome`, `tabs`, `pane` and `workspace-status` (0.1.10), with the same
   behavior. `guide-spaces` runs `git` and `hc machine ls` like the original.
-- **Usage** (`herdsidian-tabs`, beside Search). Hovering it shows the limits of your agent CLIs.
+- **Usage** (`herdsidian-status`, right of the status bar). Hovering it shows the limits of your agent CLIs.
+  With **Usage in the status bar** off in Settings, nothing is shown and nothing runs.
   This mod runs programs, reads credentials and reaches the network, only on the first
   hover and then at most every 5 minutes per agent. It runs `/bin/sh` with `/usr/bin/security`,
   `/usr/bin/plutil`, `/usr/bin/curl`, `cat`, `find`, `stat`, `sort`, `head`, `grep` and `tail`, and `opencode stats --days 7`.
@@ -287,9 +311,10 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
   never in a command line, stored, logged or shown, and the mod never refreshes or writes it.
   Only Claude Code, Codex and opencode are covered, when installed. macOS can ask you to
   allow the Keychain read the first time.
-- `herdsidian-files` is a copy of Herdr's `files` (0.1.13) whose only change is the folder
-  icon: the vault's folder, in the accent color. It does not get later fixes to Herdr's
-  `files`; compare it with `~/.config/herdr-app/mods/files/main.js` after a Herdr update.
+- The **Files** tab is code moved from a copy of Herdr's `files` (0.1.13) into the `herdsidian`
+  mod; its folder icon is the vault's folder, in the accent color. It does not get later fixes
+  to Herdr's `files`. The **Changes** tab is our own list: Herdr's `changes` mod cannot be
+  restyled or hosted. It runs `git status --porcelain=v1 -z` and `git diff --numstat`.
 
 ---
 
@@ -298,7 +323,7 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
 - The context file is not reloaded live: a change from another Herdr window shows after
   you relink or reopen.
 - The note list and search cover up to 5,000 notes.
-- The palette finds your vault only after Notes was shown once (`⌘⇧O`) since the install.
+- The palette finds your vault only after Notes was shown once (`⇧⌘O`) since the install.
 - Built and tested on macOS (the keys use `⌘`). Linux should work but is untested.
   Windows is not supported.
 
