@@ -27,11 +27,15 @@ export const inListOrder = (list, order) => {
 
 const NEXT_BLOCKED = "guide-agents.next-blocked";
 
+// A failed knownAgents() at load is asked again once after this long (see loadAgents).
+const AGENTS_RETRY_MS = 5000;
+
 export default class Status extends View {
   init(_props, cx) {
-    // Usage: nothing is fetched until the pointer first enters the control. The cache is in memory.
+    // Usage: no reading is fetched until the pointer first enters the control (the cache is in
+    // memory). The agent list loads at init and is retried once if that load fails.
     this.cx = cx;
-    this.agents = null; this.agentsFailed = false; this.agentsLoad = null;
+    this.agents = null; this.agentsFailed = false; this.agentsLoad = null; this.agentsRetried = false;
     this.usage = createUsage({
       exec,
       readTextFile,
@@ -42,12 +46,19 @@ export default class Status extends View {
   }
 
   // The installed agents, asked again on every hover (Herdr caches the answer for a minute).
-  // A rejection leaves the list empty and `agentsFailed` set. Never rejects.
+  // A rejection leaves the list empty and `agentsFailed` set, and asks once more 5 s later
+  // (one retry per failure streak, so a broken shell never loops). Never rejects.
   loadAgents() {
     this.agentsLoad ??= (async () => {
       await null; // so the assignment below lands before this clears it
-      try { this.agents = await knownAgents(); this.agentsFailed = false; }
-      catch { this.agents = null; this.agentsFailed = true; }
+      try { this.agents = await knownAgents(); this.agentsFailed = false; this.agentsRetried = false; }
+      catch {
+        this.agents = null; this.agentsFailed = true;
+        if (!this.agentsRetried) {
+          this.agentsRetried = true;
+          this.cx.timer.after(AGENTS_RETRY_MS, () => { this.loadAgents(); });
+        }
+      }
       this.agentsLoad = null;
       this.cx.notify();
     })();

@@ -33,3 +33,4 @@ d1484b8883bc0bdc5483f5db40eccfc176c04e7ccc67a484b209ca7393d8b0fd  tests/agent-us
 89b7ab25d14ec400d537b9279404375bb63eba82a2e4896a6d76724bc321380f  tests/agent-usage-fixes-2.test.js
 c79ee56488a4a8bcf1f64c44514ac385ba30f09376d7f8840e74cbe8ee8d241f  tests/agent-context-view.test.js
 edc7a02bf076b086081c7a4cd23f21a42e2e007b646a5ba4db601016e0e8fd14  tests/agent-context-ring.test.js
+61bd9bbc7f94c157c2fce83fda795e18311a8fc6cc70de2c12bf050e1d59c919  tests/usage-agents-retry.test.js
