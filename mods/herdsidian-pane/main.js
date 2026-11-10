@@ -7,7 +7,7 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { panes, props, run, theme, home } from "herdr";
-import { tokens } from "./tokens.js";
+import { tokens, RADIUS } from "./tokens.js";
 import { icon, dot, needsPill, workingBar } from "./ui.js";
 
 // The pane card's corner radius. Must match "radius" in layouts/herdsidian.json (a test checks it).
@@ -41,7 +41,7 @@ export default class Pane extends View {
     return div()
       .id(id)
       .p(3)
-      .rounded(4)
+      .rounded(RADIUS.control)
       .text_color(t.muted)
       .hover((s) => s.bg(k.pill).text_color(t.foreground))
       .on_click((_e, cx) => {

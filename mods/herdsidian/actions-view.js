@@ -6,7 +6,7 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { theme, setShared, run, openOverlay, closeOverlay, props } from "herdr";
-import { tokens } from "./tokens.js";
+import { tokens, RADIUS } from "./tokens.js";
 import { dirOf, leafOf } from "./notes.js";
 import { MENU, ACTION_KEY, menuItems, menuSize, validateName, noteFileName, takenName, deleteDetail } from "./actions.js";
 import { listNames, countFolder } from "./vault-io.js";
@@ -135,16 +135,16 @@ export class VaultSurface {
 
   menuCard(t) {
     const { width, height } = menuSize(this.target.kind);
-    const row = ({ id, label }) => h_flex().id(`vault-menu-${id}`).h(MENU.row).px(10).items_center().rounded(6)
+    const row = ({ id, label }) => h_flex().id(`vault-menu-${id}`).h(MENU.row).px(10).items_center().rounded(RADIUS.control)
       .text_size(12.5).text_color(t.foreground).cursor_pointer()
       .hover((s) => s.bg(tokens(t).pill)).on_click(() => this.choose(id)).child(label);
     return v_flex().id("vault-menu").track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
-      .w(width).h(height).p(MENU.pad / 2).rounded(8).border_1().border_color(t.border).bg(t.popover)
+      .w(width).h(height).p(MENU.pad / 2).rounded(RADIUS.overlay).border_1().border_color(t.border).bg(t.popover)
       .children(menuItems(this.target.kind).map(row));
   }
 
   button(t, id, text, primary, action) {
-    return h_flex().id(id).h(32).px(14).items_center().rounded(8)
+    return h_flex().id(id).h(32).px(14).items_center().rounded(RADIUS.card)
       .border_1().border_color(primary ? t.solid : t.input).bg(primary ? t.solid : t.raised)
       .text_color(primary ? t.solid_foreground : t.foreground).text_size(12.5).font_medium().cursor_pointer()
       .hover((s) => s.opacity(0.88)).on_click(action).child(text);
@@ -153,11 +153,11 @@ export class VaultSurface {
   promptCard(t) {
     const save = this.busy ? "Checking…" : "Save";
     return v_flex().id("vault-prompt").track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
-      .w(PROMPT.width).h(PROMPT.height).p(16).rounded(10).border_1().border_color(t.border).bg(t.popover).text_color(t.foreground)
+      .w(PROMPT.width).h(PROMPT.height).p(16).rounded(RADIUS.overlay).border_1().border_color(t.border).bg(t.popover).text_color(t.foreground)
       .child(h_flex().items_center().child(div().flex_1().text_size(15).font_semibold().child(TITLES[this.p.op] ?? "Name"))
         .child(div().text_size(11).text_color(t.muted).child("Esc")))
       .child(div().pt(12).pb(6).text_size(11.5).text_color(t.muted).child("Name"))
-      .child(Input.new(this.input).h(36).px(10).rounded(9).border_1().border_color(this.inputFocused ? t.accent : t.input).bg(t.background).text_size(12.8).text_color(t.foreground))
+      .child(Input.new(this.input).h(36).px(10).rounded(RADIUS.control).border_1().border_color(this.inputFocused ? t.accent : t.input).bg(t.background).text_size(12.8).text_color(t.foreground))
       .child(div().id("vault-prompt-message").h(34).pt(6).text_size(11.5).text_color(t.blocked).child(this.message ?? ""))
       .child(h_flex().pt(8).gap(8).justify_end()
         .child(this.button(t, "vault-prompt-cancel", "Cancel", false, () => this.close()))
@@ -169,7 +169,7 @@ export class VaultSurface {
     const name = leafOf(path);
     const detail = this.counting ? "Counting…" : deleteDetail(name, kind, this.counts);
     return v_flex().id("vault-confirm").track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
-      .w(CONFIRM.width).h(CONFIRM.height).p(16).gap(10).rounded(10).border_1().border_color(t.border).bg(t.popover).text_color(t.foreground)
+      .w(CONFIRM.width).h(CONFIRM.height).p(16).gap(10).rounded(RADIUS.overlay).border_1().border_color(t.border).bg(t.popover).text_color(t.foreground)
       .child(h_flex().items_center().child(div().flex_1().text_size(15).font_semibold().child(`Delete "${name}"?`))
         .child(div().text_size(11).text_color(t.muted).child("Esc")))
       .child(div().id("vault-confirm-detail").flex_1().min_h(0).text_size(12.5).text_color(t.muted).child(detail))

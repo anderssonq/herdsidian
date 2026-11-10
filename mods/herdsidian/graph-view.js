@@ -5,7 +5,7 @@
 
 import { PathBuilder, div, svg } from "gpui-kit";
 import { h_flex, v_flex, Input } from "gpui-base";
-import { tokens } from "./tokens.js";
+import { tokens, alpha, RADIUS } from "./tokens.js";
 import { keycap } from "./ui.js";
 import { base } from "./notes.js";
 import { LABEL, estimateWidth, fitLabel } from "./graph.js";
@@ -14,8 +14,8 @@ const AREA_HEIGHT = 200;
 const AREA_MIN = 80; // the graph area shrinks to this when the panel is short; the strip never does
 const HEADER_HEIGHT = 32;
 const STRIP_MAX = 96;
-// The strip's fixed parts: top and bottom padding 6 + 8, two gaps of 6, the title line (18) and the actions row (22).
-const STRIP_FIXED = 6 + 8 + 2 * 6 + 18 + 22;
+// The strip's fixed parts: top and bottom padding 6 + 8, two gaps of 6, the title line (18) and the actions row (28).
+const STRIP_FIXED = 6 + 8 + 2 * 6 + 18 + 28;
 const PICKER_MAX = 190;
 const PICK_HITS = 6;
 
@@ -26,10 +26,10 @@ function strokes(segments, color) {
   return globalThis.window.paint_path(b.build(), color).absolute().top(0).left(0).size_full();
 }
 
-// A small pill-shaped action. Without `action` it is disabled: muted, with the reason as tooltip.
+// A small pill-shaped action. Without `act` it is disabled: muted, with the reason as tooltip.
 function action(t, k, id, content, tip, act) {
   const on = typeof act === "function";
-  return h_flex().id(id).h(22).px(8).gap(6).flex_none().items_center().rounded(5).text_size(11.5)
+  return h_flex().id(id).h(24).px(8).gap(6).flex_none().items_center().rounded(RADIUS.control).text_size(11.5)
     .text_color(on ? t.foreground : t.muted)
     .bg(on ? t.raised : k.pill)
     .when(on, (el) => el.cursor_pointer().on_click(act))
@@ -37,33 +37,50 @@ function action(t, k, id, content, tip, act) {
     .child(content);
 }
 
+// The primary action of the strip (V6): solid, with a ⌘↵ key cap. Disabled it is the muted pill, reason as tooltip.
+function sendButton(t, k, m, on) {
+  const ok = m.send.ok;
+  const cap = div().flex_none().px(5).h(18).rounded(RADIUS.control).border(1).border_color(alpha(t.solid_foreground, 0.25))
+    .text_size(10.5).font_weight(500).flex().items_center().child("⌘↵");
+  return h_flex().id("graph-send").h(28).flex_none().items_center().gap(8).rounded(RADIUS.control).text_size(12)
+    .when(ok, (el) => el.pl(12).pr(6).bg(t.solid).text_color(t.solid_foreground).font_weight(600).cursor_pointer()
+      .on_click((_e, cx) => on.send(cx)))
+    .when(!ok, (el) => el.px(12).bg(k.pill).text_color(t.muted))
+    .when(!ok && Boolean(m.send.reason), (el) => el.tooltip(m.send.reason))
+    .child("Send to agent")
+    .when(ok, (el) => el.child(cap));
+}
+
 // A 16 px icon button inside a chip.
 function iconButton(t, k, id, icon, tip, act) {
-  return div().id(id).size(16).flex_none().flex().items_center().justify_center().rounded(4).text_color(t.muted)
+  return div().id(id).size(16).flex_none().flex().items_center().justify_center().rounded(RADIUS.control).text_color(t.muted)
     .hover((s) => s.bg(k.pill).text_color(t.foreground)).cursor_pointer().tooltip(tip).on_click(act)
     .child(svg(`mods/workspace-chrome/${icon}.svg`).size(10));
 }
 
 // The 1 | 2 hops switch, in the style of the Notes pills.
 function hopsPill(t, k, m, on) {
-  const one = (n) => div().id(`hops-${n}`).px(7).h(20).flex().items_center().rounded(5).text_size(11.5).cursor_pointer()
+  const one = (n) => div().id(`hops-${n}`).px(7).h(20).flex().items_center().rounded(RADIUS.control).text_size(11.5).cursor_pointer()
     .text_color(m.hops === n ? t.foreground : t.muted).when(m.hops === n, (el) => el.bg(t.raised))
     .hover((s) => s.text_color(t.foreground)).tooltip(n === 1 ? "Direct links only" : "Links of links").on_click((_e, cx) => on.setHops(n, cx)).child(String(n));
-  return h_flex().flex_none().p(1).gap(1).items_center().rounded(6).bg(k.pill).child(one(1)).child(one(2));
+  return h_flex().flex_none().p(1).gap(1).items_center().rounded(RADIUS.control).bg(k.pill).child(one(1)).child(one(2));
 }
 
 function header(t, k, m, on) {
   const count = m.count > 0 ? `${m.count} ${m.count === 1 ? "note" : "notes"}` : null;
+  const shut = m.hidden || m.folded;
+  const tip = m.folded ? "Folded while reading: click to show the graph for this note" : m.hidden ? "Show the graph" : "Hide the graph";
   return h_flex().h(HEADER_HEIGHT).flex_none().px(12).gap(8).items_center()
-    .child(h_flex().id("graph-toggle").gap(6).flex_none().items_center().cursor_pointer().tooltip(m.hidden ? "Show the graph" : "Hide the graph")
+    .child(h_flex().id("graph-toggle").gap(6).flex_none().items_center().cursor_pointer().tooltip(tip)
       .on_click((_e, cx) => on.toggle(cx))
-      .child(svg(`mods/files/chevron-${m.hidden ? "right" : "down"}.svg`).size(9).flex_none().text_color(t.muted))
-      .child(div().text_size(12).font_semibold().text_color(t.foreground).child("Graph")))
-    .when(!m.hidden, (el) => el.child(hopsPill(t, k, m, on)))
-    .when(Boolean(count), (el) => el.child(div().flex_none().text_size(11).text_color(t.muted).child(count)))
-    .when(m.omitted > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.muted).child(`+${m.omitted} more`)))
+      .child(svg(`mods/files/chevron-${shut ? "right" : "down"}.svg`).size(9).flex_none().text_color(t.muted))
+      .child(div().text_size(12).font_semibold().text_color(t.foreground).child("Graph"))
+      .when(m.folded, (el) => el.child(div().text_size(11).text_color(t.muted).child(m.foldDetail))))
+    .when(!shut, (el) => el.child(hopsPill(t, k, m, on)))
+    .when(Boolean(count) && !m.folded, (el) => el.child(div().flex_none().text_size(11).text_color(t.muted).child(count)))
+    .when(m.omitted > 0 && !m.folded, (el) => el.child(div().flex_none().text_size(11).text_color(t.muted).child(`+${m.omitted} more`)))
     .child(div().flex_1())
-    .when(!m.hidden, (el) => el.child(div().id("graph-fit").px(8).h(22).flex_none().flex().items_center().rounded(5).text_size(11.5).text_color(t.muted)
+    .when(!shut, (el) => el.child(div().id("graph-fit").px(8).h(22).flex_none().flex().items_center().rounded(RADIUS.control).text_size(11.5).text_color(t.muted)
       .cursor_pointer().hover((s) => s.text_color(t.foreground)).tooltip("Reset pan and zoom").on_click((_e, cx) => on.fit(cx)).child("Fit")));
 }
 
@@ -85,7 +102,7 @@ function node(t, k, n, hovered, on) {
 // One label, in the box placeLabels chose. The center and the hovered one sit on a pill so edges do not run through them.
 function label(t, box, center, hovered) {
   return div().absolute().left(box.left).top(box.top).w(box.w).h(box.h).flex().items_center()
-    .when(box.side === "below", (el) => el.justify_center()).px(LABEL.pad / 2).rounded(4).truncate().text_size(LABEL.size)
+    .when(box.side === "below", (el) => el.justify_center()).px(LABEL.pad / 2).rounded(RADIUS.control).truncate().text_size(LABEL.size)
     .text_color(center || hovered ? t.foreground : t.muted).when(center, (el) => el.font_semibold())
     .when(center || hovered, (el) => el.bg(t.raised))
     .child(box.text);
@@ -130,7 +147,7 @@ function area(t, k, m, on) {
 
 function chip(t, k, c, m, on) {
   const auto = c.scope === "auto", pinned = c.scope === "agent";
-  return h_flex().h(22).pl(8).pr(4).gap(4).flex_none().items_center().rounded(5).bg(k.accentSoft).text_size(11.5).text_color(t.foreground)
+  return h_flex().h(22).pl(8).pr(4).gap(4).flex_none().items_center().rounded(RADIUS.control).bg(k.accentSoft).text_size(11.5).text_color(t.foreground)
     .child(div().id(`chip-${c.path}`).truncate().max_w(120).cursor_pointer().tooltip(c.path).on_click((_e, cx) => on.open(c.path, cx)).child(c.label ?? base(c.path)))
     .when(auto, (el) => el.child(div().flex_none().text_size(10).text_color(t.muted).child("auto")))
     .when(m.agentOnlyAllowed && !auto, (el) => el.child(iconButton(t, k, `chip-scope-${c.path}`, pinned ? "pin" : "pin-off",
@@ -139,7 +156,7 @@ function chip(t, k, c, m, on) {
 }
 
 function suggestion(t, k, s, on) {
-  return h_flex().id(`sugg-${s.path}`).h(22).pl(8).pr(6).gap(4).flex_none().items_center().rounded(5).border(1).border_color(k.line)
+  return h_flex().id(`sugg-${s.path}`).h(22).pl(8).pr(6).gap(4).flex_none().items_center().rounded(RADIUS.control).border(1).border_color(k.line)
     .text_size(11.5).text_color(t.muted).cursor_pointer().hover((s2) => s2.text_color(t.foreground)).tooltip("Link this note")
     .on_click((_e, cx) => on.pin(s.path, cx))
     .child(div().truncate().max_w(120).child(s.label ?? base(s.path)))
@@ -150,10 +167,12 @@ function suggestion(t, k, s, on) {
 function picker(t, k, m, on) {
   return v_flex().gap(2)
     .on_key_down((e, cx) => { if (e.key === "escape") { on.pickClose(cx); cx.stop_propagation(); } })
-    .child(h_flex().id("pick-input").h(26).px(8).gap(6).items_center().rounded(6).bg(k.pill).on_click(() => m.pickState.focus())
+    .child(h_flex().id("pick-input").h(26).px(8).gap(6).items_center().rounded(RADIUS.control).bg(k.pill).on_click(() => m.pickState.focus())
       .child(Input.new(m.pickState).flex_1().text_size(12).text_color(t.foreground))
       .child(iconButton(t, k, "pick-close", "x", "Close", (_e, cx) => on.pickClose(cx))))
-    .children(m.pickHits.slice(0, PICK_HITS).map((h) => h_flex().id(`pick-${h.path}`).h(24).px(8).items_center().rounded(5).text_size(12)
+    .child(action(t, k, "graph-add-current", h_flex().gap(6).items_center().child("Add current note").child(keycap(t, "⌘L")),
+      m.canAddCurrent ? null : "Open a note first", m.canAddCurrent ? (_e, cx) => on.addCurrent(cx) : null))
+    .children(m.pickHits.slice(0, PICK_HITS).map((h) => h_flex().id(`pick-${h.path}`).h(24).px(8).items_center().rounded(RADIUS.control).text_size(12)
       .text_color(t.muted).cursor_pointer().hover((s) => s.bg(k.pill).text_color(t.foreground)).on_click((_e, cx) => on.pickChoose(h.path, cx))
       .child(div().truncate().child(h.label ?? base(h.path)))));
 }
@@ -165,12 +184,11 @@ function strip(t, k, m, on) {
     .child(h_flex().flex_none().gap(8).items_center()
       .child(div().flex_1().min_w(0).truncate().text_size(11.5).font_medium().text_color(t.foreground).child(m.agentLabel ?? "No agent focused"))
       .child(div().flex_none().text_size(11).text_color(t.muted).child(`${n} ${n === 1 ? "note" : "notes"}`)))
-    .child(h_flex().flex_none().flex_wrap().gap(6).items_center()
-      .child(action(t, k, "graph-add", "+ add note", null, (_e, cx) => on.pick(cx)))
-      .child(action(t, k, "graph-add-current",
-        h_flex().gap(6).items_center().child("Add current note").child(keycap(t, "⌘L")),
-        m.canAddCurrent ? null : "Open a note first", m.canAddCurrent ? (_e, cx) => on.addCurrent(cx) : null))
-      .child(action(t, k, "graph-send", "Send to agent", m.send.ok ? null : m.send.reason, m.send.ok ? (_e, cx) => on.send(cx) : null)))
+    .child(h_flex().flex_none().gap(6).items_center()
+      .child(h_flex().id("graph-add").h(28).px(10).flex_none().items_center().rounded(RADIUS.control).text_size(12)
+        .bg(t.raised).text_color(t.foreground).cursor_pointer().on_click((_e, cx) => on.pick(cx)).child("+ Add note"))
+      .child(div().flex_1())
+      .child(sendButton(t, k, m, on)))
     .child(v_flex().id("graph-strip-body").flex_none().max_h(m.picking ? PICKER_MAX : STRIP_MAX).overflow_y_scrollbar().gap(6)
       .when(n === 0, (el) => el.child(div().text_size(12).text_color(t.muted).child("No notes linked yet")))
       .when(n > 0 || m.suggestions.length > 0, (el) => el.child(h_flex().flex_wrap().gap(4)
@@ -189,9 +207,12 @@ export function graphSection(t, m, on) {
   const k = tokens(t);
   // Open: the section may shrink with the panel, but only through the area (its min_h is AREA_MIN). Its own
   // min_h is the divider + header + the smallest area + the strip's fixed parts, so the actions stay visible.
+  // Folded while reading (V6): the area is gone but the strip stays under the header. Hidden: the header only.
   return v_flex().id("graph-section").w_full().when(m.hidden, (el) => el.flex_none())
-    .when(!m.hidden, (el) => el.flex_shrink(1).min_h(1 + HEADER_HEIGHT + AREA_MIN + STRIP_FIXED))
+    .when(m.folded, (el) => el.flex_shrink(1).min_h(1 + HEADER_HEIGHT + STRIP_FIXED))
+    .when(!m.hidden && !m.folded, (el) => el.flex_shrink(1).min_h(1 + HEADER_HEIGHT + AREA_MIN + STRIP_FIXED))
     .child(div().h(1).w_full().flex_none().bg(k.line))
     .child(header(t, k, m, on))
-    .when(!m.hidden, (el) => el.child(area(t, k, m, on)).child(strip(t, k, m, on)));
+    .when(!m.hidden && !m.folded, (el) => el.child(area(t, k, m, on)))
+    .when(!m.hidden, (el) => el.child(strip(t, k, m, on)));
 }

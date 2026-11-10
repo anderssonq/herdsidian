@@ -10,7 +10,7 @@
 
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, Input, TextView } from "gpui-base";
-import { tokens } from "./tokens.js";
+import { tokens, RADIUS } from "./tokens.js";
 import { icon, dot, needsPill, keycap } from "./ui.js";
 import { ROW, LIST_MAX } from "./palette.js";
 
@@ -19,7 +19,7 @@ const FIRST_RUN_HINT = "Open Notes once (⌘⇧O) to choose a vault";
 export const linkPlaceholder = (space) => `Find a note to link to ${space}…`;
 
 const CARD_WIDTH = 680;
-const CARD_RADIUS = 18;
+const CARD_RADIUS = RADIUS.overlay;
 const CARD_PAD = 16;
 const PREVIEW_HEIGHT = 200;
 
@@ -27,7 +27,7 @@ const text12 = (t, tone, s) => div().px(10).h(ROW.title).flex().items_center().f
 
 // One selectable row's frame: the selected one has the accentSoft fill; hover never selects (AC22).
 function frame(k, m, row, on, height) {
-  return h_flex().id(`row-${row.key}`).h(height).px(10).gap(8).items_center().flex_none().rounded(8).cursor_pointer()
+  return h_flex().id(`row-${row.key}`).h(height).px(10).gap(8).items_center().flex_none().rounded(RADIUS.card).cursor_pointer()
     .when(row.key === m.selected, (el) => el.bg(k.accentSoft))
     .on_click((_e, cx) => on.choose(row.key, cx));
 }
@@ -56,10 +56,20 @@ function commandRow(t, k, m, row, on) {
     .when(Boolean(row.hint), (el) => el.child(keycap(t, row.hint)));
 }
 
-// A setting: its name, and its current value at the end.
+// A theme swatch half: a square of the theme's canvas with its accent dot.
+const swatch = (k, id, half) => div().id(id).size(16).flex_none().flex().items_center().justify_center().rounded(RADIUS.control)
+  .bg(half.to).border(1).border_color(k.line)
+  .child(div().id(`${id}-dot`).size(6).flex_none().rounded(RADIUS.control).bg(half.dot));
+
+// A setting: its name, and its current value at the end. A theme row also has its two swatches and a check.
 function settingRow(t, k, m, row, on) {
+  const s = row.setting;
   return frame(k, m, row, on, ROW.row)
+    .when(Boolean(s.swatch), (el) => el.child(h_flex().gap(4).flex_none()
+      .when(Boolean(s.swatch.dark), (box) => box.child(swatch(k, `swatch-${s.id}-dark`, s.swatch.dark)))
+      .when(Boolean(s.swatch.light), (box) => box.child(swatch(k, `swatch-${s.id}-light`, s.swatch.light)))))
     .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(t.foreground).child(row.label))
+    .when(Boolean(s.selected), (el) => el.child(div().id(`check-${s.id}`).flex_none().text_size(12.5).text_color(t.accent).child("✓")))
     .child(div().flex_none().text_size(12).text_color(t.muted).child(row.detail));
 }
 
@@ -106,7 +116,7 @@ function strip(t, k, m, s, on) {
 
 function tabs(t, k, m, on) {
   return h_flex().gap(4).items_center()
-    .children(m.tabs.map((tab) => div().id(`tab-${tab.id}`).px(10).h(24).flex().items_center().rounded(6).text_size(12).cursor_pointer()
+    .children(m.tabs.map((tab) => div().id(`tab-${tab.id}`).px(10).h(24).flex().items_center().rounded(RADIUS.control).text_size(12).cursor_pointer()
       .text_color(tab.active ? t.foreground : t.muted)
       .when(tab.active, (el) => el.bg(k.accentSoft))
       .when(!tab.active, (el) => el.hover((s) => s.text_color(t.foreground)))
@@ -119,7 +129,7 @@ function header(t, k, m, on) {
     .child(h_flex().h(32).gap(8).items_center()
       .child(svg("mods/workspace-chrome/search.svg").size(14).flex_none().text_color(t.muted))
       .child(Input.new(m.input).flex_1().text_size(14).text_color(t.foreground))
-      .when(Boolean(m.linking), (el) => el.child(div().h(22).px(8).flex_none().flex().items_center().rounded(5).bg(k.accentSoft)
+      .when(Boolean(m.linking), (el) => el.child(div().h(22).px(8).flex_none().flex().items_center().rounded(RADIUS.control).bg(k.accentSoft)
         .text_size(11.5).text_color(t.foreground).child(`Link to ${m.linking.space}`))))
     .child(tabs(t, k, m, on));
 }

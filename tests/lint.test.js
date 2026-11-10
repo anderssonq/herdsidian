@@ -148,6 +148,31 @@ test("accepts \"cmd-enter\" in palette-main.js", () => {
   assert.equal(r.code, 0, r.stderr);
 });
 
+// Corner radius: warn (exit 0) on a literal other than 6, 8, 14.
+const lintRounded = (expr) => {
+  const dir = copyRepo();
+  addLine(dir, [pane], expr);
+  const r = spawnSync(process.execPath, ["scripts/lint.js"], { cwd: dir, encoding: "utf8" });
+  return { code: r.status, out: r.stdout, err: r.stderr, dir };
+};
+
+test("warns on a rounded literal outside 6, 8, 14 and still exits 0", () => {
+  const r = lintRounded("div().rounded(7)");
+  assert.equal(r.code, 0, r.err);
+  assert.match(r.out + r.err, /warn: mods\/herdsidian-pane\/main\.js:\d+: rounded\(7\) — use RADIUS\.control\|card\|overlay/);
+  assert.match(r.out, /lint ok: \d+ files/);
+});
+
+test("accepts rounded(6|8|14), RADIUS.x, other args and rounded_full()", () => {
+  const r = lintRounded("[div().rounded(6), div().rounded(8), div().rounded(14), div().rounded(RADIUS.card), div().rounded(n), div().rounded_full()]");
+  assert.equal(r.code, 0, r.err);
+  // The tree already has warnings elsewhere; none may name the probe line or a 6, 8 or 14 radius.
+  const probeLine = readFileSync(join(r.dir, pane), "utf8").split("\n").findIndex((l) => l.includes("function lintProbe")) + 1;
+  assert.ok(probeLine > 0);
+  assert.doesNotMatch(r.out + r.err, new RegExp(`warn: ${pane.replace(/[./]/g, "\\$&")}:${probeLine}:`));
+  assert.doesNotMatch(r.out + r.err, /warn: [^\n]*rounded\((6|8|14)\)/);
+});
+
 // Lints a copy whose keys.json has cmd-k bound to `action`.
 const lintKey = (action) => {
   const dir = copyRepo();

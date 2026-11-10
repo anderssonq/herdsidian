@@ -8,7 +8,7 @@ import { join } from "node:path";
 import {
   TOKEN_FN, CLAUDE_SCRIPT, CODEX_SCRIPT, ERROR_TEXT, createUsage, fetchProvider, formatAge, formatPercent, formatReset, formatWindow,
   parseClaude, parseClaudeOutput, parseCodexLine, parseCodexOutput, parseOpencode, providersFrom, windowView,
-} from "../mods/herdsidian-tabs/usage.js";
+} from "../mods/herdsidian-status/usage.js";
 
 const NOW = Date.parse("2026-11-06T12:00:00Z");
 const MIN = 60000, HOUR = 60 * MIN, DAY = 24 * HOUR;

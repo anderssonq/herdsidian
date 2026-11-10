@@ -7,10 +7,11 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window } from "herdr";
-import { tokens, alpha, markLetter } from "./tokens.js";
+import { tokens, alpha, markLetter, RADIUS } from "./tokens.js";
 import { narrow } from "./layout.js";
 import { keycap } from "./ui.js";
 import { settings } from "./settings.js";
+import { showKeyHint } from "./keys.js";
 
 // Where a space is now: its first terminal's live folder, else where it was made.
 // `ps`: panes(), read once by the caller (each read copies every pane).
@@ -69,6 +70,7 @@ export default class Spaces extends View {
     this.shown = new Set(spaces().map((s) => s.id));
     this.born = {};
     this.pressed = null;
+    this.hovered = null; // the row under the pointer: where the "modifier" key hint shows
     this.over = null;
     this.machines = [];
     this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]"));
@@ -261,11 +263,11 @@ export default class Spaces extends View {
         .child(svg(`mods/workspace-chrome/${m ? "server" : "monitor"}.svg`).size(13).flex_none())
         .when(!collapsed, el => el.child(div().flex_1().truncate().child(m ?? "This computer"))
           .when(!connected, el => el.child(div().flex_none().child((machine?.state ?? "asleep").replace(/_/g, " "))))
-          .when(connected, el => el.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(4).rounded(4).hover(s => s.bg(k.pill).text_color(t.foreground))
+          .when(connected, el => el.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(4).rounded(RADIUS.control).hover(s => s.bg(k.pill).text_color(t.foreground))
             .on_click((_e, cx) => { cx.stop_propagation(); run("space.new", m ? { machine: m } : {}); }).child("+")))
-          .child(div().size(6).rounded(3).flex_none().bg(connected ? t.ansi2 : t.dim))
+          .child(div().size(6).rounded_full().flex_none().bg(connected ? t.ansi2 : t.dim))
           .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(11).flex_none()));
-      const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(28).flex_none().px(8).gap(7).items_center().rounded(7)
+      const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(28).flex_none().px(8).gap(7).items_center().rounded(RADIUS.card)
         .text_size(12).text_color(t.muted).hover(s => s.bg(k.pill).text_color(t.foreground))
         .on_click(() => run("space.new", m ? { machine: m } : {}))
         .child(svg("mods/workspace-chrome/plus.svg").size(12)).when(!collapsed, el => el.child("New space there"));
@@ -273,15 +275,16 @@ export default class Spaces extends View {
     });
   }
 
-  // Right of the name: ahead/behind pills, a dot when blocked, and the key cap on every row
-  // while key hints are on.
+  // Right of the name: ahead/behind pills, a dot when blocked, and the key cap: on every row for
+  // "always", on the hovered row for "modifier" (a mod cannot see modifier keys), never for "off".
   signals({ w, i, g }, t) {
-    const cap = i < 9 && settings().keyHints;
-    const pill = (text, c) => div().flex_none().h(18).px(6).rounded(5).flex().items_center().text_size(11).text_color(c).bg(alpha(c, 0.16)).child(text);
+    const hints = settings().keyHints;
+    const cap = i < 9 && showKeyHint(hints, this.hovered, w.id);
+    const pill = (text, c) => div().flex_none().h(18).px(6).rounded(RADIUS.control).flex().items_center().text_size(11).text_color(c).bg(alpha(c, 0.16)).child(text);
     return h_flex().flex_none().gap(5).items_center()
       .when(Boolean(g) && g.ahead > 0, (el) => el.child(pill(`\u2191${g.ahead}`, t.ansi2)))
       .when(Boolean(g) && g.behind > 0, (el) => el.child(pill(`\u2193${g.behind}`, t.ansi1)))
-      .when(w.status === "blocked", (el) => el.child(div().size(6).rounded(3).flex_none().bg(t.blocked)))
+      .when(w.status === "blocked", (el) => el.child(div().size(6).rounded_full().flex_none().bg(t.blocked)))
       .when(cap, (el) => el.child(keycap(t, `\u2303${i + 1}`)));
   }
 
@@ -291,7 +294,7 @@ export default class Spaces extends View {
     const color = colors[w.id] ?? "ansi6";
     const fill = /^#[0-9a-f]{6}/i.test(color) ? color : MARK[color] ?? t[color] ?? t.accent;
     const k = tokens(t);
-    const tip = spaceTip(g, { tree, name: w.name, hint: i < 9 && settings().keyHints ? `⌃${i + 1}` : "" });
+    const tip = spaceTip(g, { tree, name: w.name, hint: i < 9 && settings().keyHints !== "off" ? `⌃${i + 1}` : "" });
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
@@ -300,7 +303,7 @@ export default class Spaces extends View {
       .h(rowHeight({ tree }))
       .flex_none()
       .justify_center()
-      .rounded(8)
+      .rounded(RADIUS.card)
       .when(on, (el) => el.bg(k.accentSoft))
       .when(!on, (el) => el.hover((s) => s.bg(k.pill)))
       .when(this.pressed === i && this.over !== i, (el) => el.opacity(0.5))
@@ -309,6 +312,11 @@ export default class Spaces extends View {
           .when(this.pressed < i, line => line.bottom(0))
           .when(this.pressed > i, line => line.top(0)),
       ))
+      .on_hover((on, cx) => {
+        if (on) this.hovered = w.id;
+        else if (this.hovered === w.id) this.hovered = null;
+        cx.notify();
+      })
       .on_mouse_down("left", () => {
         this.pressed = i;
         this.over = i;
@@ -336,7 +344,7 @@ export default class Spaces extends View {
           .gap(10)
           .items_center()
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.dim)))
-          .when(!tree, el => el.child(h_flex().size(20).flex_none().rounded(6).bg(alpha(fill, 0.2)).items_center().justify_center().text_size(11).font_bold().text_color(markLetter(fill, t)).child([...w.name][0]?.toUpperCase() ?? "?")))
+          .when(!tree, el => el.child(h_flex().size(20).flex_none().rounded(RADIUS.control).bg(alpha(fill, 0.2)).items_center().justify_center().text_size(11).font_bold().text_color(markLetter(fill, t)).child([...w.name][0]?.toUpperCase() ?? "?")))
           .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).when(on, el => el.font_medium()).child(w.name))
           .child(this.signals({ w, i, g }, t)),
       );
@@ -376,14 +384,14 @@ export default class Spaces extends View {
     return v_flex().size_full().min_h(0).bg(k.glass).text_size(13)
       .child(h_flex().h(24).flex_none().px(8).gap(8).items_center().text_size(11).text_color(t.muted)
         .when(!collapsed, el => el.child(h_flex().id("spaces-fold").gap(4).items_center().cursor_pointer()
-          .when(settings().keyHints, el => el.tooltip("⌃ 1–9 · ⌘⌥[ ⌘⌥]"))
+          .when(settings().keyHints !== "off", el => el.tooltip("⌃ 1–9 · ⌘⌥[ ⌘⌥]"))
           .on_click((_e, cx) => { this.sectionFolded = !this.sectionFolded; cx.notify(); })
           .child(svg(`mods/workspace-chrome/chevron-${this.sectionFolded ? "right" : "down"}.svg`).size(11).flex_none())
           .child(div().font_semibold().child("Spaces")))
           .child(div().flex_1())
           .child(div().id("spaces-count").flex_none().text_size(11).text_color(t.muted).child(String(sp.length))))
         .when(collapsed, el => el.justify_center())
-        .child(div().id("space-new").size(22).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(k.pill).text_color(t.foreground))
+        .child(div().id("space-new").size(22).flex_none().flex().items_center().justify_center().rounded(RADIUS.control).hover(s => s.bg(k.pill).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
       .child(v_flex().flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })

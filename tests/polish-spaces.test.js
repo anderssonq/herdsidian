@@ -63,6 +63,7 @@ test("ahead and behind pills appear only above zero", () => {
 
 test("with key hints on the key cap shows on every row of the first nine, with no hover, and not on the tenth", () => {
   const { view, cx } = mount();
+  state.shared["herdsidian.settings"] = { keyHints: "always" };
   const cap = (id, n) => texts(row(view, cx, id)).includes("⌃" + n);
   assert.equal(cap("a", 1), true);
   assert.equal(cap("b", 2), true);
@@ -86,6 +87,7 @@ test("with key hints on the key cap shows on every row of the first nine, with n
 
 test("the key cap, both pills and the blocked dot show together on one row with no hover", () => {
   const { view, cx } = mount({ "/r/b": git({ ahead: 3, behind: 1 }) });
+  state.shared["herdsidian.settings"] = { keyHints: "always" };
   const dot = (id) => walk(row(view, cx, id)).some((n) => call(n, "size")?.[0] === 6 && call(n, "bg"));
   const arrows = (id) => texts(row(view, cx, id)).filter((s) => /[↑↓]/.test(s));
   assert.deepEqual(arrows("b"), ["↑3", "↓1"]);

@@ -4,6 +4,9 @@
 export const PULSE = { from: 0.4, to: 1, period: 1800 }; // .loop("opacity", PULSE)
 export const GLOW_ANGLE = 180; // top sheen gradient: top to bottom
 
+// Corner radii: .rounded(RADIUS.control) for buttons and inputs, card for cards, overlay for overlays.
+export const RADIUS = { control: 6, card: 8, overlay: 14 };
+
 // "#rrggbb" or "#rrggbbaa" in, "#rrggbb" + two hex digits of round(a * 255) out.
 export function alpha(color, a) {
   const level = Math.min(255, Math.max(0, Math.round(a * 255)));

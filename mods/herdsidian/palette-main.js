@@ -7,17 +7,19 @@
 
 import { InputState } from "gpui-base";
 import { theme, agents, spaces, panes, focused, keys, layout, shared, setShared, home, run, notify, props, closeOverlay,
-  knownAgents, readTextFile } from "herdr";
+  knownAgents, readTextFile, themes, settings as herdrSettings, appHome } from "herdr";
 import { base, render as toMarkdown } from "./notes.js";
 import { emptyDoc, pickAgent } from "./context.js";
 import { stateDir, loadContext, saveContext, allNotes, noteTime } from "./io.js";
 import {
-  ROW, LIST_MAX, TABS, scene, commandList, settingSections, buildList, rankNoteRows, hasMod, agentHint, topMeta, wrap, sendState, planSend, footer,
+  ROW, LIST_MAX, TABS, scene, commandList, paletteSettings, buildList, rankNoteRows, hasMod, agentHint, topMeta, wrap, sendState, planSend, footer,
   visibleWindow, isShown, targetAgent, sameKey, rankKey, modelKey,
 } from "./palette.js";
 import { sendText } from "./send.js";
 import { find } from "./layout.js";
 import { settings, setSetting } from "./settings.js";
+import { themeCalls, selectedFamily, parseAppearance } from "./theme-pick.js";
+import { SIDEBAR_STORE, readSidebar } from "./sidebar.js";
 import { paletteCard, PLACEHOLDER, linkPlaceholder } from "./palette-view.js";
 
 const TAB_LABELS = { all: "All", notes: "Notes", agents: "Agents", commands: "Commands", settings: "Settings" };
@@ -44,6 +46,7 @@ export class Palette {
     this.mtimes = new Map(); this.statted = new Set();
     this.previewOn = false; this.previewPath = null; this.previewData = null; this.previewGen = 0;
     this.memo = null; this.list = null; this.sceneMemo = null; this.rankMemo = null;
+    this.appearance = null;
     this.handle = cx.focus_handle();
     this.on = this.callbacks();
     this.input = this.makeInput(PLACEHOLDER);
@@ -53,6 +56,7 @@ export class Palette {
     // Everything slow runs off render. Agents and commands show at once; the notes arrive later (AC35, AC39).
     if (this.vault) { this.loadNotes(cx); this.loadDoc(cx); }
     if (space) this.loadStarter(cx, space);
+    this.loadAppearance(cx);
   }
 
   makeInput(placeholder) {
@@ -91,6 +95,16 @@ export class Palette {
     });
   }
 
+  // Light or dark lives in Herdr's settings.json, which is only read, never written. Unreadable: null.
+  loadAppearance(cx) {
+    cx.spawn(async (cx) => {
+      let value = null;
+      try { value = parseAppearance(await readTextFile(`${appHome()}/settings.json`)); } catch {}
+      this.appearance = value;
+      this.touch(cx);
+    });
+  }
+
   touch(cx) {
     if (!this.dead) cx.notify();
   }
@@ -121,10 +135,15 @@ export class Palette {
       return;
     }
     // Settings change in place: the palette stays open and its row shows the new value.
+    // Only Appearance closes it: it sends the person to Herdr Settings.
     if (row.kind === "setting") {
       const change = row.setting.action;
-      if (change.type === "setting") setSetting(change.name, change.value);
+      if (change.type === "theme") {
+        for (const [name, args] of themeCalls(change.family, themes())) run(name, args);
+        this.loadAppearance(cx);
+      } else if (change.type === "setting") setSetting(change.name, change.value);
       else run(change.name, change.args);
+      if (row.setting.closes) return this.close();
       cx.notify();
       return;
     }
@@ -273,27 +292,30 @@ export class Palette {
     const live = agents();
     const tree = layout();
     const hasList = hasMod(tree, "guide-agents");
-    const notesHidden = !isShown(tree, "herdsidian");
-    const filesHidden = !isShown(tree, "files"), changesHidden = !isShown(tree, "changes");
-    // Notes is a rail under 160 px, as Notes itself decides (main.js narrow()).
-    const notesRail = (find(tree, "herdsidian")?.size?.px ?? Infinity) < 160;
+    const sidebarHidden = !isShown(tree, "herdsidian"), sidebarTab = readSidebar(shared(SIDEBAR_STORE)).tab;
+    // The sidebar is a rail under 160 px, as Notes itself decides (main.js narrow()).
+    const sidebarRail = (find(tree, "herdsidian")?.size?.px ?? Infinity) < 160;
     const current = settings();
     const bindings = keys(), layoutName = shared("layout"), order = shared("guide-agents.order");
+    const themeList = themes(), family = selectedFamily(herdrSettings()), appearance = this.appearance;
     const inputs = modelKey({
       query: this.query, tab, notes: this.notes, notesError: this.notesError, doc: this.doc, linking: this.linking,
-      starter: this.starter, agents: live, order, layoutName, bindings, notesHidden, hasList, settings: current, notesRail,
-      filesHidden, changesHidden,
+      starter: this.starter, agents: live, order, layoutName, bindings, hasList, settings: current,
+      sidebarHidden, sidebarRail, sidebarTab, themes: themeList, family, appearance,
     });
     if (this.memo && sameKey(this.memo.inputs, inputs)) return this.memo;
 
     const commands = commandList({
-      vault: this.vault, notesHidden, space: this.target.space, starter: this.starter, bindings, layoutName,
+      vault: this.vault, sidebarHidden, sidebarTab, space: this.target.space, starter: this.starter, bindings, layoutName,
     });
     const sc = this.sceneFor();
     const list = buildList({
       query: this.query, tab, vault: this.vault, notes: this.notes, notesError: this.notesError, linked: sc.linked,
       contextPaths: sc.contextPaths, agents: live, commands, hintFor: (address) => agentHint(address, order, bindings, layoutName, hasList),
-      rankedNotes: this.rankedFor(tab, sc), settings: settingSections({ settings: current, notesHidden, notesRail, filesHidden, changesHidden }),
+      rankedNotes: this.rankedFor(tab, sc),
+      settings: paletteSettings({
+        settings: current, sidebarHidden, sidebarRail, sidebarTab, themes: themeList, family, appearance,
+      }),
     });
     this.memo = { inputs, tab, scene: sc, list };
     return this.memo;

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
-import { GLOW_ANGLE, PULSE, alpha, contrast, dotOffset, isLight, markLetter, mix, statusDot, tokens } from "../lib/tokens.js";
+import { GLOW_ANGLE, PULSE, RADIUS, alpha, contrast, dotOffset, isLight, markLetter, mix, statusDot, tokens } from "../lib/tokens.js";
 
 test("dotOffset keeps the 6 px grid aligned, also for fractions and negatives", () => {
   assert.equal(dotOffset(0), 0);
@@ -9,6 +9,10 @@ test("dotOffset keeps the 6 px grid aligned, also for fractions and negatives", 
   assert.equal(dotOffset(252), 0);
   assert.equal(dotOffset(248.5), 2.5);
   assert.equal(dotOffset(-1), 5);
+});
+
+test("RADIUS holds the three corner sizes", () => {
+  assert.deepEqual(RADIUS, { control: 6, card: 8, overlay: 14 });
 });
 
 const theme = {

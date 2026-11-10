@@ -1,16 +1,18 @@
-// The Usage control and card in the toolbar, rendered against stubbed runtimes.
+// The Usage control and card in the status bar, rendered against stubbed runtimes.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { state, fakeCx, settle, element, walk, findById, svgPaths } from "./support/mod-stubs.js";
 
 // The stubs treat HoverCard and knownAgents as "anything"; give them a shape this test can read.
-const hooks = { knownAgents: async () => [] };
+const hooks = { knownAgents: async () => [], spaces: [], agents: [] };
 const stubs = globalThis.__herdsidianStubs;
 stubs["gpui-base"].HoverCard = { new: (id) => element("hovercard", id) };
 stubs.herdr.knownAgents = (...args) => hooks.knownAgents(...args);
+stubs.herdr.spaces = () => hooks.spaces;
+stubs.herdr.agents = () => hooks.agents;
 
-const { default: Tabs } = await import("../mods/herdsidian-tabs/main.js");
-const { EMPTY_FAILED, EMPTY_NONE } = await import("../mods/herdsidian-tabs/usage.js");
+const { default: Status } = await import("../mods/herdsidian-status/main.js");
+const { EMPTY_FAILED, EMPTY_NONE } = await import("../mods/herdsidian-status/usage.js");
 
 const AGENTS = [
   { key: "opencode", name: "opencode", icon: "icons/opencode.svg", tint: true, installed: true },
@@ -33,18 +35,19 @@ const answering = (command, args) => {
 
 beforeEach(() => {
   calls = []; timers = [];
-  state.exec = answering;
+  state.exec = answering; state.shared = {};
   hooks.knownAgents = async () => AGENTS;
+  hooks.spaces = []; hooks.agents = [];
 });
 
 const start = async () => {
-  const view = new Tabs(), cx = fakeCx();
+  const view = new Status(), cx = fakeCx();
   cx.timer = { after: (ms, fn) => { timers.push({ ms, fn }); return { cancel() {} }; } };
   view.init({}, cx);
   await settle();
   return { view, cx };
 };
-const hovercard = (view, cx) => walk(view.render(cx)).find((n) => n.kind === "hovercard");
+const hovercard = (view) => walk(view.render()).find((n) => n.kind === "hovercard");
 const call = (node, name) => node.calls.find(([n]) => n === name)?.[1][0];
 const hoverHandler = (card) => call(call(card, "trigger"), "on_hover");
 const textsOf = (node, out = []) => {
@@ -56,71 +59,68 @@ const textsOf = (node, out = []) => {
   return out;
 };
 const cardText = (card) => textsOf(call(card, "content")).join(" | ");
-const hover = async (view, cx) => { hoverHandler(hovercard(view, cx))(true, cx); await settle(); };
+const hover = async (view) => { hoverHandler(hovercard(view))(true); await settle(); };
 
-test("the control sits directly left of Search with the card timing (AC1, AC6)", async () => {
-  const { view, cx } = await start();
-  const root = view.render(cx);
-  const kids = root.kids;
+test("the control sits at the right end of the status bar with the card timing (AC1, AC6)", async () => {
+  const { view } = await start();
+  const kids = view.render().kids;
   const at = kids.findIndex((n) => n?.kind === "hovercard");
-  assert.ok(at >= 0, "the hover card is in the toolbar");
-  assert.equal(kids[at + 1].nodeId, "search");
+  assert.ok(at >= 0, "the hover card is in the status bar");
+  assert.equal(at, kids.length - 1, "last, after the spacer");
+  assert.ok(kids[at - 1].calls.some(([n]) => n === "flex_1"), "the spacer pushes it right");
   const card = kids[at];
   assert.equal(call(card, "open_delay"), 0);
   assert.equal(call(card, "close_delay"), 150);
+  assert.equal(call(card, "anchor"), "bottom_right");
   const control = call(card, "trigger");
   assert.equal(control.nodeId, "usage");
-  assert.ok(control.calls.some(([n, a]) => n === "h" && a[0] === 30), "30 px high");
   assert.ok(control.calls.some(([n]) => n === "flex_none"), "never shrinks");
-  assert.ok(control.calls.some(([n, a]) => n === "rounded" && a[0] === 8));
-  assert.equal(control.onClick, null, "clicking does nothing else");
   assert.ok(control.calls.some(([n, a]) => n === "on_mouse_down" && a[0] === "left"));
-  assert.ok(textsOf(control).includes("Usage"));
 });
 
 test("the card is 280 px wide (AC7)", async () => {
-  const { view, cx } = await start();
-  assert.equal(call(call(hovercard(view, cx), "content"), "w"), 280);
+  const { view } = await start();
+  assert.equal(call(call(hovercard(view), "content"), "w"), 280);
 });
 
-test("the control shows the word and each provider icon in order once agents are known (AC1, AC2)", async () => {
-  const { view, cx } = await start();
-  const control = call(hovercard(view, cx), "trigger");
+test("the control shows each provider icon, primary first, once agents are known (AC1, AC2)", async () => {
+  const { view } = await start();
+  const control = call(hovercard(view), "trigger");
   assert.deepEqual(svgPaths(control), ["icons/claude.svg", "icons/codex.svg", "icons/opencode.svg"]);
 });
 
 test("no icons while knownAgents has not answered, when it rejects, or when none is installed (AC3, AC12)", async () => {
   hooks.knownAgents = () => new Promise(() => {});
-  let { view, cx } = await start();
-  assert.deepEqual(svgPaths(call(hovercard(view, cx), "trigger")), []);
-  assert.ok(textsOf(call(hovercard(view, cx), "trigger")).includes("Usage"));
+  let { view } = await start();
+  assert.deepEqual(svgPaths(call(hovercard(view), "trigger")), []);
+  assert.ok(textsOf(call(hovercard(view), "trigger")).includes("Usage"));
 
   hooks.knownAgents = () => Promise.reject(new Error("no shell"));
-  ({ view, cx } = await start());
-  assert.deepEqual(svgPaths(call(hovercard(view, cx), "trigger")), []);
-  assert.equal(cardText(hovercard(view, cx)), EMPTY_FAILED);
+  ({ view } = await start());
+  assert.deepEqual(svgPaths(call(hovercard(view), "trigger")), []);
+  assert.equal(cardText(hovercard(view)), EMPTY_FAILED);
 
   hooks.knownAgents = async () => [{ key: "gemini", installed: true }, { key: "claude", installed: false }];
-  ({ view, cx } = await start());
-  assert.deepEqual(svgPaths(call(hovercard(view, cx), "trigger")), []);
-  assert.equal(cardText(hovercard(view, cx)), EMPTY_NONE);
+  ({ view } = await start());
+  assert.deepEqual(svgPaths(call(hovercard(view), "trigger")), []);
+  assert.equal(cardText(hovercard(view)), EMPTY_NONE);
 });
 
 test("nothing is fetched until the first hover, and leaving the control fetches nothing (AC13, AC16)", async () => {
-  const { view, cx } = await start();
+  const { view } = await start();
   await settle();
   assert.equal(calls.length, 0);
-  hoverHandler(hovercard(view, cx))(false, cx);
+  hoverHandler(hovercard(view))(false);
   await settle();
   assert.equal(calls.length, 0);
   assert.equal(timers.length, 0);
 });
 
 test("the first hover fetches each installed provider once and the sections show their readings (AC9-AC11)", async () => {
-  const { view, cx } = await start();
-  await hover(view, cx);
+  const { view } = await start();
+  await hover(view);
   assert.deepEqual(calls.map(([c]) => c), ["/bin/sh", "/bin/sh", "opencode"]);
-  const text = cardText(hovercard(view, cx));
+  const text = cardText(hovercard(view));
   assert.match(text, /Claude Code/);
   assert.match(text, /5 h \| 4% \|.*resets in/);
   assert.match(text, /7 d \| 25% \|.*resets in/);
@@ -134,25 +134,25 @@ test("the first hover fetches each installed provider once and the sections show
 
 test("a section shows Loading… until its own fetch ends (AC8)", async () => {
   state.exec = (command, args) => { calls.push([command, args]); return new Promise(() => {}); };
-  const { view, cx } = await start();
-  await hover(view, cx);
+  const { view } = await start();
+  await hover(view);
   assert.equal(calls.length, 3);
-  assert.equal(cardText(hovercard(view, cx)).split("Loading…").length - 1, 3);
+  assert.equal(cardText(hovercard(view)).split("Loading…").length - 1, 3);
 });
 
 test("a second hover inside 5 minutes starts no fetch (AC14)", async () => {
-  const { view, cx } = await start();
-  await hover(view, cx);
+  const { view } = await start();
+  await hover(view);
   const first = calls.length;
-  await hover(view, cx);
+  await hover(view);
   assert.equal(calls.length, first);
 });
 
 test("a failing exec shows the fixed text, never the raw message (AC18, AC19)", async () => {
   state.exec = () => Promise.reject(new Error("Bearer sk-ant-FAKE spawn failed"));
-  const { view, cx } = await start();
-  await hover(view, cx);
-  const text = cardText(hovercard(view, cx));
+  const { view } = await start();
+  await hover(view);
+  const text = cardText(hovercard(view));
   assert.equal(text.split("Usage unavailable.").length - 1, 3);
   assert.doesNotMatch(text, /sk-ant|Bearer|spawn/);
 });
@@ -162,17 +162,22 @@ test("a fetch over 15 s shows Timed out. while the others still show (AC17)", as
     calls.push([command, args]);
     return command === "opencode" ? new Promise(() => {}) : Promise.resolve(ok(args[1].includes("curl") ? CLAUDE : CODEX));
   };
-  const { view, cx } = await start();
-  await hover(view, cx);
+  const { view } = await start();
+  await hover(view);
   assert.deepEqual(timers.map((t) => t.ms), [15000, 15000, 15000]);
   timers[2].fn();
-  const text = cardText(hovercard(view, cx));
+  const text = cardText(hovercard(view));
   assert.match(text, /opencode \| Timed out\./);
   assert.match(text, /5 h \| 4%/);
 });
 
-test("the toolbar keeps its other controls (AC32)", async () => {
-  const { view, cx } = await start();
-  const tree = view.render(cx);
-  for (const id of ["panel-files", "panel-changes", "tab-new", "search", "notes-toggle"]) assert.ok(findById(tree, id), id);
+test("the status bar keeps the machine, branch, agent counts and the Needs you pill (AC32)", async () => {
+  hooks.spaces = [{ active: true, branch: "main" }];
+  hooks.agents = [{ pane: "p1", status: "working" }, { pane: "p2", status: "blocked" }];
+  const { view } = await start();
+  const tree = view.render();
+  const texts = textsOf(tree);
+  for (const text of ["This computer", "main", "1 working", "Needs you"]) assert.ok(texts.includes(text), text);
+  assert.ok(findById(tree, "status-needs"));
+  assert.ok(hovercard(view), "and Usage");
 });

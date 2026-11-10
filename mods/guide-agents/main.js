@@ -4,10 +4,12 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, layout, nextCommand } from "herdr";
-import { alpha, tokens } from "./tokens.js";
+import { alpha, tokens, RADIUS } from "./tokens.js";
 import { icon, dot, alertMark, needsPill } from "./ui.js";
 import { find, narrow, toggleSidebar } from "./layout.js";
 import { settings } from "./settings.js";
+import { showKeyHint } from "./keys.js";
+import { nextBlocked } from "./blocked.js";
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 
@@ -52,7 +54,7 @@ export const STATUS_TEXT = { working: "Working", blocked: "Needs you", done: "Do
 function tile(t, p, fallback, size, bg) {
   const big = size === 20;
   const pic = icon(p, big ? 13 : 11, t.foreground);
-  return div().relative().size(size).flex_none().rounded(big ? 6 : 5).bg(bg).flex().items_center().justify_center()
+  return div().relative().size(size).flex_none().rounded(RADIUS.control).bg(bg).flex().items_center().justify_center()
     .child(pic ?? div().text_size(big ? 11 : 10).font_semibold().text_color(t.muted).child([...(fallback ?? "")][0]?.toUpperCase() ?? "?"));
 }
 
@@ -90,7 +92,7 @@ export default class Agents extends View {
     cx.spawn(async (cx) => {
       for (;;) {
         const c = await nextCommand();
-        const a = this.order[Number(c.replace("focus-", "")) - 1];
+        const a = c === "next-blocked" ? nextBlocked(this.order, focused()?.pane) : this.order[Number(c.replace("focus-", "")) - 1];
         if (a) run("pane.focus", { pane: a.pane });
         cx.notify();
       }
@@ -160,7 +162,7 @@ export default class Agents extends View {
         .h(31)
         .px(8)
         .gap(9)
-        .rounded(7)
+        .rounded(RADIUS.card)
         .items_center()
         .text_color(t.foreground)
         .hover((el) => el.bg(tokens(t).pill))
@@ -197,7 +199,7 @@ export default class Agents extends View {
       .id(`sub-${k.address}`)
       .pl(39)
       .pr(8)
-      .rounded(8)
+      .rounded(RADIUS.card)
       .h(26)
       .flex_none()
       .gap(0)
@@ -245,6 +247,7 @@ export default class Agents extends View {
     const t = theme();
     if (props()?.sortMenu) return this.sortMenu(t);
     const tk = tokens(t);
+    const hints = settings().keyHints; // "always" | "modifier" (on row hover) | "off"
     const collapsed = narrow();
     // The 44 px rail has no room for a tile next to the number; the 76 px mac rail has.
     // Narrower than 72 px, a two-digit number would run into the tile.
@@ -290,7 +293,7 @@ export default class Agents extends View {
         .gap(3)
         .flex()
         .items_center()
-        .rounded(4)
+        .rounded(RADIUS.control)
         .text_size(11)
         .text_color(open ? t.muted : (t[top] ?? t.muted))
         .cursor_pointer()
@@ -346,7 +349,7 @@ export default class Agents extends View {
         .id(`pin-${a.address}`)
         .flex_none()
         .p(2)
-        .rounded(4)
+        .rounded(RADIUS.control)
         .text_color(t.muted)
         .cursor_pointer()
         .hover((s) => s.bg(tk.pill).text_color(t.foreground))
@@ -368,7 +371,7 @@ export default class Agents extends View {
         .px(8)
         .py(7)
         .flex_none()
-        .rounded(8)
+        .rounded(RADIUS.card)
         .items_center()
         .gap(10)
         .when(a.focused, (el) => el.bg(tk.accentSoft))
@@ -392,7 +395,7 @@ export default class Agents extends View {
           .child(h_flex().h(18).items_center()
             .when(this.hovered === a.address, el => el.child(pin))
             .when(this.hovered !== a.address && Boolean(when), el => el.child(duration(now - when))))
-          .child(div().child(n < 9 && settings().keyHints ? `\u2318\u2325${n + 1}` : "")));
+          .child(div().child(n < 9 && showKeyHint(hints, this.hovered, a.address) ? `\u2318\u2325${n + 1}` : "")));
     };
 
     // Groups in list order: spaces (grouped) or priority sections. Agents of a
@@ -465,8 +468,9 @@ export default class Agents extends View {
                 cx.notify();
               })
               .child(svg(`mods/workspace-chrome/chevron-${this.sectionFolded ? "right" : "down"}.svg`).size(11).flex_none())
+              .when(hints !== "off", (el) => el.tooltip("\u2318\u2325 1\u20139 \u00b7 \u2318[ \u2318]"))
               .child("Agents"))
-            .child(div().flex_1().min_w(0).truncate().text_right().text_size(11).text_color(t.muted).child(settings().keyHints ? "\u2318\u2325 1\u20139 \u00b7 \u2318[ \u2318]" : ""))
+            .child(div().flex_1().min_w(0))
             .child(
               div()
                 .id("ag-sort")
