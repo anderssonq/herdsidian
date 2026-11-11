@@ -157,7 +157,7 @@ Then press `⇧⌘O` and **Choose a vault**.
 <summary>By hand</summary>
 
 1. Copy `layouts/herdsidian.json` and `layouts/herdsidian.svg` (its picture in
-   Settings → Look), the eight files in `themes/` and the seven folders in
+   Settings → Look), the eight files in `themes/` and the eight folders in
    `mods/` into `~/.config/herdr-app/` (same paths). If you installed an earlier
    version, remove the old `themes/herdsidian_*.json` files.
 2. Merge the `layout:herdsidian` and `mod:herdsidian` sections of `keys.json` into
@@ -165,7 +165,7 @@ Then press `⇧⌘O` and **Choose a vault**.
 3. Check the mods:
    ```sh
    cd ~/.config/herdr-app/mods
-   for m in herdsidian herdsidian-chrome guide-spaces guide-agents herdsidian-tabs herdsidian-pane herdsidian-status; do herdr-app check $m; done
+   for m in herdsidian herdsidian-chrome guide-spaces guide-agents herdsidian-tabs herdsidian-pane herdsidian-status herdsidian-toast; do herdr-app check $m; done
    ```
 4. Switch to it: `herdr-app do layout.switch '{"name":"herdsidian"}'`, or Settings →
    Look, or Herdr's default `⌃⇧L`, which cycles layouts.
@@ -299,6 +299,13 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
   and `herdsidian-status` are restyled copies of Herdr's `spaces`, `agents`,
   `workspace-chrome`, `tabs`, `pane` and `workspace-status` (0.1.10), with the same
   behavior. `guide-spaces` runs `git` and `hc machine ls` like the original.
+- `herdsidian-toast` draws every notification as an agent card at the top right, next to the
+  right sidebar (the layout root sets `"toast": "herdsidian-toast"`). "Needs you", login and
+  error cards stay until you act (Go to agent, Later, Copy the login command, or Dismiss),
+  or until the agent is no longer blocked or the machine is ready or gone.
+  Timed cards show a timer line, paused while the pointer is over the card and while Herdr is
+  not the active window. Up to three cards show, then "+N more"; a new notice from the same
+  agent or machine replaces its card in place.
 - **Usage** (`herdsidian-status`, right of the status bar). Hovering it shows the limits of your agent CLIs.
   With **Usage in the status bar** off in Settings, nothing is shown and nothing runs.
   This mod runs programs, reads credentials and reaches the network, only on the first
@@ -390,9 +397,9 @@ its own, so each mod that uses one carries a byte-identical copy. After editing 
 it into every mod that has it; `npm run lint` fails if a copy differs.
 
 ```sh
-cp lib/tokens.js mods/<mod>/tokens.js
-cp lib/ui.js mods/<mod>/ui.js          # herdsidian, herdsidian-chrome, herdsidian-tabs, herdsidian-pane, herdsidian-status, guide-agents, guide-spaces
-cp lib/layout.js mods/<mod>/layout.js  # herdsidian, herdsidian-chrome, herdsidian-tabs, guide-agents, guide-spaces
+cp lib/tokens.js mods/<mod>/tokens.js    # all mods that use it, including herdsidian-toast
+cp lib/ui.js mods/<mod>/ui.js          # herdsidian, herdsidian-chrome, herdsidian-tabs, herdsidian-pane, herdsidian-status, herdsidian-toast, guide-agents, guide-spaces
+cp lib/layout.js mods/<mod>/layout.js  # herdsidian, herdsidian-chrome, herdsidian-tabs, guide-agents, guide-spaces, herdsidian-toast
 cp lib/keys.js mods/<mod>/keys.js      # herdsidian, herdsidian-tabs, guide-agents, guide-spaces
 cp lib/settings.js mods/<mod>/settings.js  # herdsidian, herdsidian-tabs, guide-agents, guide-spaces
 cp lib/agent-files.js mods/<mod>/agent-files.js  # herdsidian-status, guide-agents

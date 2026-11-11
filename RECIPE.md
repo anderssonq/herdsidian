@@ -381,7 +381,8 @@ Look (layout root):
   pane header → `herdsidian-pane`, `workspace-status` → `herdsidian-status`,
   and a last root child
   `{ "id": "herdsidian", "type": "block", "hidden": true, "size": { "px": 380 },
-  "min": 44, "max": 720, "content": { "mod": "herdsidian" } }`.
+  "min": 44, "max": 720, "content": { "mod": "herdsidian" } }`. The root also
+  sets `"toast": "herdsidian-toast"`.
 - The eight mods:
 
   | Mod | Role |
@@ -393,6 +394,7 @@ Look (layout root):
   | `herdsidian-tabs` | The toolbar, with the sidebar toggle. Clone of `tabs`. |
   | `herdsidian-pane` | The pane header. Clone of `pane`. |
   | `herdsidian-status` | The status bar, with Usage. Clone of `workspace-status`. |
+  | `herdsidian-toast` | Notifications as agent cards at the top right next to the right sidebar: sticky "needs you", login and error cards (Go to agent / Later / Copy / Dismiss), timed cards with a timer line paused on hover and while Herdr is inactive, up to three plus "+N more", the same agent or machine replaces in place. Replaces `toast` (layout root `"toast"`). |
 
   The Files tab is the code of Herdr's `files` mod, moved into `herdsidian` (`files-view.js`,
   `files-tree.js`); there is no `herdsidian-files` mod.
@@ -534,8 +536,8 @@ Look (layout root):
   canonical files. Each mod that uses one carries a byte-identical
   `mods/<mod>/<name>.js`, because a mod folder is installed on its own. After
   you edit a canonical file, copy it into every mod that has it
-  (`cp lib/tokens.js mods/<mod>/tokens.js`; `ui.js` lives in
-  `herdsidian`, `herdsidian-chrome`, `herdsidian-tabs`, `herdsidian-pane`, `herdsidian-status`, `guide-agents` and `guide-spaces`). `npm run lint` fails if a copy
+  (`cp lib/tokens.js mods/<mod>/tokens.js`; `herdsidian-toast` carries `tokens.js` and `ui.js`; `ui.js` lives in
+  `herdsidian`, `herdsidian-chrome`, `herdsidian-tabs`, `herdsidian-pane`, `herdsidian-status`, `herdsidian-toast`, `guide-agents` and `guide-spaces`). `npm run lint` fails if a copy
   differs.
 - Icons: Herdr's `mods/workspace-chrome/*.svg` and `mods/files/*.svg`, plus
   the SVGs inside `herdsidian`, `herdsidian-tabs` and `herdsidian-pane`.
@@ -728,9 +730,9 @@ Look (layout root):
 
 - The eight `themes/hs_*.json` are in `~/.config/herdr-app/themes/`
   and show in Settings → Look.
-- `herdr-app check` passes for all seven mods: `herdsidian`,
+- `herdr-app check` passes for all eight mods: `herdsidian`,
   `herdsidian-chrome`, `guide-spaces`, `guide-agents`, `herdsidian-tabs`,
-  `herdsidian-pane` and `herdsidian-status`.
+  `herdsidian-pane`, `herdsidian-status` and `herdsidian-toast`.
 - `layout.switch herdsidian` shows the glass look, hints on spaces and
   agents, and no errors in `herdr-app status`.
 - Each theme gives the glass its own tint (`app.theme` with each name).
