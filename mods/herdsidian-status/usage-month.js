@@ -1,8 +1,9 @@
-// Usage for the agent CLIs that report a month and no limits: Kiro (credits, from its session JSON)
-// and Grok (cost and tokens, from the Herdsidian status line hook's state files). The listing scripts,
+// Usage for the agent CLIs that report a month and no limits: Kiro (credits, from the usage_summary
+// lines of its messages.jsonl files, plus its older session JSON) and Grok (cost and tokens, from the Herdsidian status line hook's state files). The listing scripts,
 // the month sums and the text. Pure: imports only ./agent-files.js, so Node tests import it.
-// Each reader runs one read-only /bin/sh listing, then reads the listed .json files.
-import { formatTokens, isReadable, grokListScript, kiroListScript, parseGrokState, parseKiroSession, parseListing } from "./agent-files.js";
+// Each reader runs one read-only /bin/sh listing, then reads the listed .json files. Kiro's
+// messages.jsonl files are never read here: that same shell prints only their usage fields.
+import { formatTokens, isReadable, grokListScript, kiroSessionId, kiroUsageScript, parseGrokState, parseKiroSession, parseKiroUsageListing, parseListing } from "./agent-files.js";
 
 // Card notes for a missing source. usage.js looks them up through errorText().
 export const MONTH_NOTES = {
@@ -11,7 +12,6 @@ export const MONTH_NOTES = {
 };
 export const GROK_NOTE = "Only Grok sessions run with the Herdsidian status line.";
 
-const KIRO_LIST_SCRIPT = kiroListScript();
 const GROK_LIST_SCRIPT = grokListScript();
 
 const DAY = 86400000;
@@ -46,33 +46,65 @@ const round2 = (n) => Math.round(n * 100) / 100;
 // isReadable), so the month counts it in `skipped` and the card warns about it.
 const candidates = (listing, sinceMs) => listing.files.filter((f) => f.mtimeMs >= sinceMs);
 
-// What a reader needs before it counts: a missing source, or "every candidate was skipped".
+// Grok's check before it counts: a missing source, or "every candidate was skipped". Kiro has its own in kiroMonth.
 function sourceError(listing, found, skipped, note) {
   if (listing.dir === null || listing.files.length === 0) return { error: note };
   if (found > 0 && skipped === found) return { error: "unavailable" };
   return null;
 }
 
-// listing: parseListing(); texts: Map<path, file text | null>. -> a month value or { error }.
-function kiroMonth(listing, texts, nowMs) {
+// "sess_<uuid>" and "<uuid>" name the same Kiro session.
+const kiroKey = (id) => (id.startsWith("sess_") ? id.slice(5) : id);
+
+// listing: parseListing() of sessions/cli; texts: Map<path, file text | null>; stdout: the same
+// exec's output, whose "new ..." lines carry the messages.jsonl usage. -> a month value or { error }.
+// An old file whose session_id names a new sess_ folder joins that session, and on the same time
+// the new line's credits win. Any other old file stays its own session, as before.
+function kiroMonth(listing, texts, nowMs, stdout) {
   const { month, startMs, endMs } = monthOf(nowMs);
+  const fresh = parseKiroUsageListing(stdout);
+  const entries = [];
+  const byKey = new Map();
+  const add = () => { const e = { turns: [], newTimes: new Set() }; entries.push(e); return e; };
+  for (const s of fresh.sessions) {
+    const key = s.id === null ? null : kiroKey(s.id);
+    const e = (key !== null && byKey.get(key)) || add();
+    if (key !== null) byKey.set(key, e);
+    for (const t of s.turns) { e.turns.push({ when: t.atMs, credits: t.credits }); e.newTimes.add(t.atMs); }
+  }
   const files = candidates(listing, startMs);
-  let credits = 0, sessions = 0, turns = 0, skipped = 0, at = null;
+  const inMonth = (when) => when !== null && when >= startMs && when < endMs;
+  let oldSkipped = 0, oldTurns = 0;
   for (const f of files) {
-    const s = texts.has(f.path) ? parseKiroSession(texts.get(f.path)) : null;
-    if (!s) { skipped++; continue; }
-    let counted = 0;
+    const raw = texts.get(f.path) ?? null;
+    const s = parseKiroSession(raw);
+    if (!s) { oldSkipped++; continue; }
+    const id = kiroSessionId(raw);
+    const e = (id !== null && byKey.get(kiroKey(id))) || add();
     for (const t of s.turns) {
       const when = t.endMs ?? s.updatedAt;
-      if (when === null || when < startMs || when >= endMs) continue;
+      if (inMonth(when)) oldTurns++;
+      if (!e.newTimes.has(when)) e.turns.push({ when, credits: t.credits });
+    }
+  }
+  const oldNone = listing.dir === null || listing.files.length === 0;
+  const newNone = fresh.total === 0;
+  if (oldNone && newNone) return { error: "kiroNoSessions" };
+  const newFound = fresh.sessions.length + fresh.skipped;
+  if (newFound > 0 && fresh.skipped === newFound && oldTurns === 0) return { error: "unavailable" };
+  if (newFound === 0 && files.length > 0 && oldSkipped === files.length) return { error: "unavailable" };
+  let credits = 0, sessions = 0, turns = 0, at = null;
+  for (const e of entries) {
+    let counted = 0;
+    for (const t of e.turns) {
+      if (!inMonth(t.when)) continue;
       counted++; credits += t.credits;
-      if (at === null || when > at) at = when;
+      if (at === null || t.when > at) at = t.when;
     }
     turns += counted;
     if (counted) sessions++;
   }
-  const bad = sourceError(listing, files.length, skipped, "kiroNoSessions");
-  if (bad) return bad;
+  const skipped = oldSkipped + fresh.skipped;
   return { kind: "month", month, credits: round2(credits), costUsd: null, tokens: null, sessions, turns, skipped, at };
 }
 
@@ -108,11 +140,11 @@ async function fetchMonth(script, exec, readTextFile, nowMs, slackMs, build) {
       try { texts.set(f.path, await readTextFile(f.path)); } catch { texts.set(f.path, null); }
     }));
   }
-  return build(listing, texts, nowMs);
+  return build(listing, texts, nowMs, res.stdout);
 }
 
 export async function fetchKiro(exec, readTextFile, nowMs = Date.now()) {
-  try { return await fetchMonth(KIRO_LIST_SCRIPT, exec, readTextFile, nowMs, 0, kiroMonth); }
+  try { return await fetchMonth(kiroUsageScript(Math.floor(monthOf(nowMs).startMs / 1000)), exec, readTextFile, nowMs, 0, kiroMonth); }
   catch { return { error: "unavailable" }; }
 }
 

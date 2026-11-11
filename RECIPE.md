@@ -604,12 +604,21 @@ Look (layout root):
   logs (`~/.codex/sessions`), and sends one `GET` to `https://api.anthropic.com/api/oauth/usage`.
   The token is read and sent inside one constant shell pipeline (`curl -H @-`, so it is in
   no argv); the mod never stores, logs, shows, refreshes or writes it. The cache is in
-  memory only. Kiro and Grok add no new network host and no credential read. Kiro: one
-  read-only `/bin/sh` with `find` and `stat` lists `<kiro>/sessions/cli/*.json` (`<kiro>` is
+  memory only. Kiro and Grok add no new network host, no credential read, no `kiro` CLI and no write. Kiro: one
+  read-only `/bin/sh` with `find`, `stat`, `grep` and `awk` does two things. It lists
+  `<kiro>/sessions/cli/*.json` (the older format; `<kiro>` is
   `$KIRO_HOME` when it is an absolute path that is not `/`, not `$HOME` and not a parent of
   `$HOME`, else `~/.kiro`), and `readTextFile` reads each one (cwd, timestamps, credit counts;
   the title is never kept; a file of 1 MiB or more is never read and counts in `skipped`, so
-  the card warns "N files skipped"). Grok: the same listing and reads for the hook's state files,
+  the card warns "N files skipped"). It also finds
+  `<kiro>/sessions/<workspace hash or _global>/sess_<id>/messages.jsonl` files modified this month
+  (newest first, at most 400), greps their `usage_summary` lines and prints only three fields: the
+  line's timestamp, and each entry's unit and usage. Prompts, message bodies, tool names, and turn
+  and execution ids are never printed. `messages.jsonl` is never read with `readTextFile`, so a
+  file over 1 MiB still counts; files past the 400 cap or not readable count as skipped. Credits are
+  the sum of `usage` where the unit is `credit`. A session in both formats (old `session_id` equals
+  the `sess_` folder name, with or without the prefix) counts once; on the same timestamp the new
+  line wins. Grok: the same listing and reads for the hook's state files,
   `${XDG_STATE_HOME:-~/.local/state}/herdsidian/grok/*.json`. `usage.js` is pure (parsers, formatting, scripts, cache) and has Node tests
   in `tests/usage.test.js` and `tests/usage-view.test.js`.
 - Disclosure: `guide-agents` reads agent files (the Context window on each agent row; nothing
