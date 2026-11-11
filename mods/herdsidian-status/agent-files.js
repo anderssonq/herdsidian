@@ -5,6 +5,8 @@
 // through /bin/sh. Copied byte for byte into both mods (ADR-0001); lint checks the copies.
 
 export const MAX_READ_BYTES = 1048576;
+// A listed file readTextFile can read (it refuses MAX_READ_BYTES or more).
+export const isReadable = (f) => f.size < MAX_READ_BYTES;
 // ADR-0002: the Herdsidian state folder, resolved by the shell.
 export const STATE_DIR_SH = '${XDG_STATE_HOME:-$HOME/.local/state}/herdsidian';
 // Run before STATE_DIR_SH: a relative $XDG_STATE_HOME is ignored (XDG spec), as the Grok hook does.
@@ -46,14 +48,14 @@ export function parseListing(stdout) {
 }
 
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
-const object = (raw) => {
+export const object = (raw) => {
   if (typeof raw !== "string") return null;
   try {
     const v = JSON.parse(raw);
     return isObject(v) ? v : null;
   } catch { return null; }
 };
-const finite = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+export const finite = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const text = (v) => (typeof v === "string" ? v : null);
 const ms = (v) => {
   if (typeof v !== "string") return null;

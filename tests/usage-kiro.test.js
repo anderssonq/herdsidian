@@ -73,8 +73,8 @@ test("AC6: the month's credits, sessions, turns and skipped files from a temp <k
   const r = recorded({ HOME: home });
   const got = await fetchProvider("kiro", r.exec, { readTextFile: r.readTextFile, now: NOW });
   assert.deepEqual(got, { data: { kind: "month", month: "2026-11", credits: 3.85, costUsd: null, tokens: null,
-    sessions: 2, turns: 3, skipped: 1, at: Date.parse(iso(13)) } });
-  assert.ok(!r.log.reads.some((p) => p.endsWith("big.json")), "the 1.1 MiB file is not listed");
+    sessions: 2, turns: 3, skipped: 2, at: Date.parse(iso(13)) } });
+  assert.ok(!r.log.reads.some((p) => p.endsWith("big.json")), "the 1.1 MiB file is listed and counted in skipped, but never read");
   assert.ok(!r.log.reads.some((p) => p.endsWith(".jsonl")), "no transcript is read");
 });
 

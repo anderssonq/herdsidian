@@ -1,4 +1,5 @@
-// Usage: a failed knownAgents() at load is retried once, 5 s later, without waiting for a hover.
+// Usage: a failed knownAgents() at load is retried without waiting for a hover: 5 s later, then
+// with backoff (15 s after a second failure). Exactly one retry timer is pending at any time.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { state, fakeCx, settle, element, walk } from "./support/mod-stubs.js";
@@ -23,7 +24,7 @@ const RETRY_MS = 5000;
 let timers, asked;
 const start = async () => {
   const view = new Status(), cx = fakeCx();
-  cx.timer.after = (ms, fn) => { timers.push([ms, fn]); return { cancel() {} }; };
+  cx.timer.after = (ms, fn) => { const t = { live: true }; timers.push([ms, fn, t]); return { cancel() { t.live = false; } }; };
   view.init({}, cx);
   await settle();
   return { view, cx };
@@ -51,13 +52,22 @@ test("a rejected load schedules one retry in 5 s, and the retry fills the provid
   assert.ok(!showsWordOnly(view), "after the retry the control shows a provider");
 });
 
-test("a retry that fails again schedules no further retry", async () => {
+test("a retry that fails again schedules the next one 15 s later, one pending timer at a time", async () => {
   hooks.knownAgents = async () => { asked++; throw new Error("down"); };
-  await start();
-  retries()[0][1]();
+  const { view } = await start();
+  const live = () => timers.filter(([, , t]) => t.live);
+  assert.deepEqual(timers.map(([ms]) => ms), [RETRY_MS]);
+  await view.loadAgents();
   await settle();
   assert.equal(asked, 2);
-  assert.equal(retries().length, 1, "still exactly one retry: no loop");
+  assert.deepEqual(timers.map(([ms]) => ms), [RETRY_MS], "no new timer while one is pending");
+  const [, fn, t] = timers[0];
+  t.live = false;
+  fn();
+  await settle();
+  assert.equal(asked, 3);
+  assert.deepEqual(timers.map(([ms]) => ms), [RETRY_MS, 15000], "after the failed retry the next one comes 15 s later");
+  assert.equal(live().length, 1, "exactly one retry timer pending");
 });
 
 test("a successful load schedules no retry", async () => {

@@ -48,7 +48,7 @@ function duration(ms) {
   return h < 24 ? `${h}h` : `${Math.floor(h / 24)}d`;
 }
 
-const contextWanted = () => settings().contextInSidebar !== false;
+const contextWanted = () => settings().contextInSidebar;
 
 export const STATUS_TEXT = { working: "Working", blocked: "Needs you", done: "Done", idle: "Idle" };
 

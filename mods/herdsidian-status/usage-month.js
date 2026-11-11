@@ -2,7 +2,7 @@
 // and Grok (cost and tokens, from the Herdsidian status line hook's state files). The listing scripts,
 // the month sums and the text. Pure: imports only ./agent-files.js, so Node tests import it.
 // Each reader runs one read-only /bin/sh listing, then reads the listed .json files.
-import { MAX_READ_BYTES, formatTokens, grokListScript, kiroListScript, parseGrokState, parseKiroSession, parseListing } from "./agent-files.js";
+import { formatTokens, isReadable, grokListScript, kiroListScript, parseGrokState, parseKiroSession, parseListing } from "./agent-files.js";
 
 // Card notes for a missing source. usage.js looks them up through errorText().
 export const MONTH_NOTES = {
@@ -42,8 +42,9 @@ export function monthText(d) {
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
-// The listed files worth reading: small enough and touched since `sinceMs`.
-const candidates = (listing, sinceMs) => listing.files.filter((f) => f.size < MAX_READ_BYTES && f.mtimeMs >= sinceMs);
+// The listed files touched since `sinceMs`. One of MAX_READ_BYTES or more is never read (see
+// isReadable), so the month counts it in `skipped` and the card warns about it.
+const candidates = (listing, sinceMs) => listing.files.filter((f) => f.mtimeMs >= sinceMs);
 
 // What a reader needs before it counts: a missing source, or "every candidate was skipped".
 function sourceError(listing, found, skipped, note) {
@@ -100,7 +101,7 @@ async function fetchMonth(script, exec, readTextFile, nowMs, slackMs, build) {
   const res = await exec("/bin/sh", ["-c", script]);
   if (res.code !== 0) return { error: "unavailable" };
   const listing = parseListing(res.stdout);
-  const files = candidates(listing, monthOf(nowMs).startMs - slackMs);
+  const files = candidates(listing, monthOf(nowMs).startMs - slackMs).filter(isReadable);
   const texts = new Map();
   for (let i = 0; i < files.length; i += BATCH) {
     await Promise.all(files.slice(i, i + BATCH).map(async (f) => {

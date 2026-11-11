@@ -606,16 +606,22 @@ Look (layout root):
   read-only `/bin/sh` with `find` and `stat` lists `<kiro>/sessions/cli/*.json` (`<kiro>` is
   `$KIRO_HOME` when it is an absolute path that is not `/`, not `$HOME` and not a parent of
   `$HOME`, else `~/.kiro`), and `readTextFile` reads each one (cwd, timestamps, credit counts;
-  the title is never kept). Grok: the same listing and reads for the hook's state files,
+  the title is never kept; a file of 1 MiB or more is never read and counts in `skipped`, so
+  the card warns "N files skipped"). Grok: the same listing and reads for the hook's state files,
   `${XDG_STATE_HOME:-~/.local/state}/herdsidian/grok/*.json`. `usage.js` is pure (parsers, formatting, scripts, cache) and has Node tests
   in `tests/usage.test.js` and `tests/usage-view.test.js`.
 - Disclosure: `guide-agents` reads agent files (the Context window on each agent row; nothing
   runs with "Context in the sidebar" off). Every 30 s while agents are listed it runs read-only
   `/bin/sh -c` with `find`, `stat`, `sort`, `head`, `tail` and `grep`. For Claude Code
-  (`~/.claude/projects`) and Codex (`~/.codex/sessions`) it looks only at the last 256 KiB of the
-  newest session log of the agent's folder and keeps numbers, model ids and folders in memory.
-  For Kiro it reads `<kiro>/sessions/cli/*.json`, and for Grok `herdsidian/grok/*.json` in the
-  state folder, with `readTextFile`. No new network host, no credential read, no
+  (`~/.claude/projects`) it walks up to 5 session logs of the agent's folder changed in the last
+  day, newest first, looks only at the last 256 KiB of each, and stops at the newest interactive
+  session (an `entrypoint` of `cli`, or none): SDK and other non-interactive runs are skipped. Its
+  window is 1M when the top-level `requestedModel` ends in `[1m]` (or once use passes 200K), else
+  200K. For Codex (`~/.codex/sessions`) it reads the first line and the last 256 KiB of each log
+  changed in the last day, once per mtime and size. It keeps numbers, model ids and folders in
+  memory. For Kiro it reads `<kiro>/sessions/cli/*.json`, and for Grok `herdsidian/grok/*.json` in
+  the state folder, with `readTextFile`; of a Kiro file of 1 MiB or more it takes only the cwd
+  (`head -c 4096`), and that folder shows no value. No new network host, no credential read, no
   `kiro-cli` or `grok` run. `agent-context.js` is pure; the parsers shared with Usage live in
   `lib/agent-files.js` (copied into `herdsidian-status` and `guide-agents`, lint checks the copies).
 - Grok hook: `scripts/grok-status-line.sh` (macOS; only `/bin/sh` and `/usr/bin/plutil`) is

@@ -313,7 +313,8 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
   with `find` and `stat` (read-only) to list `sessions/cli/*.json` under `$KIRO_HOME` (when it is
   an absolute path that is not `/`, not your home and not a parent of it; otherwise `~/.kiro`),
   then reads those session files, which hold the folder, timestamps and credit counts, and sums
-  this month's credits; the title in them is never kept. For Grok it lists and reads the hook's state files in
+  this month's credits; the title in them is never kept. A file of 1 MiB or more is never read:
+  the card counts it as skipped ("1 file skipped"). For Grok it lists and reads the hook's state files in
   `${XDG_STATE_HOME:-~/.local/state}/herdsidian/grok/*.json` (see Grok setup below). Both
   show this month's use with no limit and no bar. Claude Code, Codex, opencode, Kiro and Grok are
   covered, when installed. macOS can ask you to allow the Keychain read the first time.
@@ -334,10 +335,15 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
 - **Context window** (`guide-agents`, each agent row in the left sidebar). With **Context in the
   sidebar** On (the default), every 30 seconds while agents are listed, it shows how full each Claude
   Code, Codex, Kiro and Grok agent's context window is. It runs `/bin/sh` with `find`, `stat`,
-  `sort`, `head`, `tail` and `grep`, read-only: for Claude Code and Codex it reads only the last
-  256 KiB of the newest session log in `~/.claude/projects` and `~/.codex/sessions`, and keeps only
-  numbers, model ids and folders in memory. For Kiro it reads the session files in `sessions/cli`
-  (see above), and for Grok the hook's files in `herdsidian/grok`. It adds no network host and
+  `sort`, `head`, `tail` and `grep`, read-only. For Claude Code it looks at up to 5 recent session
+  logs of the agent's folder in `~/.claude/projects`, only the last 256 KiB of each, and uses the
+  newest interactive session: SDK and other non-interactive runs (such as `claude -p`) are skipped.
+  The window is 1M when the model you asked for ends in `[1m]` (or once use passes 200K), else 200K.
+  For Codex it reads the first line and the last 256 KiB of the session logs in `~/.codex/sessions`
+  changed in the last day. It keeps only numbers, model ids and folders in memory. For Kiro it
+  reads the session files in `sessions/cli` (see above; of a file of 1 MiB or more only the folder,
+  from its first 4 KiB, and that folder then shows no value), and for Grok the hook's files in
+  `herdsidian/grok`. It adds no network host and
   reads no credential. Off in Settings, it reads nothing and starts no timer.
 - The **Files** tab is code moved from a copy of Herdr's `files` (0.1.13) into the `herdsidian`
   mod; its folder icon is the vault's folder, in the accent color. It does not get later fixes

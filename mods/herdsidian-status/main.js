@@ -27,15 +27,15 @@ export const inListOrder = (list, order) => {
 
 const NEXT_BLOCKED = "guide-agents.next-blocked";
 
-// A failed knownAgents() at load is asked again once after this long (see loadAgents).
-const AGENTS_RETRY_MS = 5000;
+// A failed knownAgents() is asked again after these waits, the last one repeating (see loadAgents).
+const AGENTS_RETRY_MS = [5000, 15000, 60000, 300000];
 
 export default class Status extends View {
   init(_props, cx) {
     // Usage: no reading is fetched until the pointer first enters the control (the cache is in
-    // memory). The agent list loads at init and is retried once if that load fails.
+    // memory). The agent list loads at init and is retried with backoff while that load fails.
     this.cx = cx;
-    this.agents = null; this.agentsFailed = false; this.agentsLoad = null; this.agentsRetried = false;
+    this.agents = null; this.agentsFailed = false; this.agentsLoad = null; this.agentsRetries = 0; this.agentsRetryTimer = null;
     this.usage = createUsage({
       exec,
       readTextFile,
@@ -46,17 +46,22 @@ export default class Status extends View {
   }
 
   // The installed agents, asked again on every hover (Herdr caches the answer for a minute).
-  // A rejection leaves the list empty and `agentsFailed` set, and asks once more 5 s later
-  // (one retry per failure streak, so a broken shell never loops). Never rejects.
+  // A rejection leaves the list empty and `agentsFailed` set, and asks again after 5 s, 15 s, 60 s,
+  // then every 300 s (one pending timer; a success resets the steps). A scheduled retry does
+  // nothing, and ends the chain, when Usage is off in the status bar; a later hover or the lazy
+  // load in usageControl starts it again. Never rejects.
   loadAgents() {
     this.agentsLoad ??= (async () => {
       await null; // so the assignment below lands before this clears it
-      try { this.agents = await knownAgents(); this.agentsFailed = false; this.agentsRetried = false; }
+      try { this.agents = await knownAgents(); this.agentsFailed = false; this.agentsRetries = 0; }
       catch {
         this.agents = null; this.agentsFailed = true;
-        if (!this.agentsRetried) {
-          this.agentsRetried = true;
-          this.cx.timer.after(AGENTS_RETRY_MS, () => { this.loadAgents(); });
+        if (!this.agentsRetryTimer) {
+          const wait = AGENTS_RETRY_MS[Math.min(this.agentsRetries++, AGENTS_RETRY_MS.length - 1)];
+          this.agentsRetryTimer = this.cx.timer.after(wait, () => {
+            this.agentsRetryTimer = null;
+            if (settings().usageInStatus) this.loadAgents();
+          }) ?? true;
         }
       }
       this.agentsLoad = null;
@@ -77,8 +82,10 @@ export default class Status extends View {
   // The Usage control, or null when it is off or Usage has not started (no init).
   usageControl(t, k) {
     if (!this.usage || !settings().usageInStatus) return null;
-    // Usage was turned on after init: load the agents once, outside render work.
-    if (this.agents === null && !this.agentsFailed && !this.agentsLoad && !this.lazyAgents) {
+    // Load the agents outside render work: once when Usage was turned on after init, and again
+    // when a failed load has no retry pending (the chain ended while Usage was off).
+    const idle = this.agents === null && !this.agentsLoad && !this.agentsRetryTimer;
+    if (idle && (this.agentsFailed || !this.lazyAgents)) {
       this.lazyAgents = true;
       this.cx.spawn(() => this.loadAgents());
     }

@@ -7,6 +7,9 @@
 # (folder 0700, file 0600, never the prompt, the transcript path, the branch or the repo).
 # Uses only /bin/sh and /usr/bin/plutil (plus mkdir, chmod, mv, date, cat by absolute path). It
 # never deletes a file, never uses the network and always exits 0, so Grok never paints an error.
+# Cost per run: 10 or 11 plutil reads (the cwd has a fallback key), then 3 plutil inserts (only the
+# three strings, so plutil escapes them). The six numbers from the payload pass a strict JSON
+# number check (else null) and are spliced into the JSON as text with updated_at, no process each.
 
 umask 077
 payload=$(/bin/cat 2>/dev/null)
@@ -14,13 +17,13 @@ payload=$(/bin/cat 2>/dev/null)
 # get KEYPATH: the raw value of a key, empty when missing or not a plain value.
 get() { printf '%s' "$payload" | /usr/bin/plutil -extract "$1" raw -o - - 2>/dev/null; }
 
-# num VALUE: VALUE when it is -?digits(.digits)?([eE][-+]?digits)?, else the word null.
+# num VALUE: VALUE when it is a JSON number, -?(0|[1-9][0-9]*)(.[0-9]+)?([eE][-+]?[0-9]+)?, else null.
 num() {
   n=${1#-}
   m=${n%%[eE]*}
   i=${m%%.*}
   good=1
-  case "$i" in ''|*[!0-9]*) good=0 ;; esac
+  case "$i" in ''|*[!0-9]*|0[0-9]*) good=0 ;; esac
   if [ "$i" != "$m" ]; then
     case "${m#*.}" in ''|*[!0-9]*) good=0 ;; esac
   fi
@@ -28,23 +31,21 @@ num() {
     e=${n#*[eE]}
     case "${e#[-+]}" in ''|*[!0-9]*) good=0 ;; esac
   fi
+  # A number too large for a double (1e999) is null: the shell prints it as inf.
+  if [ "$good" = 1 ] && [ "$m" != "$n" ]; then
+    case $(printf '%g' "$1" 2>/dev/null) in *[iI][nN][fF]*|*[nN][aA][nN]*) good=0 ;; esac
+  fi
   if [ "$good" = 1 ]; then printf '%s' "$1"; else printf null; fi
 }
 
-# ins_s KEY VALUE and ins_j KEY JSON: add one key to the JSON on stdin. A string goes in as an
-# argument, so plutil does the escaping (quotes, backslashes, non-ASCII). An empty string is null.
+# ins_s KEY VALUE: add one string key to the JSON on stdin. The value goes in as an argument, so
+# plutil does the escaping (quotes, backslashes, non-ASCII). An empty string is null.
 ins_s() {
   if [ -n "$2" ]; then
     /usr/bin/plutil -insert "$1" -string "$2" -o - - 2>/dev/null
   else
     /usr/bin/plutil -insert "$1" -json null -o - - 2>/dev/null
   fi
-}
-# A number plutil still refuses (1e999, 007) goes in as null, so one bad field never loses the rest.
-ins_j() {
-  doc=$(/bin/cat)
-  printf '%s' "$doc" | /usr/bin/plutil -insert "$1" -json "$2" -o - - 2>/dev/null \
-    || printf '%s' "$doc" | /usr/bin/plutil -insert "$1" -json null -o - - 2>/dev/null
 }
 
 sid=$(get session_id)
@@ -85,15 +86,10 @@ if [ "$ok" = 1 ]; then
     json=$(printf '{"v":1}' \
       | ins_s session_id "$sid" \
       | ins_s cwd "$cwd" \
-      | ins_s model "$model" \
-      | ins_j updated_at "$now" \
-      | ins_j cost_usd "$cost" \
-      | ins_j context_window_size "$size" \
-      | ins_j context_tokens "$tokens" \
-      | ins_j used_percentage "$pct" \
-      | ins_j session_input_tokens "$tin" \
-      | ins_j session_output_tokens "$tout")
+      | ins_s model "$model")
+    # The numbers are spliced in here, not through plutil, which would refuse a value it cannot hold.
     if [ -n "$json" ]; then
+      json="${json%\}},\"updated_at\":$now,\"cost_usd\":$cost,\"context_window_size\":$size,\"context_tokens\":$tokens,\"used_percentage\":$pct,\"session_input_tokens\":$tin,\"session_output_tokens\":$tout}"
       if printf '%s\n' "$json" > "$tmp" 2>/dev/null; then
         /bin/mv -f "$tmp" "$dir/$sid.json" 2>/dev/null
       fi
