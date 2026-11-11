@@ -225,7 +225,7 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
 
 Look (layout root):
 - Theme `hs_carbon` (default): background `#181818`, foreground
-  `#d6d6dd`, selection `#2f3a4a`, accent `#4c9df3`, canvas `#0e0e0e`, chrome
+  `#d6d6dd`, selection `#345e8c`, accent `#4c9df3`, canvas `#0e0e0e`, chrome
   `#121212`, border `#2a2a2a`, ANSI red `#f14c4c`, green `#3fbf8f`, yellow
   `#e5b95c`, blue `#4c9df3`.
 - Root `background`: `{ "gradient": ["chrome", "canvas"], "angle": 160 }`.
