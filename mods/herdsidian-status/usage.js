@@ -1,7 +1,8 @@
 // Usage beside Search: the providers, the parsers, the formatting, the fetch scripts and the cache.
 // Pure: no herdr / gpui-kit imports, so Node tests import it. Programs run: /bin/sh (with
-// /usr/bin/security, /usr/bin/plutil, /usr/bin/curl, cat, find, stat, sort, head, grep, tail) and opencode.
-// Read-only files: ~/.codex/sessions; <kiro>/sessions/cli/*.json (<kiro> is $KIRO_HOME by Kiro's
+// /usr/bin/security, /usr/bin/plutil, /usr/bin/curl, cat, find, stat, sort, head, grep, awk, tail) and opencode.
+// Read-only files: ~/.codex/sessions; <kiro>/sessions/cli/*.json and
+// <kiro>/sessions/*/sess_*/messages.jsonl (usage_summary fields only) (<kiro> is $KIRO_HOME by Kiro's
 // rule, else ~/.kiro); ${XDG_STATE_HOME:-~/.local/state}/herdsidian/grok/*.json (the Grok hook's files).
 // Network: api.anthropic.com only.
 import { MONTH_NOTES, fetchGrok, fetchKiro } from "./usage-month.js";

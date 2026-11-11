@@ -310,18 +310,25 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
   With **Usage in the status bar** off in Settings, nothing is shown and nothing runs.
   This mod runs programs, reads credentials and reaches the network, only on the first
   hover and then at most every 5 minutes per agent. It runs `/bin/sh` with `/usr/bin/security`,
-  `/usr/bin/plutil`, `/usr/bin/curl`, `cat`, `find`, `stat`, `sort`, `head`, `grep` and `tail`, and `opencode stats --days 7`.
+  `/usr/bin/plutil`, `/usr/bin/curl`, `cat`, `find`, `stat`, `sort`, `head`, `grep`, `awk` and `tail`, and `opencode stats --days 7`.
   It reads Claude Code's login (the macOS Keychain item `Claude Code-credentials`, else
   `~/.claude/.credentials.json`) and the last lines of Codex's session logs in
   `~/.codex/sessions`. It sends one `GET` to `https://api.anthropic.com/api/oauth/usage` with
   that token. The token is never in a command line, stored, logged or shown: it goes from the
   Keychain to `curl` inside one shell pipeline, and the mod never refreshes or writes it.
-  Kiro and Grok add no network host and no credential read. For Kiro the mod runs `/bin/sh`
-  with `find` and `stat` (read-only) to list `sessions/cli/*.json` under `$KIRO_HOME` (when it is
-  an absolute path that is not `/`, not your home and not a parent of it; otherwise `~/.kiro`),
-  then reads those session files, which hold the folder, timestamps and credit counts, and sums
-  this month's credits; the title in them is never kept. A file of 1 MiB or more is never read:
-  the card counts it as skipped ("1 file skipped"). For Grok it lists and reads the hook's state files in
+  Kiro and Grok add no network host, no credential read, no `kiro` CLI and no write. For Kiro the mod
+  runs one read-only `/bin/sh` with `find`, `stat`, `grep` and `awk`. It lists `sessions/cli/*.json` under
+  `$KIRO_HOME` (when it is an absolute path that is not `/`, not your home and not a parent of it;
+  otherwise `~/.kiro`), the older format, and reads those session files (folder, timestamps and
+  credit counts); the title in them is never kept. A file of 1 MiB or more is never read: the card
+  counts it as skipped ("1 file skipped"). The same script also finds the
+  `sessions/<workspace hash or _global>/sess_<id>/messages.jsonl` files changed this month (newest
+  first, at most 400) and greps their `usage_summary` lines. It prints only three fields: the line's
+  timestamp, and each entry's unit and usage. Prompts, message bodies, tool names, and turn and
+  execution ids are never printed. `messages.jsonl` is not read with `readTextFile`, so a file over
+  1 MiB still counts; a file past the 400 cap or not readable counts as skipped. The card sums the
+  entries whose unit is `credit`. A session in both formats counts once (on the same timestamp the
+  new line wins). For Grok it lists and reads the hook's state files in
   `${XDG_STATE_HOME:-~/.local/state}/herdsidian/grok/*.json` (see Grok setup below). Both
   show this month's use with no limit and no bar. Claude Code, Codex, opencode, Kiro and Grok are
   covered, when installed. macOS can ask you to allow the Keychain read the first time.
