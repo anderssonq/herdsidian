@@ -98,7 +98,7 @@ herdsidian: ~/code/acme-api
   sidebar. It is lit while the sidebar is shown. It is the only sidebar control in the toolbar; its tooltip shows no key.
 - **Usage in the status bar.** The limits of your agent CLIs sit at the right of the status
   bar: the provider of the focused pane in full, the others compact. Hover opens the usage
-  card. An off switch in Settings (**Usage in the status bar**) hides it and stops every fetch.
+  card. Kiro and Grok show this month's use (Grok needs the status-line script, see below). An off switch in Settings (**Usage in the status bar**) hides it and stops every fetch.
 - **Settings in `⌘K`.** **Theme**: four family rows (Carbon, Midnight, Catppuccin, Nord) that set
   the dark and the light half together; one appearance row opens Herdr Settings → Look,
   because a mod cannot set light or dark. **Key hints**: Always / On hover / Off. **Layout**:
@@ -307,10 +307,44 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
   It reads Claude Code's login (the macOS Keychain item `Claude Code-credentials`, else
   `~/.claude/.credentials.json`) and the last lines of Codex's session logs in
   `~/.codex/sessions`. It sends one `GET` to `https://api.anthropic.com/api/oauth/usage` with
-  that token. The token goes from the Keychain to `curl` inside one shell pipeline: it is
-  never in a command line, stored, logged or shown, and the mod never refreshes or writes it.
-  Only Claude Code, Codex and opencode are covered, when installed. macOS can ask you to
-  allow the Keychain read the first time.
+  that token. The token is never in a command line, stored, logged or shown: it goes from the
+  Keychain to `curl` inside one shell pipeline, and the mod never refreshes or writes it.
+  Kiro and Grok add no network host and no credential read. For Kiro the mod runs `/bin/sh`
+  with `find` and `stat` (read-only) to list `sessions/cli/*.json` under `$KIRO_HOME` (when it is
+  an absolute path that is not `/`, not your home and not a parent of it; otherwise `~/.kiro`),
+  then reads those session files, which hold the folder, timestamps and credit counts, and sums
+  this month's credits; the title in them is never kept. A file of 1 MiB or more is never read:
+  the card counts it as skipped ("1 file skipped"). For Grok it lists and reads the hook's state files in
+  `${XDG_STATE_HOME:-~/.local/state}/herdsidian/grok/*.json` (see Grok setup below). Both
+  show this month's use with no limit and no bar. Claude Code, Codex, opencode, Kiro and Grok are
+  covered, when installed. macOS can ask you to allow the Keychain read the first time.
+- **Grok setup** (optional, by hand). Grok has no local token counts, so Herdsidian ships a status-line
+  script: `scripts/grok-status-line.sh` (macOS; only `/bin/sh` and `/usr/bin/plutil`). Copy it,
+  make it executable and point Grok at it in `~/.grok/config.toml`:
+  ```toml
+  [ui.status_line]
+  type = "command"
+  command = "~/.grok/herdsidian-status-line.sh"
+  ```
+  Then restart Grok. This replaces Grok's built-in status row and any other status-line command,
+  and Herdsidian never edits `~/.grok/config.toml`. On each state change the script reads Grok's
+  JSON from stdin and writes `${XDG_STATE_HOME:-~/.local/state}/herdsidian/grok/<session id>.json`
+  (folder owner-only, file owner-only, 11 keys: ids, folder, model, time, cost and token counts;
+  never the prompt, transcript path, branch or repo). It prints one line such as `Grok 4.5 · 12% ctx`,
+  makes no network call, runs no `git` and deletes nothing: old files stay until you remove them.
+- **Context window** (`guide-agents`, each agent row in the left sidebar). With **Context in the
+  sidebar** On (the default), every 30 seconds while agents are listed, it shows how full each Claude
+  Code, Codex, Kiro and Grok agent's context window is. It runs `/bin/sh` with `find`, `stat`,
+  `sort`, `head`, `tail` and `grep`, read-only. For Claude Code it looks at up to 5 recent session
+  logs of the agent's folder in `~/.claude/projects`, only the last 256 KiB of each, and uses the
+  newest interactive session: SDK and other non-interactive runs (such as `claude -p`) are skipped.
+  The window is 1M when the model you asked for ends in `[1m]` (or once use passes 200K), else 200K.
+  For Codex it reads the first line and the last 256 KiB of the session logs in `~/.codex/sessions`
+  changed in the last day. It keeps only numbers, model ids and folders in memory. For Kiro it
+  reads the session files in `sessions/cli` (see above; of a file of 1 MiB or more only the folder,
+  from its first 4 KiB, and that folder then shows no value), and for Grok the hook's files in
+  `herdsidian/grok`. It adds no network host and
+  reads no credential. Off in Settings, it reads nothing and starts no timer.
 - The **Files** tab is code moved from a copy of Herdr's `files` (0.1.13) into the `herdsidian`
   mod; its folder icon is the vault's folder, in the accent color. It does not get later fixes
   to Herdr's `files`. The **Changes** tab is our own list: Herdr's `changes` mod cannot be
@@ -361,6 +395,7 @@ cp lib/ui.js mods/<mod>/ui.js          # herdsidian, herdsidian-chrome, herdsidi
 cp lib/layout.js mods/<mod>/layout.js  # herdsidian, herdsidian-chrome, herdsidian-tabs, guide-agents, guide-spaces
 cp lib/keys.js mods/<mod>/keys.js      # herdsidian, herdsidian-tabs, guide-agents, guide-spaces
 cp lib/settings.js mods/<mod>/settings.js  # herdsidian, herdsidian-tabs, guide-agents, guide-spaces
+cp lib/agent-files.js mods/<mod>/agent-files.js  # herdsidian-status, guide-agents
 ```
 
 Check mod changes in Herdr with `herdr-app check`. The "Needs you" pill is one shared

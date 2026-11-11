@@ -3,8 +3,8 @@
 
 // keyHints: "modifier" | "always" | "off". A mod cannot see modifiers while a terminal is focused
 // (probe Q2), so "modifier" falls back to showing the keys on row hover.
-// usageInStatus: show the Usage line in the status bar.
-export const SETTING_DEFAULTS = { keyHints: "modifier", usageInStatus: true };
+// usageInStatus: show the Usage line in the status bar. contextInSidebar: show the context window on agent rows.
+export const SETTING_DEFAULTS = { keyHints: "modifier", usageInStatus: true, contextInSidebar: true };
 export const KEY_HINT_VALUES = ["modifier", "always", "off"];
 export const SIDEBAR_TABS = ["notes", "files", "changes"];
 
@@ -20,6 +20,7 @@ export function readSettings(raw) {
     else if (raw.keyHints === true) out.keyHints = "always";
     else if (raw.keyHints === false) out.keyHints = "off";
     if (typeof raw.usageInStatus === "boolean") out.usageInStatus = raw.usageInStatus;
+    if (typeof raw.contextInSidebar === "boolean") out.contextInSidebar = raw.contextInSidebar;
   }
   return out;
 }
@@ -54,6 +55,11 @@ export function settingSections({ settings, sidebarHidden, sidebarRail, sidebarT
   layout.push({
     id: "usage-in-status", label: "Usage in the status bar", detail: settings.usageInStatus ? "On" : "Off",
     action: { type: "setting", name: "usageInStatus", value: !settings.usageInStatus },
+  });
+  const contextOn = settings.contextInSidebar !== false; // a missing key reads as On
+  layout.push({
+    id: "context-in-sidebar", label: "Context in the sidebar", detail: contextOn ? "On" : "Off",
+    action: { type: "setting", name: "contextInSidebar", value: !contextOn },
   });
   return [{ title: "General", rows: general }, { title: "Layout", rows: layout }];
 }

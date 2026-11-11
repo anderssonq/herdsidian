@@ -1,6 +1,7 @@
 // Usage in the status bar: which provider is primary and what each one shows. Pure: no herdr /
 // gpui-kit imports, so Node tests import it.
 import { PROVIDER_KEYS, windowView } from "./usage.js";
+import { monthLabel, monthText } from "./usage-month.js";
 
 export const NO_READING = "–"; // before the first hover, while loading, and after an error
 export const HIGH_PERCENT = 90; // at or over this, the reading is a warning
@@ -31,6 +32,7 @@ export function orderedProviders(providers, programKey) {
 export function reading(key, entry, now) {
   if (entry?.state !== "ok") return { text: NO_READING, percent: null, label: "", high: false };
   const d = entry.data;
+  if (d.kind === "month") return { text: monthText(d), percent: null, label: monthLabel(d.month), high: false };
   if (d.kind === "stats") return { text: d.cost, percent: null, label: "7 d", high: false };
   const w = d.windows.find((x) => x.label === "5 h") ?? d.windows[0];
   const v = windowView(w, now, key === "codex");

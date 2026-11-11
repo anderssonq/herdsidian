@@ -60,7 +60,7 @@ for (const m of mods) if (!ours.includes(m) && !shipped.includes(m)) errors.push
 // Shared copies (ADR-0001): every mods/*/<name>.js equals lib/<name>.js, and a mod that
 // imports ./<name>.js has the file. .kit-backup/ and .spec/ are skipped.
 const modFiles = all.filter((p) => relative(root, p).startsWith("mods/"));
-for (const name of ["tokens", "ui", "layout", "keys", "settings", "sidebar", "blocked"]) {
+for (const name of ["tokens", "ui", "layout", "keys", "settings", "sidebar", "blocked", "agent-files"]) {
   const canonicalPath = join(root, `lib/${name}.js`);
   let canonical = null;
   try { canonical = readFileSync(canonicalPath, "utf8"); }
@@ -107,7 +107,7 @@ for (const p of modFiles.filter((p) => p.endsWith(".js") && !shared(p))) {
 // The no-submit rule (2) also covers palette-main.js, palette.js, palette-view.js and send.js.
 const pure = new Set(["notes", "context", "graph", "palette", "send", "actions", "refs", "files-tree", "changes", "fold", "theme-pick", "sidebar"].map((n) => `mods/herdsidian/${n}.js`));
 // Pure files of other mods (checked: none imports herdr, gpui-kit or gpui-base).
-for (const p of ["mods/herdsidian-status/usage-status.js", "mods/herdsidian-status/blocked.js", "mods/guide-agents/blocked.js"]) pure.add(p);
+for (const p of ["mods/herdsidian-status/usage-status.js", "mods/herdsidian-status/blocked.js", "mods/guide-agents/blocked.js", "mods/herdsidian-status/agent-files.js", "mods/guide-agents/agent-files.js", "mods/herdsidian-status/usage-month.js", "mods/guide-agents/agent-context.js"]) pure.add(p);
 const hostImport = /\bfrom\s*["'](herdr|gpui-kit|gpui-base)["']|\bimport\s*["'](herdr|gpui-kit|gpui-base)["']/;
 const paintPath = /(?<!globalThis\.)\bwindow\.paint_path/;
 const submitCall = /terminal\.(send|keys)\b|hc\(\s*\[\s*["'](send|keys)["']|["']enter["']|\btask\s*:/;

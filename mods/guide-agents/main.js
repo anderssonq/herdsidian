@@ -3,13 +3,14 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, layout, nextCommand } from "herdr";
+import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, layout, nextCommand, exec, readTextFile } from "herdr";
 import { alpha, tokens, RADIUS } from "./tokens.js";
 import { icon, dot, alertMark, needsPill } from "./ui.js";
 import { find, narrow, toggleSidebar } from "./layout.js";
 import { settings } from "./settings.js";
 import { showKeyHint } from "./keys.js";
 import { nextBlocked } from "./blocked.js";
+import { CONTEXT_EVERY_MS, contextTooltip, createContextRefresher, ringStep } from "./agent-context.js";
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 
@@ -47,6 +48,8 @@ function duration(ms) {
   return h < 24 ? `${h}h` : `${Math.floor(h / 24)}d`;
 }
 
+const contextWanted = () => settings().contextInSidebar;
+
 export const STATUS_TEXT = { working: "Working", blocked: "Needs you", done: "Done", idle: "Idle" };
 
 // The agent's icon tile: the program icon centered, else the first letter of `fallback`.
@@ -77,6 +80,15 @@ const badge = (t, status, focused) => {
     .flex().items_center().justify_center().child(blocked ? alertMark(t, 12, ring) : dot(t, status, 8, 0));
 };
 
+// The context ring after the status word: a 12 px ring (ring/ring-NNN.svg, 5 % steps, drawn in
+// currentColor) and the percent. At 90 % and over both turn blocked.
+const contextRing = (t, address, v) => {
+  const high = v.percent >= 90;
+  return h_flex().id(`ctx-${address}`).gap(4).items_center().tooltip(contextTooltip(v))
+    .child(svg(`mods/guide-agents/ring/ring-${ringStep(v.percent)}.svg`).size(12).flex_none().text_color(high ? t.blocked : t.accent))
+    .child(div().text_size(11).text_color(high ? t.blocked : t.muted).child(`${v.percent}%`));
+};
+
 export default class Agents extends View {
   init(_props, cx) {
     if (props()?.sortMenu) return;
@@ -87,6 +99,12 @@ export default class Agents extends View {
     this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}");
     this.pins = JSON.parse(localStorage.getItem("pins") ?? "[]");
     cx.timer.every(30000, (cx) => cx.notify());
+    // The context ring (ADR-0005) refreshes on its own timer, only while its setting is on.
+    // init's cx is an AsyncContext, so it may be kept to start and stop that timer later.
+    this.cx = cx;
+    this.contextOn = false;
+    this.context = createContextRefresher({ exec, readTextFile, sleep: (ms) => this.cx.sleep(ms) });
+    this.syncContext(cx);
     // keys.json: "cmd-alt-1": "guide-agents.focus-1" shows the first agent in the list.
     this.order = [];
     cx.spawn(async (cx) => {
@@ -97,6 +115,38 @@ export default class Agents extends View {
         cx.notify();
       }
     });
+  }
+
+  // Starts or stops the context timer to match the setting. Timer handles are guarded:
+  // a test context's timers return nothing.
+  syncContext(cx) {
+    const on = contextWanted();
+    if (on && !this.contextOn) {
+      this.contextOn = true;
+      this.contextTask = cx.timer.every(CONTEXT_EVERY_MS, (cx) => this.tickContext(cx));
+      cx.spawn((cx) => this.tickContext(cx));
+    } else if (!on && this.contextOn) {
+      this.contextTask?.cancel?.();
+      this.contextTask = null;
+      this.contextOn = false;
+      this.context.clear();
+    }
+  }
+
+  // One background refresh; none on the rail. Render reads only its result. A tick while one
+  // runs (a timer, or the setting turned off and on) is kept: one more runs when it ends.
+  async tickContext(cx) {
+    if (!this.contextOn || !contextWanted() || narrow()) return;
+    if (this.context.running) {
+      this.contextAgain = true;
+      return;
+    }
+    await this.context.refresh(agents(), panes());
+    if (this.contextOn) cx.notify();
+    if (this.contextAgain) {
+      this.contextAgain = false;
+      this.cx.spawn((cx) => this.tickContext(cx));
+    }
   }
 
   // Stamps agents whose state changed. Done and idle count as one: looking at a
@@ -248,7 +298,21 @@ export default class Agents extends View {
     if (props()?.sortMenu) return this.sortMenu(t);
     const tk = tokens(t);
     const hints = settings().keyHints; // "always" | "modifier" (on row hover) | "off"
+    const showContext = contextWanted();
+    // The setting changed: start or stop the context timer from a task, never from render.
+    if (this.cx && showContext !== this.contextOn && !this.syncPending) {
+      this.syncPending = true;
+      this.cx.spawn((cx) => {
+        this.syncPending = false;
+        this.syncContext(cx);
+      });
+    }
     const collapsed = narrow();
+    // Entering the rail drops the context values: no refresh runs there, so they would be old
+    // when the sidebar expands. Leaving it queues one refresh from a task, never from render.
+    if (collapsed && !this.wasRail) this.context?.clear();
+    if (!collapsed && this.wasRail && showContext && this.cx) this.cx.spawn((cx) => this.tickContext(cx));
+    this.wasRail = collapsed;
     // The 44 px rail has no room for a tile next to the number; the 76 px mac rail has.
     // Narrower than 72 px, a two-digit number would run into the tile.
     const railWide = (find(layout(), "sidebar")?.size?.px ?? Infinity) >= 72;
@@ -366,6 +430,8 @@ export default class Agents extends View {
       // Without a space header above (priority, pinned) the row names its space.
       const full = byPriority || isPinned;
       const name = full ? a.space_name || label(a) : more ?? (/^\d+$/.test(label(a)) ? a.program?.name || label(a) : label(a));
+      const statusLine = div().text_size(11.5).text_color(a.status === "blocked" ? t.blocked : t.muted).font_weight(a.status === "blocked" ? 500 : 400).child(STATUS_TEXT[a.status] ?? "");
+      const ctx = showContext && !machine ? this.context?.value(a.address) : null;
       return h_flex()
         .id(`ag-${a.address}`)
         .px(8)
@@ -390,7 +456,7 @@ export default class Agents extends View {
             .when(full && Boolean(more), el => el.child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(`\u00b7 ${more}`)))
             .when(Boolean(machine), el => el.child(div().flex_none().text_size(10).text_color(t.muted).child(machine)))
             .when(subs.length > 0, el => el.child(fold(a, subs))))
-          .child(div().text_size(11.5).text_color(a.status === "blocked" ? t.blocked : t.muted).font_weight(a.status === "blocked" ? 500 : 400).child(STATUS_TEXT[a.status] ?? "")))
+          .child(ctx ? h_flex().gap(6).items_center().child(statusLine).child(contextRing(t, a.address, ctx)) : statusLine))
         .child(v_flex().flex_none().items_end().gap(1).text_size(11).text_color(t.muted)
           .child(h_flex().h(18).items_center()
             .when(this.hovered === a.address, el => el.child(pin))
