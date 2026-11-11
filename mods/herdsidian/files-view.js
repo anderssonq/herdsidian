@@ -4,8 +4,9 @@
 // The tab keeps no gpui Context: each call that needs one gets it as an argument.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState } from "gpui-base";
-import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, shared, home } from "herdr";
+import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, shared, home, notify } from "herdr";
 import { RADIUS } from "./tokens.js";
+import { iconButton } from "./icon-button.js";
 import { SIDEBAR_STORE, readSidebar } from "./sidebar.js";
 import { PER_FOLDER, TOTAL, locate, parseListing, capEntries, languageOf, parseMarks, relativeTo, ancestors, tildePath } from "./files-tree.js";
 
@@ -204,10 +205,19 @@ export class FilesTab {
       this.request = null;
       this.reveal(abs, cx);
     }
-    const line = h_flex().id("files-path").h(30).flex_none().px(14).gap(6).items_center().text_size(12).text_color(t.muted)
-      .when(Boolean(this.file), (el) => el.child(div().id("files-back").w(20).flex_none().cursor_pointer().hover((s) => s.text_color(t.foreground))
-        .on_click((_e, cx) => { this.show(null); cx.notify(); }).child("←")))
-      .child(div().flex_1().min_w(0).truncate().child(this.file ?? tildePath(this.root ?? "", home())));
+    // With a file open the header is Notes' sub-header: back, name over relative path, copy the full path.
+    const line = this.file
+      ? h_flex().id("files-header").flex_none().pt(2).pr(8).pb(6).pl(8).gap(4).items_center()
+        .child(iconButton("files-back", t, "chevron-left", "Back to the files", (_e, cx) => { this.show(null); cx.notify(); }))
+        .child(v_flex().id("files-path").flex_1().min_w(0)
+          .child(div().truncate().font_semibold().child(this.file.split("/").pop()))
+          .child(div().truncate().text_size(10.5).text_color(t.muted).child(this.file)))
+        .child(iconButton("files-copy-path", t, "mods/herdsidian/copy.svg", "Copy the full path", (_e, cx) => {
+          cx.write_to_clipboard(this.full ?? `${this.root}/${this.file}`);
+          notify({ title: "Path copied", level: "success" });
+        }))
+      : h_flex().id("files-path").h(30).flex_none().px(14).gap(6).items_center().text_size(12).text_color(t.muted)
+        .child(div().flex_1().min_w(0).truncate().child(tildePath(this.root ?? "", home())));
     return v_flex().id("tab-files").flex_1().min_h(0).text_color(t.foreground).text_size(13)
       .child(line)
       .when(!this.file, (el) => el.child(v_flex().id("files-tree").flex_1().min_h(0).overflow_y_scrollbar().px(6).pb(8).children(this.rows("", 0, [], t))
