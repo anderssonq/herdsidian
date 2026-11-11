@@ -41,3 +41,4 @@ c1f7752109dc9951864baf5fe2e395521d75aeb49156a846b7d66541f42de0a1  tests/usage-ag
 6ab601645fe12089d4d4734b8a914a098efcc71b52ab7ed2da8fb9b3323cd758  tests/usage-agents-retry.test.js
 bbc4352252de94579cceb6ab33665d038e23fbb9e3e9cbf72bae5aa91b26486f  tests/grok-hook-numbers.test.js
 770243dca7ff406fee72d97000a7c79e09f258b64258be91d5e0fdb9ff421cfc  tests/agent-context-fixes-3.test.js
+09bff78684a843d0072801c4f2ad066b8775599c17fc994a7fac4b4ef8d1c9b2  tests/files-preview-format.test.js
