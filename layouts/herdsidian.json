@@ -160,6 +160,7 @@
     "width": 1,
     "color": "border"
   },
+  "toast": "herdsidian-toast",
   "titlebar": "none",
   "traffic_lights": [
     16,

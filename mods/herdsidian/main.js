@@ -11,6 +11,7 @@ import { exec, readTextFile, writeTextFile, watchFolder, pickFolder, theme, sett
 import { alpha, tokens, RADIUS } from "./tokens.js";
 import { find } from "./layout.js";
 import { headerDots, keycap } from "./ui.js";
+import { iconButton } from "./icon-button.js";
 import { SIDEBAR_STORE, readSidebar } from "./sidebar.js";
 import { tabControl, railTabs, changeCount, tabTips } from "./sidebar-view.js";
 import { FilesTab } from "./files-view.js";
@@ -438,12 +439,6 @@ export default class Notes extends View {
     else { this.error = `No note named "${target}"`; cx.notify(); }
   }
 
-  button(id, t, icon, tip, action) {
-    return div().id(id).size(28).flex_none().flex().items_center().justify_center().rounded(RADIUS.control).text_color(t.muted)
-      .hover((s) => s.bg(tokens(t).pill).text_color(t.foreground)).cursor_pointer().tooltip(tip).on_click(action)
-      .child(svg(icon.includes("/") ? icon : `mods/workspace-chrome/${icon}.svg`).size(14));
-  }
-
   // `tone`: "folder" (foreground name), "note" (muted name) or "selected" (the last note opened).
   // `menu`: the right-click handler of this row.
   row(id, t, depth, icon, label, action, extra, tone = "note", menu = null) {
@@ -501,10 +496,10 @@ export default class Notes extends View {
   rail(t, tab) {
     const k = tokens(t);
     return v_flex().id("herdsidian").size_full().pt(8).gap(4).items_center().bg(k.glass)
-      .child(this.button("notes-expand", t, "panel-right", "Expand sidebar", () => this.collapse()))
+      .child(iconButton("notes-expand", t, "panel-right", "Expand sidebar", () => this.collapse()))
       .children(railTabs(t, k, { tab, onSelect: (id) => { this.host.selectTab(id); this.collapse(); } }))
-      .when(Boolean(this.vault), (el) => el.child(this.button("notes-search-rail", t, "search", "Find a note", (_e, cx) => this.toggleSearch(cx))))
-      .when(!this.note, (el) => el.child(this.button("notes-new-rail", t, "square-pen", "New note", (_e, cx) => { this.collapse(); this.newNote(cx); })));
+      .when(Boolean(this.vault), (el) => el.child(iconButton("notes-search-rail", t, "search", "Find a note", (_e, cx) => this.toggleSearch(cx))))
+      .when(!this.note, (el) => el.child(iconButton("notes-new-rail", t, "square-pen", "New note", (_e, cx) => { this.collapse(); this.newNote(cx); })));
   }
 
   chooseVault(cx) {
@@ -800,7 +795,7 @@ export default class Notes extends View {
         // The block's left edge is the window width minus Notes' own width, so the grid lines up with the toolbar's.
         .child(headerDots(k, "herdsidian", blockX()))
         .child(tabControl(t, k, { tab, count: changeCount(shared("herdsidian.changes")), tips: tabTips(keys(), shared("layout"), herdsidianSettings().keyHints), onSelect: (id, cx) => { this.host.selectTab(id); cx.notify(); } }))
-        .child(this.button("notes-collapse", t, "panel-right", "Collapse to rail", () => this.collapse())))
+        .child(iconButton("notes-collapse", t, "panel-right", "Collapse to rail", () => this.collapse())))
       .child(tab === "notes" ? this.notesTab(t, cx) : this.tabBody(tab).render(t, cx));
   }
 
@@ -815,19 +810,19 @@ export default class Notes extends View {
     const title = this.note ? base(this.note) : this.vault?.split("/").pop() ?? "Notes";
     return v_flex().flex_1().min_h(0)
       .child(h_flex().flex_none().pt(2).pr(8).pb(6).pl(8).gap(4).items_center()
-        .when(Boolean(this.note), (el) => el.child(this.button("notes-back", t, "chevron-left", "Back to the notes",
+        .when(Boolean(this.note), (el) => el.child(iconButton("notes-back", t, "chevron-left", "Back to the notes",
           (_e, cx) => this.leave((cx) => { this.close(); cx.notify(); }, cx))))
         .child(v_flex().flex_1().min_w(0)
           .child(div().truncate().font_semibold().child(title))
           .when(Boolean(this.note), (el) => el.child(div().truncate().text_size(10.5).text_color(t.muted).child(this.note))))
-        .when(Boolean(this.note), (el) => el.child(this.button("notes-copy-path", t, "mods/herdsidian/copy.svg", "Copy the full path", (_e, cx) => {
+        .when(Boolean(this.note), (el) => el.child(iconButton("notes-copy-path", t, "mods/herdsidian/copy.svg", "Copy the full path", (_e, cx) => {
           cx.write_to_clipboard(`${this.vault}/${this.note}`);
           notify({ title: "Path copied", level: "success" });
         })))
         .when(!this.note, (el) => el
-          .when(Boolean(this.vault), (el) => el.child(this.button("notes-search", t, "search", "Find a note", (_e, cx) => this.toggleSearch(cx))))
-          .child(this.button("notes-new", t, "square-pen", "New note", (_e, cx) => this.newNote(cx)))
-          .child(this.button("notes-vault", t, "folder", "Choose the vault", (_e, cx) => this.chooseVault(cx)))))
+          .when(Boolean(this.vault), (el) => el.child(iconButton("notes-search", t, "search", "Find a note", (_e, cx) => this.toggleSearch(cx))))
+          .child(iconButton("notes-new", t, "square-pen", "New note", (_e, cx) => this.newNote(cx)))
+          .child(iconButton("notes-vault", t, "folder", "Choose the vault", (_e, cx) => this.chooseVault(cx)))))
       .when(Boolean(this.error), (el) => el.child(div().px(12).pb(6).text_size(11.5).text_color(t.blocked).child(this.error)))
       .when(Boolean(this.notice), (el) => el.child(div().px(12).pb(6).text_size(11.5).text_color(t.muted).child(this.notice)))
       .child(this.note ? this.reader(t) : this.browser(t))

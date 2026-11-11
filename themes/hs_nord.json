@@ -1,7 +1,7 @@
 {
   "background": "#2e3440",
   "foreground": "#d8dee9",
-  "selection": "#434c5e",
+  "selection": "#365b8c",
   "cursor": "#d8dee9",
   "ansi": [
     "#3b4252", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#88c0d0", "#e5e9f0",

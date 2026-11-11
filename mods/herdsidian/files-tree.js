@@ -2,7 +2,8 @@
 // Pure (no herdr, gpui-kit or gpui-base import), so Node tests import it.
 
 export const PER_FOLDER = 500, TOTAL = 5000;
-const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", toml: "yaml", jsonc: "json", svelte: "html", vue: "html" };
+const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", cjs: "js", toml: "yaml", jsonc: "json", svelte: "html", vue: "html", htm: "html",
+  markdown: "md", mdx: "md", scss: "css", sass: "css", less: "css" };
 
 // The folder Files and Changes look at: the focused pane's cwd, else the focused cwd, else the space folder.
 // `on` is the machine of a remote space or terminal.
