@@ -1,4 +1,4 @@
-// Usage: Kiro credits from messages.jsonl usage_summary lines (docs/specs/kiro-usage-jsonl.md,
+// Usage: Kiro credits from messages.jsonl usage_summary lines (the Kiro usage JSONL spec,
 // AC1-AC8). Parser and merge run on fixture strings and stub execs; the shell runs against temp
 // folders on macOS only (`stat -f` is BSD). No real Kiro transcript is used.
 import { test } from "node:test";
