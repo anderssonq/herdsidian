@@ -49,17 +49,17 @@ test("S3 visible: max 3, +N more, expanded shows all and resets when small", () 
   assert.equal(s.cards.length, 5, "no mutation");
 });
 
-test("S4 heights: 60 plain, 96 with actions, more 28, gap 8, margin 12 below, width 364", () => {
+test("S4 heights: 60 for every card (buttons sit inline), more 28, gap 8, margin 12 below, width 364", () => {
   assert.equal(heightOf(mk({ kind: "done" })), 60);
   assert.equal(heightOf(mk({ kind: "info" })), 60);
-  assert.equal(heightOf(sticky({ kind: "blocked" })), 96);
-  assert.equal(heightOf(sticky({ kind: "error", login: "hc machine login x" })), 96);
-  assert.equal(heightOf(sticky({ kind: "error" })), 96);
+  assert.equal(heightOf(sticky({ kind: "blocked" })), 60);
+  assert.equal(heightOf(sticky({ kind: "error", login: "hc machine login x" })), 60);
+  assert.equal(heightOf(sticky({ kind: "error" })), 60);
   const one = { ...empty(), cards: [mk({ id: 1 })] };
   assert.equal(windowSpec(one, { vw: 1280, zoom: 1, rightInset: 0 }).height, 60 + 12);
   assert.equal(windowSpec(one, { vw: 1280, zoom: 1, rightInset: 0 }).width, 364);
   const three = { ...empty(), cards: [sticky({ id: 1, kind: "blocked" }), mk({ id: 2 }), mk({ id: 3, kind: "info" })] };
-  assert.equal(windowSpec(three, { vw: 1280, zoom: 1, rightInset: 0 }).height, 96 + 60 + 60 + 2 * 8 + 12);
+  assert.equal(windowSpec(three, { vw: 1280, zoom: 1, rightInset: 0 }).height, 60 + 60 + 60 + 2 * 8 + 12);
   const five = { ...empty(), cards: [1, 2, 3, 4, 5].map((id) => mk({ id })) };
   assert.equal(windowSpec(five, { vw: 1280, zoom: 1, rightInset: 0 }).height, 3 * 60 + 28 + 3 * 8 + 12);
   assert.equal(windowSpec({ ...five, expanded: true }, { vw: 1280, zoom: 1, rightInset: 0 }).height, 5 * 60 + 4 * 8 + 12);

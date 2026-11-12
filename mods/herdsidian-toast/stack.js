@@ -3,12 +3,12 @@
 // Spec: the SPEC (A) block of herdsidian-toasts-a-reference.html.
 
 // Sizes in px. width is the card; the window adds `margin` on each side (and below) for the card's shadow.
-export const A = { width: 340, top: 60, gap: 8, max: 3, ttl: 5000, margin: 12, enter: 160, leave: 120, cardPlain: 60, cardActions: 96, more: 28 };
+export const A = { width: 340, top: 60, gap: 8, max: 3, ttl: 5000, margin: 12, enter: 160, leave: 120, cardPlain: 60, more: 28 };
 
 const LOGIN = /^([a-z0-9][a-z0-9_.-]{0,31}) needs login; run hc machine login \1$/;
 
+// Sticky cards stay until acted on; they get the X at the left (and Go to agent or Copy at the right).
 export const isSticky = (c) => c.kind === "blocked" || c.kind === "error";
-const hasActions = isSticky; // blocked: Go to agent / Later; login: code + Copy; error: Dismiss
 
 // Sticky first, then newest first (ties: higher id first).
 export function order(cards) {
@@ -32,7 +32,10 @@ export function cardFrom(props, { panes = [], agents = [], spaces = [] }, now, n
       sub: "Remote machine · its agents are paused", letter: login[1][0].toUpperCase() });
   }
   const action = props.action?.name ? { name: props.action.name, args: props.action.args ?? {} } : null;
-  const paneId = action?.name === "pane.focus" ? action.args.pane : null;
+  // Herdr's own agent notices go through agent.focus {terminal}; a mod's may use pane.focus {pane}.
+  const terminal = action?.name === "agent.focus" ? action.args.terminal : null;
+  const paneId = action?.name === "pane.focus" ? action.args.pane
+    : terminal ? (panes.find((p) => p.terminal === terminal) ?? agents.find((a) => a.address === terminal))?.pane ?? null : null;
   const pane = paneId ? panes.find((p) => p.pane === paneId) : null;
   const level = props.level;
   if (!pane) {
@@ -48,7 +51,8 @@ export function cardFrom(props, { panes = [], agents = [], spaces = [] }, now, n
     ?? spaces.find((s) => s.id === agent?.space)?.name
     ?? spaces.find((s) => s.tabs?.some((t) => t.id === pane.tab))?.name ?? "";
   const line = (tail) => [space, tail].filter(Boolean).join(" · ");
-  const kind = level === "error" ? "error" : level === "warning" || status === "blocked" ? "blocked"
+  // A blocked agent wins over the level: Herdr posts its "needs you" notice as an error.
+  const kind = status === "blocked" ? "blocked" : level === "error" ? "error" : level === "warning" ? "blocked"
     : level === "success" || status === "done" ? "done" : "info";
   const title = kind === "blocked" ? `${name} needs you` : kind === "done" ? `${name} finished` : props.title ?? name;
   const sub = kind === "blocked" ? line(props.reason || pane.branch) : kind === "done" ? line(pane.branch) : props.body ?? "";
@@ -80,7 +84,7 @@ export function visible(store) {
   return { shown, more: store.cards.length - shown.length };
 }
 
-export const heightOf = (card) => (hasActions(card) ? A.cardActions : A.cardPlain);
+export const heightOf = () => A.cardPlain; // every card is one row: buttons sit inline
 
 // The overlay window, in the app's pixels. The card's right edge sits 16 px left of the right sidebar (or of the window edge
 // when `rightInset` is 0); the window is `margin` wider on each side, so x subtracts `margin` too.

@@ -215,7 +215,7 @@ export default class Toast extends View {
     const cards = shown.map((card) => {
       const handlers = {
         onGo: (c) => this.goTo(card, c),
-        onLater: (c) => this.dismiss(card.id, c),
+        onClose: (c) => this.dismiss(card.id, c),
         onCopy: (c) => {
           c.write_to_clipboard(card.login);
           update((cur) => ({ ...cur, cards: cur.cards.map((x) => (x.id === card.id ? { ...x, copied: true } : x)) }));

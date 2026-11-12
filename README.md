@@ -301,8 +301,9 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
   behavior. `guide-spaces` runs `git` and `hc machine ls` like the original.
 - `herdsidian-toast` draws every notification as an agent card at the top right, next to the
   right sidebar (the layout root sets `"toast": "herdsidian-toast"`). "Needs you", login and
-  error cards stay until you act (Go to agent, Later, Copy the login command, or Dismiss),
-  or until the agent is no longer blocked or the machine is ready or gone.
+  error cards stay until you act or until the agent is no longer blocked or the machine is ready
+  or gone. Each card is one 60 px row: an X at the far left closes a card that stays, and
+  **Go to agent** or **Copy** (the login command) sits at the right.
   Timed cards show a timer line, paused while the pointer is over the card and while Herdr is
   not the active window. Up to three cards show, then "+N more"; a new notice from the same
   agent or machine replaces its card in place.

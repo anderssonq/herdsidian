@@ -156,7 +156,7 @@ test("F3 every handler uses the cx its own callback gets, never the render's", (
   findById(r.tree, `toast-copy-${id}`).onClick({}, r.fresh);
   assert.deepEqual(r.fresh.clipboard, ["hc machine login devbox"]);
   r = rendered();
-  findById(r.tree, `toast-later-${id}`).onClick({}, r.fresh);
+  findById(r.tree, `toast-close-${id}`).onClick({}, r.fresh);
   assert.equal(store().cards.length, 0);
 
   state.shared = {};
@@ -187,7 +187,7 @@ test("F3 every handler uses the cx its own callback gets, never the render's", (
   assert.equal(store().expanded, true);
 });
 
-test("F4 a warning notice with no pane stays, and offers Later but not Go to agent", () => {
+test("F4 a warning notice with no pane stays, and offers the X but not Go to agent", () => {
   post(notice({ level: "warning", title: "Careful", body: "disk almost full" }));
   const copy = stackCopy();
   const id = store().cards[0].id;
@@ -195,20 +195,21 @@ test("F4 a warning notice with no pane stays, and offers Later but not Go to age
   copy.cx.drain();
   assert.equal(store().cards.length, 1);
   assert.equal(findById(tree, `toast-go-${id}`), null);
-  assert.deepEqual(texts(findById(tree, `toast-later-${id}`)), ["Later"]);
+  assert.ok(findById(tree, `toast-close-${id}`));
+  assert.equal(findById(tree, `toast-later-${id}`), null);
   assert.equal(stillNeeded({ kind: "blocked", key: null }, [], []), true);
   assert.equal(stillNeeded({ kind: "blocked", key: "p1" }, [], []), false);
 });
 
-test("F5 login cards: Later removes the card; an unknown machine is no longer needed; one card per machine", () => {
+test("F5 login cards: the X removes the card; an unknown machine is no longer needed; one card per machine", () => {
   post(loginNotice());
   const copy = stackCopy();
   const id = store().cards[0].id;
-  const later = findById(copy.tree(), `toast-later-${id}`);
-  assert.deepEqual(texts(later), ["Later"]);
-  const kids = walk(findById(copy.tree(), `toast-card-${id}`)).filter((n) => /^toast-(code|copy|later)-/.test(n.nodeId ?? "")).map((n) => n.nodeId.split("-")[1]);
-  assert.deepEqual(kids, ["code", "copy", "later"], "Later comes after Copy");
-  later.onClick({}, copy.cx);
+  const close = findById(copy.tree(), `toast-close-${id}`);
+  assert.ok(close);
+  const kids = walk(findById(copy.tree(), `toast-card-${id}`)).filter((n) => /^toast-(close|code|copy|later)-/.test(n.nodeId ?? "")).map((n) => n.nodeId.split("-")[1]);
+  assert.deepEqual(kids, ["close", "code", "copy"], "the X comes first, Copy last");
+  close.onClick({}, copy.cx);
   assert.equal(store().cards.length, 0);
 
   const login = { kind: "error", login: "hc machine login devbox" };
@@ -228,7 +229,7 @@ test("F6 each card has the height the window counts; expanded mode caps the wind
   post(blockedCard());
   let copy = stackCopy();
   let id = store().cards[0].id;
-  assert.deepEqual(args(findById(copy.tree(), `toast-card-${id}`), "h").at(-1), [96]);
+  assert.deepEqual(args(findById(copy.tree(), `toast-card-${id}`), "h").at(-1), [60]);
   state.shared = {};
   post(notice());
   copy = stackCopy();

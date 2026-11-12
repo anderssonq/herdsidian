@@ -394,7 +394,7 @@ Look (layout root):
   | `herdsidian-tabs` | The toolbar, with the sidebar toggle. Clone of `tabs`. |
   | `herdsidian-pane` | The pane header. Clone of `pane`. |
   | `herdsidian-status` | The status bar, with Usage. Clone of `workspace-status`. |
-  | `herdsidian-toast` | Notifications as agent cards at the top right next to the right sidebar: sticky "needs you", login and error cards (Go to agent / Later / Copy / Dismiss), timed cards with a timer line paused on hover and while Herdr is inactive, up to three plus "+N more", the same agent or machine replaces in place. Replaces `toast` (layout root `"toast"`). |
+  | `herdsidian-toast` | Notifications as agent cards at the top right next to the right sidebar: sticky "needs you", login and error cards (an X at the far left closes them; Go to agent / Copy inline at the right; one 60 px row each), timed cards with a timer line paused on hover and while Herdr is inactive, up to three plus "+N more", the same agent or machine replaces in place. Replaces `toast` (layout root `"toast"`). |
 
   The Files tab is the code of Herdr's `files` mod, moved into `herdsidian` (`files-view.js`,
   `files-tree.js`); there is no `herdsidian-files` mod.
