@@ -3,7 +3,7 @@
 import { div, svg, image } from "gpui-kit";
 import { RADIUS, alpha } from "./tokens.js";
 import { alertMark } from "./ui.js";
-import { A, heightOf } from "./stack.js";
+import { A, heightOf, isSticky } from "./stack.js";
 
 const PAD_X = 14;
 const TIMER_FULL = A.width - 2 * PAD_X; // the timer line runs inset 14 on each side
@@ -33,33 +33,28 @@ function tile(card, t) {
     .child(ring.id(`toast-badge-${card.id}`).absolute().rounded_full().bg(t.popover).flex().items_center().justify_center());
 }
 
-const secondary = (t, id, label, onClick) => div().id(id).flex_none().h(26).px(10).rounded(RADIUS.control).bg(alpha(t.foreground, 0.06))
-  .flex().items_center().text_size(12).text_color(t.muted).cursor_pointer().on_click(press(onClick)).child(label);
+// The X at the far left of a sticky card: it dismisses the card. Muted, lit on hover.
+const closeButton = (card, t, onClose) => div().id(`toast-close-${card.id}`).flex_none().size(20).rounded(RADIUS.control)
+  .flex().items_center().justify_center().text_color(t.muted).cursor_pointer().tooltip("Dismiss")
+  .hover((s) => s.bg(alpha(t.foreground, 0.08)).text_color(t.foreground)).on_click(press(onClose))
+  .child(svg("mods/herdsidian-toast/close.svg").size(12));
 
-// The primary button, with its key cap when `cap` is a string.
+// The primary button, inline at the right of the card, with its key cap when `cap` is a string.
 function goButton(card, t, onGo, cap) {
-  const button = div().id(`toast-go-${card.id}`).flex_none().h(26).pl(10).pr(cap ? 5 : 10).gap(7).rounded(RADIUS.control).bg(t.solid)
+  const button = div().id(`toast-go-${card.id}`).flex_none().h(24).pl(9).pr(cap ? 4 : 9).gap(6).rounded(RADIUS.control).bg(t.solid)
     .flex().items_center().text_size(12).font_weight(600).text_color(t.solid_foreground).cursor_pointer().on_click(press(onGo)).child("Go to agent");
   return cap === null ? button : button.child(div().flex_none().h(16).px(4).rounded(4).border(1).border_color(alpha(t.solid_foreground, 0.25))
     .flex().items_center().text_size(10).font_weight(500).child(cap));
 }
 
-// The row under the text: null when the card has no buttons.
-function actions(card, t, handlers, opts) {
-  const row = () => div().flex().items_center().gap(6).pl(34);
-  if (card.kind === "blocked") {
-    const later = secondary(t, `toast-later-${card.id}`, "Later", handlers.onLater);
-    return card.key ? row().child(goButton(card, t, handlers.onGo, opts.cap ?? null)).child(later) : row().child(later); // no pane: nowhere to go
-  }
-  if (card.kind === "error" && card.login) {
-    return row()
-      .child(div().id(`toast-code-${card.id}`).flex_1().min_w_0().h(26).px(8).rounded(RADIUS.control).bg(t.background).border(1).border_color(alpha(t.foreground, 0.07))
-        .flex().items_center().truncate().font_family(MONO).text_size(11.5).text_color(t.foreground).child(card.login))
-      .child(div().id(`toast-copy-${card.id}`).flex_none().h(26).px(10).rounded(RADIUS.control).bg(t.raised).flex().items_center()
-        .text_size(12).text_color(t.foreground).cursor_pointer().on_click(press(handlers.onCopy)).child(opts.copied ? "Copied" : "Copy"))
-      .child(secondary(t, `toast-later-${card.id}`, "Later", handlers.onLater));
-  }
-  if (card.kind === "error") return row().child(secondary(t, `toast-dismiss-${card.id}`, "Dismiss", handlers.onLater));
+// Copies the login command, inline at the right of a login card.
+const copyButton = (card, t, onCopy, copied) => div().id(`toast-copy-${card.id}`).flex_none().h(24).px(9).rounded(RADIUS.control).bg(t.raised)
+  .flex().items_center().text_size(12).text_color(t.foreground).cursor_pointer().on_click(press(onCopy)).child(copied ? "Copied" : "Copy");
+
+// The inline button at the right: null when the card has none.
+function inlineButton(card, t, handlers, opts) {
+  if (card.login) return copyButton(card, t, handlers.onCopy, opts.copied);
+  if (isSticky(card) && card.key) return goButton(card, t, handlers.onGo, opts.cap ?? null); // no pane: nowhere to go
   return null;
 }
 
@@ -79,22 +74,29 @@ function timerLine(card, t, now, fresh) {
 // One card. `opts`: { copied, cap (string or null: hidden), agoText, fresh (first render in this window copy) }.
 // The root's height is the one stack.js counts for the window, so a card never gets clipped.
 export function cardView(card, t, handlers, now, opts) {
-  const lines = div().flex_1().min_w_0().flex().flex_col().gap(2)
-    .child(div().flex().items_baseline().gap(6)
-      .child(div().flex_1().min_w_0().truncate().text_size(13).font_weight(600).text_color(t.foreground).child(card.title))
-      .child(div().flex_none().text_size(11).text_color(t.muted).child(opts.agoText)))
-    .child(div().id(`toast-sub-${card.id}`).truncate().text_size(12).text_color(t.muted).tooltip(card.sub).child(card.sub));
-  const row = actions(card, t, handlers, opts);
-  const main = div().flex().gap(10).when(row === null, (el) => el.items_center()).when(row !== null, (el) => el.items_start())
-    .child(tile(card, t)).child(lines);
-  return div().id(`toast-card-${card.id}`).relative().w_full().h(heightOf(card)).flex().flex_col().gap(10).px(PAD_X).py(12)
+  const button = inlineButton(card, t, handlers, opts);
+  // The time never truncates. With a button at the right the title gets the room and the time ends the second line.
+  const ago = div().id(`toast-ago-${card.id}`).flex_none().text_size(11).text_color(t.muted).child(opts.agoText);
+  const title = div().flex().items_baseline().gap(6)
+    .child(div().flex_1().min_w_0().truncate().text_size(13).font_weight(600).text_color(t.foreground).child(card.title))
+    .when(button === null, (el) => el.child(ago));
+  // A login card shows its command on the second line, where the Copy button next to it can be read.
+  const text = card.login
+    ? div().id(`toast-code-${card.id}`).flex_1().min_w_0().truncate().font_family(MONO).text_size(11.5).text_color(t.foreground).tooltip(card.sub).child(card.login)
+    : div().id(`toast-sub-${card.id}`).flex_1().min_w_0().truncate().text_size(12).text_color(t.muted).tooltip(card.sub).child(card.sub);
+  const sub = div().flex().items_baseline().gap(6).child(text).when(button !== null, (el) => el.child(ago));
+  const lines = div().flex_1().min_w_0().flex().flex_col().gap(2).child(title).child(sub);
+  const main = div().flex().items_center().gap(10)
+    .when(isSticky(card), (el) => el.child(closeButton(card, t, handlers.onClose)))
+    .child(tile(card, t)).child(lines)
+    .when(button !== null, (el) => el.child(button));
+  return div().id(`toast-card-${card.id}`).relative().w_full().h(heightOf(card)).flex().flex_col().justify_center().px(PAD_X).py(12)
     .rounded(RADIUS.overlay).bg(t.popover).border(1).border_color(alpha(t.foreground, 0.07)).shadow_xl().overflow_hidden().cursor_pointer()
     .top(card.entered ? 0 : -8).opacity(card.entered && !card.leaving ? 1 : 0)
     .transition("top", ENTER).transition("opacity", card.leaving ? LEAVE : ENTER)
     .on_hover((hovered, cx) => handlers.onHover(hovered, cx))
     .on_click((_event, cx) => handlers.onOpen(cx))
     .child(main)
-    .when(row !== null, (el) => el.child(row))
     .when(card.ttl != null, (el) => el.child(timerLine(card, t, now, opts.fresh)));
 }
 
