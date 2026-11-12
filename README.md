@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/hero.jpg" width="760" alt="Herdsidian banner: the title over a violet and blue aurora, the tagline &quot;Your vault is your agents' memory. Now it sits right next to them.&quot;, and the Herdr window with a Claude Code agent and the Notes sidebar" />
+  <img src="docs/hero.jpg" width="760" alt="Herdsidian banner: the title over a violet and blue aurora, the tagline &quot;Your vault is your agents' memory. Now it sits right next to them.&quot;, and the Herdr window with the Notes sidebar, a &quot;Codex needs you&quot; card and the usage of each agent" />
 </p>
 
 <p align="center"><i>‹ your vault, next to your agents ›</i></p>
@@ -8,16 +8,19 @@
   <a href="https://herdr.dev"><img src="https://img.shields.io/badge/Herdr-layout-7aa2f7" alt="Herdr layout" /></a>
   <img src="https://img.shields.io/badge/Obsidian-vault-7C3AED?logo=obsidian&logoColor=white" alt="Obsidian vault" />
   <img src="https://img.shields.io/badge/Claude%20Code-ready-D97757?logo=claude&logoColor=white" alt="Claude Code ready" />
+  <img src="https://img.shields.io/badge/Codex-ready-111111?logo=data:image/svg%2bxml;base64,PHN2ZyBoZWlnaHQ9IjFlbSIgc3R5bGU9ImZsZXg6bm9uZTtsaW5lLWhlaWdodDoxIiB2aWV3Qm94PSIwIDAgMjQgMjQiIHdpZHRoPSIxZW0iIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHRpdGxlPkNvZGV4PC90aXRsZT48cGF0aCBkPSJNMTkuNTAzIDBINC40OTZBNC40OTYgNC40OTYgMCAwMDAgNC40OTZ2MTUuMDA3QTQuNDk2IDQuNDk2IDAgMDA0LjQ5NiAyNGgxNS4wMDdBNC40OTYgNC40OTYgMCAwMDI0IDE5LjUwM1Y0LjQ5NkE0LjQ5NiA0LjQ5NiAwIDAwMTkuNTAzIDB6IiBmaWxsPSIjZmZmIj48L3BhdGg+PHBhdGggZD0iTTkuMDY0IDMuMzQ0YTQuNTc4IDQuNTc4IDAgMDEyLjI4NS0uMzEyYzEgLjExNSAxLjg5MS41NCAyLjY3MyAxLjI3NS4wMS4wMS4wMjQuMDE3LjAzNy4wMjFhLjA5LjA5IDAgMDAuMDQzIDAgNC41NSA0LjU1IDAgMDEzLjA0Ni4yNzVsLjA0Ny4wMjIuMTE2LjA1N2E0LjU4MSA0LjU4MSAwIDAxMi4xODggMi4zOTljLjIwOS41MS4zMTMgMS4wNDEuMzE1IDEuNTk1YTQuMjQgNC4yNCAwIDAxLS4xMzQgMS4yMjMuMTIzLjEyMyAwIDAwLjAzLjExNWMuNTk0LjYwNy45ODggMS4zMyAxLjE4MyAyLjE3LjI4OSAxLjQyNS0uMDA3IDIuNzEtLjg4NyAzLjg1NGwtLjEzNi4xNjZhNC41NDggNC41NDggMCAwMS0yLjIwMSAxLjM4OC4xMjMuMTIzIDAgMDAtLjA4MS4wNzZjLS4xOTEuNTUxLS4zODMgMS4wMjMtLjc0IDEuNDk0LS45IDEuMTg3LTIuMjIyIDEuODQ2LTMuNzExIDEuODM4LTEuMTg3LS4wMDYtMi4yMzktLjQ0LTMuMTU3LTEuMzAyYS4xMDcuMTA3IDAgMDAtLjEwNS0uMDI0Yy0uMzg4LjEyNS0uNzguMTQzLTEuMjA0LjEzOGE0LjQ0MSA0LjQ0MSAwIDAxLTEuOTQ1LS40NjYgNC41NDQgNC41NDQgMCAwMS0xLjYxLTEuMzM1Yy0uMTUyLS4yMDItLjMwMy0uMzkyLS40MTQtLjYxN2E1LjgxIDUuODEgMCAwMS0uMzctLjk2MSA0LjU4MiA0LjU4MiAwIDAxLS4wMTQtMi4yOTguMTI0LjEyNCAwIDAwLjAwNi0uMDU2LjA4NS4wODUgMCAwMC0uMDI3LS4wNDggNC40NjcgNC40NjcgMCAwMS0xLjAzNC0xLjY1MSAzLjg5NiAzLjg5NiAwIDAxLS4yNTEtMS4xOTIgNS4xODkgNS4xODkgMCAwMS4xNDEtMS42Yy4zMzctMS4xMTIuOTgyLTEuOTg1IDEuOTMzLTIuNjE4LjIxMi0uMTQxLjQxMy0uMjUxLjYwMS0uMzMuMjE1LS4wODkuNDMtLjE2NC42NDYtLjIyN2EuMDk4LjA5OCAwIDAwLjA2NS0uMDY2IDQuNTEgNC41MSAwIDAxLjgyOS0xLjYxNSA0LjUzNSA0LjUzNSAwIDAxMS44MzctMS4zODh6bTMuNDgyIDEwLjU2NWEuNjM3LjYzNyAwIDAwMCAxLjI3MmgzLjYzNmEuNjM3LjYzNyAwIDEwMC0xLjI3MmgtMy42MzZ6TTguNDYyIDkuMjNhLjYzNy42MzcgMCAwMC0xLjEwNi42MzFsMS4yNzIgMi4yMjQtMS4yNjYgMi4xMzZhLjYzNi42MzYgMCAxMDEuMDk1LjY0OWwxLjQ1NC0yLjQ1NWEuNjM2LjYzNiAwIDAwLjAwNS0uNjRMOC40NjIgOS4yM3oiIGZpbGw9InVybCgjbG9iZS1pY29ucy1jb2RleC1fUl8wXykiPjwvcGF0aD48ZGVmcz48bGluZWFyR3JhZGllbnQgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiIGlkPSJsb2JlLWljb25zLWNvZGV4LV9SXzBfIiB4MT0iMTIiIHgyPSIxMiIgeTE9IjMiIHkyPSIyMSI+PHN0b3Agc3RvcC1jb2xvcj0iI0IxQTdGRiI+PC9zdG9wPjxzdG9wIG9mZnNldD0iLjUiIHN0b3AtY29sb3I9IiM3QTlERkYiPjwvc3RvcD48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMzOTQxRkYiPjwvc3RvcD48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48L3N2Zz4=" alt="Codex ready" />
+  <img src="https://img.shields.io/badge/Grok-ready-000000?logo=data:image/svg%2bxml;base64,PHN2ZyBmaWxsPSIjZmZmZmZmIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48dGl0bGU+R3JvazwvdGl0bGU+PHBhdGggZD0iTTkuMjcgMTUuMjlsNy45NzgtNS44OTdjLjM5MS0uMjkuOTUtLjE3NyAxLjEzNy4yNzIuOTggMi4zNjkuNTQyIDUuMjE1LTEuNDEgNy4xNjktMS45NTEgMS45NTQtNC42NjcgMi4zODItNy4xNDkgMS40MDZsLTIuNzExIDEuMjU3YzMuODg5IDIuNjYxIDguNjExIDIuMDAzIDExLjU2Mi0uOTUzIDIuMzQxLTIuMzQ0IDMuMDY2LTUuNTM5IDIuMzg4LTguNDJsLjAwNi4wMDdjLS45ODMtNC4yMzIuMjQyLTUuOTI0IDIuNzUtOS4zODMuMDYtLjA4Mi4xMi0uMTY0LjE3OS0uMjQ4bC0zLjMwMSAzLjMwNXYtLjAxTDkuMjY3IDE1LjI5Mk03LjYyMyAxNi43MjNjLTIuNzkyLTIuNjctMi4zMS02LjgwMS4wNzEtOS4xODQgMS43NjEtMS43NjMgNC42NDctMi40ODMgNy4xNjYtMS40MjVsMi43MDUtMS4yNWE3LjgwOCA3LjgwOCAwIDAwLTEuODI5LTFBOC45NzUgOC45NzUgMCAwMDUuOTg0IDUuODNjLTIuNTMzIDIuNTM2LTMuMzMgNi40MzYtMS45NjIgOS43NjQgMS4wMjIgMi40ODctLjY1MyA0LjI0Ni0yLjM0IDYuMDIyLS41OTkuNjMtMS4xOTkgMS4yNTktMS42ODIgMS45MjVsNy42Mi02LjgxNSI+PC9wYXRoPjwvc3ZnPg==" alt="Grok ready" />
+  <img src="https://img.shields.io/badge/Kiro-ready-9046FF?logo=data:image/svg%2bxml;base64,PHN2ZyB3aWR0aD0iMTIwMCIgaGVpZ2h0PSIxMjAwIiB2aWV3Qm94PSIwIDAgMTIwMCAxMjAwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8cmVjdCB3aWR0aD0iMTIwMCIgaGVpZ2h0PSIxMjAwIiByeD0iMjYwIiBmaWxsPSIjOTA0NkZGIi8+CjxtYXNrIGlkPSJtYXNrMF8xMTA2XzQ4NTYiIHN0eWxlPSJtYXNrLXR5cGU6bHVtaW5hbmNlIiBtYXNrVW5pdHM9InVzZXJTcGFjZU9uVXNlIiB4PSIyNzIiIHk9IjIwMiIgd2lkdGg9IjY1NSIgaGVpZ2h0PSI3OTYiPgo8cGF0aCBkPSJNOTI2LjU3OCAyMDIuNzkzSDI3Mi42MzdWOTk3Ljg1N0g5MjYuNTc4VjIwMi43OTNaIiBmaWxsPSJ3aGl0ZSIvPgo8L21hc2s+CjxnIG1hc2s9InVybCgjbWFzazBfMTEwNl80ODU2KSI+CjxwYXRoIGQ9Ik0zOTguNTU0IDgxOC45MTRDMzE2LjMxNSAxMDAxLjAzIDQ5MS40NzcgMTA0Ni43NCA2MjAuNjcyIDk0MC4xNTZDNjU4LjY4NyAxMDU5LjY2IDgwMS4wNTIgOTcwLjQ3MyA4NTIuMjM0IDg3Ny43OTVDOTY0Ljc4NyA2NzMuNTY3IDkxOS4zMTggNDY1LjM1NyA5MDcuNjQgNDIyLjM3NEM4MjcuNjM3IDEyOS40NDMgNDI3LjYyMyAxMjguOTQ2IDM1OC44IDQyMy44NjVDMzQyLjY1MSA0NzUuNTQ0IDM0Mi40MDIgNTM0LjE4IDMzMy40NTggNTk1LjA1MUMzMjguOTg2IDYyNS44NiAzMjUuNTA3IDY0NS40ODggMzEzLjgzIDY3Ny43ODVDMzA2Ljg3MyA2OTYuNDI0IDI5Ny42OCA3MTIuODE5IDI4Mi43NzMgNzQwLjY0NUMyNTkuOTE1IDc4My44ODEgMjY5LjYwNCA4NjcuMTEzIDM4Ny44NyA4MjMuODgzTDM5OS4wNTEgODE4LjkxNEgzOTguNTU0WiIgZmlsbD0id2hpdGUiLz4KPHBhdGggZD0iTTYzNi4xMjMgNTQ5LjM1M0M2MDMuMzI4IDU0OS4zNTMgNTk4LjM1OSA1MTAuMDk3IDU5OC4zNTkgNDg2Ljc0MkM1OTguMzU5IDQ2NS42MjMgNjAyLjA4NiA0NDguOTc3IDYwOS4yOTMgNDM4LjI5M0M2MTUuNTA0IDQyOC44NTIgNjI0LjY5NyA0MjQuMTMxIDYzNi4xMjMgNDI0LjEzMUM2NDcuNTU1IDQyNC4xMzEgNjU3LjQ5MiA0MjguODUyIDY2NC40NDcgNDM4LjU0MUM2NzIuMzk4IDQ0OS40NzQgNjc2LjYyMyA0NjYuMTIgNjc2LjYyMyA0ODYuNzQyQzY3Ni42MjMgNTI1Ljk5OCA2NjEuNDcxIDU0OS4zNTMgNjM2LjM3NSA1NDkuMzUzSDYzNi4xMjNaIiBmaWxsPSJibGFjayIvPgo8cGF0aCBkPSJNNzcxLjI0IDU0OS4zNTNDNzM4LjQ0NSA1NDkuMzUzIDczMy40NzcgNTEwLjA5NyA3MzMuNDc3IDQ4Ni43NDJDNzMzLjQ3NyA0NjUuNjIzIDczNy4yMDMgNDQ4Ljk3NyA3NDQuNDEgNDM4LjI5M0M3NTAuNjIxIDQyOC44NTIgNzU5LjgxNCA0MjQuMTMxIDc3MS4yNCA0MjQuMTMxQzc4Mi42NzIgNDI0LjEzMSA3OTIuNjA5IDQyOC44NTIgNzk5LjU2NCA0MzguNTQxQzgwNy41MTYgNDQ5LjQ3NCA4MTEuNzQgNDY2LjEyIDgxMS43NCA0ODYuNzQyQzgxMS43NCA1MjUuOTk4IDc5Ni41ODggNTQ5LjM1MyA3NzEuNDkyIDU0OS4zNTNINzcxLjI0WiIgZmlsbD0iYmxhY2siLz4KPC9nPgo8L3N2Zz4K" alt="Kiro ready" />
   <img src="https://img.shields.io/badge/macOS-tested-000000?logo=apple&logoColor=white" alt="Tested on macOS" />
   <img src="https://img.shields.io/badge/tests-node%20--test-5FA04E?logo=nodedotjs&logoColor=white" alt="Tests with node --test" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-78a9ff" alt="MIT license" /></a>
 </p>
 
 <p align="center">
-  <img src="docs/demo.gif" width="760" alt="Herdsidian demo: the Notes sidebar, the local graph, linking a note to the agent's space, Send to agent pasting @paths into Claude Code, and the themes" />
+  <img src="docs/demo.gif" width="760" alt="Herdsidian demo: the Notes sidebar opening a project note, the Changes and Files tabs, a &quot;Codex needs you&quot; card with Go to agent, context rings, and the usage card for Codex, opencode, Kiro and Grok" />
 </p>
 
-<p align="center"><sub>20-second cut, demo data. <a href="docs/film.mp4">Full film (MP4, 43 s)</a></sub></p>
+<p align="center"><sub>20-second cut, demo data. <a href="docs/film.mp4">Full film (MP4, 82 s)</a></sub></p>
 
 ---
 
@@ -30,7 +33,11 @@ beside your terminals. You read and edit notes, and create, rename and delete no
 folders, while the agents work. You link the right notes to each space and hand them to an
 agent with one click.
 
-![Herdsidian: a Claude Code agent at work, with the vault, the local graph and the notes linked to its space in the Notes sidebar](preview.png)
+It works with the agents Herdr runs: **Claude Code, Codex, Grok, Kiro and opencode**. The
+status bar shows their usage, each Claude Code, Codex, Kiro and Grok agent row shows how full
+its context window is, and an agent that needs you shows a card at the top right.
+
+![Herdsidian: a Claude Code agent at work, the vault, local graph and linked notes in the Notes sidebar, a "Codex needs you" card, context rings on each agent and usage in the status bar](preview.png)
 
 ---
 
@@ -92,17 +99,19 @@ herdsidian: ~/code/acme-api
   frontmatter, headings and links; `⌘E` switches to Edit and `⌘S` saves. A button copies the
   note's full path. Any folder of Markdown files works; Obsidian is not needed.
 - **Files and Changes tabs.** Files browses and previews the files of the focused pane's
-  folder. Changes lists the changed files of its repo (from `git status` and `git diff
-  --numstat`) with +N / −N, and a count badge on the tab; a click opens the file in Files.
+  folder. The preview wraps long lines and colors code, web files included. Changes lists
+  the changed files of its repo (from `git status` and `git diff --numstat`) with +N / −N,
+  and a count badge on the tab; a click opens the file in Files.
 - **Toolbar sidebar toggle.** One icon button right of Search shows or hides the right
   sidebar. It is lit while the sidebar is shown. It is the only sidebar control in the toolbar; its tooltip shows no key.
 - **Usage in the status bar.** The limits of your agent CLIs sit at the right of the status
   bar: the provider of the focused pane in full, the others compact. Hover opens the usage
-  card. Kiro and Grok show this month's use (Grok needs the status-line script, see below). An off switch in Settings (**Usage in the status bar**) hides it and stops every fetch.
+  card. Kiro and Grok show this month's use (Grok needs the status-line script, see below).
+  An off switch in Settings (**Usage in the status bar**) hides it and stops every fetch.
 - **Settings in `⌘K`.** **Theme**: four family rows (Carbon, Midnight, Catppuccin, Nord) that set
   the dark and the light half together; one appearance row opens Herdr Settings → Look,
   because a mod cannot set light or dark. **Key hints**: Always / On hover / Off. **Layout**:
-  right sidebar, its tab, sidebar width, Usage in the status bar.
+  right sidebar, its tab, sidebar width, Usage in the status bar, Context in the sidebar.
 - **Next blocked agent.** `⌘J` focuses the next agent that needs you, after the focused one,
   and wraps. The status bar pill shows `⌘J` and does the same on click.
 - **Right-click menu.** Create, rename and delete notes and folders from the tree. Delete
@@ -132,6 +141,13 @@ herdsidian: ~/code/acme-api
   agents list, the pane header, the status bar and the palette. The status bar pill
   (with the count when more than one) jumps to the blocked agent.
 - **Working bar.** While an agent works, a thin moving bar runs along the top of its pane.
+- **Agent cards.** Herdr's notices show as agent cards at the top right, beside the right
+  sidebar. A "Needs you" card stays until you act: the X at its far left closes it and
+  **Go to agent** focuses the agent. A "finished" card fades out on a timer. Up to three
+  show, then "+N more".
+- **Context ring.** Each Claude Code, Codex, Kiro and Grok agent row shows how full its
+  context window is, as a ring in the accent color that turns to the alert color at 90 %.
+  **Context in the sidebar** in Settings turns it off.
 
 ![The eight themes](docs/themes.png)
 
@@ -232,9 +248,10 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
   closes the palette and opens Herdr Settings → Look. General: **Key hints**
   Always / On hover / Off. "On hover" shows the keys on the row under the pointer, because a
   mod cannot see modifier keys while a terminal has the keyboard. Layout: **Right sidebar**
-  Shown / Hidden, **Right sidebar tab** and, while shown, **Sidebar width** Expanded / Rail,
-  and **Usage in the status bar** On / Off. The Right sidebar row shows no key. The values live in one store,
-  `herdsidian.settings`, that every mod reads.
+  Shown / Hidden, **Right sidebar tab**, **Sidebar width** Expanded / Rail (while shown),
+  **Usage in the status bar** On / Off and **Context in the sidebar** On / Off. The Right
+  sidebar row shows no key. The values live in one store, `herdsidian.settings`, that every
+  mod reads.
 - **Search.** A note matches when its name contains the text; an exact name, then a
   prefix, then a word start rank first, and notes linked to the space win ties. Agents
   match on program, space, tab or title. Commands match on their label.
@@ -268,7 +285,9 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
   one: the tree shows only folders and notes.
 - **Not a sync tool.** It reads and writes the files in place. Obsidian, git and your
   agents see the same files.
-- **Not online.** Nothing reaches the network.
+- **Not online.** Notes, links, the graph and Send stay on your machine. The only network
+  call is the Claude Code usage card: one `GET` to Anthropic, on hover, at most every
+  5 minutes. **Usage in the status bar** Off stops it.
 
 ---
 
