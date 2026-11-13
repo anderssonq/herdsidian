@@ -269,7 +269,12 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
   list and that key is bound. Otherwise there is no hint.
 - **Commands.** "Link note to current agent…" (`⌘L`), "New <agent> in <space>" (no key),
   "Show Notes" / "Hide Notes" (`⇧⌘O`), "Choose vault…" (only with no vault) and
-  "All Herdr commands… `⇧⌘P`".
+  "All Herdr commands… `⇧⌘P`". After those come "Archive space: <name>" and "Archive
+  agent: <program> in <space>" (no keys). They act on the palette's target, and become
+  "Restore space" / "Restore agent" when it is already archived. The agent command is not
+  offered for an agent archived only through its space. Nothing is closed or killed. As
+  they come last, they show on a search or in the Commands tab, because the All tab keeps
+  only the first 4 commands.
 - **Link mode.** "Link note to current agent…" turns the palette into a note finder for
   the space. `↵` links the note, as `⌘L` does, and closes.
 - **No vault.** Agents and commands still work. The palette says "Open Notes once (⇧⌘O)
@@ -405,7 +410,7 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
 stubbed in `tests/support/mod-stubs.js`. The pure logic runs under Node with no Herdr imports: `mods/herdsidian/notes.js`
 (Markdown, wikilinks; wikilinks inside code are ignored), `graph.js` (link index, neighborhood, layout) and `context.js`
 (context links, suggestions, Send text). The palette adds `palette.js` (ranking, key
-hints, lists) and `send.js` (the paste sequence), also pure. `io.js`, `graph-view.js`,
+hints, lists), `send.js` (the paste sequence) and `archive.js` (the archived store), also pure. `io.js`, `graph-view.js`,
 `palette-main.js` and `palette-view.js` need Herdr.
 
 ```sh
@@ -431,7 +436,7 @@ cp lib/layout.js mods/<mod>/layout.js  # herdsidian, herdsidian-chrome, herdsidi
 cp lib/keys.js mods/<mod>/keys.js      # herdsidian, herdsidian-tabs, guide-agents, guide-spaces
 cp lib/settings.js mods/<mod>/settings.js  # herdsidian, herdsidian-tabs, guide-agents, guide-spaces
 cp lib/agent-files.js mods/<mod>/agent-files.js  # herdsidian-status, guide-agents
-cp lib/archive.js mods/<mod>/archive.js  # guide-agents, guide-spaces
+cp lib/archive.js mods/<mod>/archive.js  # guide-agents, guide-spaces, herdsidian
 ```
 
 Check mod changes in Herdr with `herdr-app check`. The "Needs you" pill is one shared

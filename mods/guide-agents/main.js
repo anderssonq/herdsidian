@@ -338,6 +338,8 @@ export default class Agents extends View {
     const stored = readArchive(shared(ARCHIVE_KEY));
     const archive = prunedAgents(stored, all);
     if (archive !== stored) setShared(ARCHIVE_KEY, archive);
+    // An agent archived on its own is never pinned, whoever archived it (the ⌘K palette cannot reach the pins).
+    if (this.pins.some((p) => archive.agents.includes(p))) this.setPins(this.pins.filter((p) => !archive.agents.includes(p)));
     const isArch = (a) => isArchivedAgent(archive, a);
     const away = list.filter(isArch);
     list = list.filter((a) => !isArch(a));
