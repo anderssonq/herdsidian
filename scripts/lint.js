@@ -107,7 +107,7 @@ for (const p of modFiles.filter((p) => p.endsWith(".js") && !shared(p))) {
 // The no-submit rule (2) also covers palette-main.js, palette.js, palette-view.js and send.js.
 const pure = new Set(["notes", "context", "graph", "palette", "send", "actions", "refs", "files-tree", "changes", "fold", "theme-pick", "sidebar"].map((n) => `mods/herdsidian/${n}.js`));
 // Pure files of other mods (checked: none imports herdr, gpui-kit or gpui-base).
-for (const p of ["mods/herdsidian-status/usage-status.js", "mods/herdsidian-status/blocked.js", "mods/guide-agents/blocked.js", "mods/herdsidian-status/agent-files.js", "mods/guide-agents/agent-files.js", "mods/herdsidian-status/usage-month.js", "mods/guide-agents/agent-context.js", "mods/guide-spaces/archive.js", "mods/guide-agents/archive.js"]) pure.add(p);
+for (const p of ["mods/herdsidian-status/usage-status.js", "mods/herdsidian-status/blocked.js", "mods/guide-agents/blocked.js", "mods/herdsidian-status/agent-files.js", "mods/guide-agents/agent-files.js", "mods/herdsidian-status/usage-month.js", "mods/guide-agents/agent-context.js", "mods/guide-spaces/archive.js", "mods/guide-agents/archive.js", "mods/herdsidian/archive.js"]) pure.add(p);
 const hostImport = /\bfrom\s*["'](herdr|gpui-kit|gpui-base)["']|\bimport\s*["'](herdr|gpui-kit|gpui-base)["']/;
 const paintPath = /(?<!globalThis\.)\bwindow\.paint_path/;
 const submitCall = /terminal\.(send|keys)\b|hc\(\s*\[\s*["'](send|keys)["']|["']enter["']|\btask\s*:/;

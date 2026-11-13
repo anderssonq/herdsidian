@@ -5,6 +5,7 @@ import { matchNotes, canSend, contextNotes, findEntry, autoLinks, deliveryText }
 import { sendToasts } from "./send.js";
 import { keyHint, settingSections } from "./keys.js";
 import { FAMILIES, cardColors } from "./theme-pick.js";
+import { readArchive } from "./archive.js";
 
 export const LIMITS = { agents: 4, notes: 6, commands: 4, single: 50 };
 export const ROW = { top: 56, row: 32, title: 24 }; // px, shared by the view and visibleWindow
@@ -112,12 +113,12 @@ export const agentSig = (agents) => agents
   .join("\n");
 
 // The list memo key: everything buildList and commandList read.
-export function modelKey({ query, tab, notes, notesError, doc, linking, starter, agents, order, layoutName, bindings, hasList, settings, sidebarHidden, sidebarRail, sidebarTab, themes, family, appearance }) {
+export function modelKey({ query, tab, notes, notesError, doc, linking, starter, agents, order, layoutName, bindings, hasList, settings, sidebarHidden, sidebarRail, sidebarTab, themes, family, appearance, archived }) {
   return [
     query, tab, notes, notesError, doc, linking, starter, agentSig(agents),
     JSON.stringify(order ?? null), layoutName, JSON.stringify(bindings), hasList,
     JSON.stringify(settings ?? null), sidebarHidden, sidebarRail, sidebarTab,
-    JSON.stringify(themes ?? null), family, appearance,
+    JSON.stringify(themes ?? null), family, appearance, JSON.stringify(archived ?? null),
   ];
 }
 
@@ -129,8 +130,32 @@ export function agentHint(address, order, bindings, layoutName, hasAgentsList) {
   return keyHint(bindings, `guide-agents.focus-${at + 1}`, layoutName);
 }
 
-// The palette's own commands. action: run | link | request.
-export function commandList({ vault, sidebarHidden, sidebarTab, space, starter, bindings, layoutName }) {
+// Archive and restore for the target space and agent (phase 2). `store` is the raw shared value.
+// action: { type: "archive", kind: "spaces" | "agents", id, archive }. An agent archived through its space gets none.
+function archiveCommands({ store, space, agent }) {
+  const now = readArchive(store);
+  const out = [];
+  if (space) {
+    const archived = now.spaces.includes(space.id);
+    out.push({
+      id: archived ? "restore-space" : "archive-space", label: `${archived ? "Restore" : "Archive"} space: ${space.name}`, hint: null,
+      action: { type: "archive", kind: "spaces", id: space.id, archive: !archived },
+    });
+  }
+  if (space && agent && !now.spaces.includes(space.id)) {
+    const archived = now.agents.includes(agent.address);
+    const name = agent.program?.name ?? agent.app ?? "Agent";
+    out.push({
+      id: archived ? "restore-agent" : "archive-agent", label: `${archived ? "Restore" : "Archive"} agent: ${name} in ${space.name}`, hint: null,
+      action: { type: "archive", kind: "agents", id: agent.address, archive: !archived },
+    });
+  }
+  return out;
+}
+
+// The palette's own commands. action: run | link | request | archive. `archive` ({ store, agent }) adds the
+// archive commands after the others; without it the list is what it always was.
+export function commandList({ vault, sidebarHidden, sidebarTab, space, starter, bindings, layoutName, archive }) {
   const hint = (action) => keyHint(bindings, action, layoutName);
   const out = [];
   if (vault && space) {
@@ -154,6 +179,7 @@ export function commandList({ vault, sidebarHidden, sidebarTab, space, starter, 
     id: "herdr", label: "All Herdr commands…", hint: hint("app.palette"),
     action: { type: "run", name: "app.palette", args: {} },
   });
+  if (archive) out.push(...archiveCommands({ store: archive.store, space, agent: archive.agent }));
   return out;
 }
 

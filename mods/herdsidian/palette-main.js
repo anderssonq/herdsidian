@@ -21,6 +21,7 @@ import { settings, setSetting } from "./settings.js";
 import { themeCalls, selectedFamily, parseAppearance } from "./theme-pick.js";
 import { SIDEBAR_STORE, readSidebar } from "./sidebar.js";
 import { paletteCard, PLACEHOLDER, linkPlaceholder } from "./palette-view.js";
+import { ARCHIVE_KEY, readArchive, withArchived, withoutArchived, endIndex, restoreIndex } from "./archive.js";
 
 const TAB_LABELS = { all: "All", notes: "Notes", agents: "Agents", commands: "Commands", settings: "Settings" };
 const PREVIEW_CHARS = 2048;
@@ -151,7 +152,20 @@ export class Palette {
     if (action.type === "link") return this.enterLink(cx);
     if (action.type === "request") return this.request(action.op);
     this.close();
+    if (action.type === "archive") return this.archive(action);
     run(action.name, action.args);
+  }
+
+  // Archive or restore the target: the same store and moves as the sidebar buttons, never a close. The store
+  // and the space list are read now, not at open; a state already reached by another screen writes nothing.
+  archive({ kind, id, archive }) {
+    const now = readArchive(shared(ARCHIVE_KEY));
+    if (now[kind].includes(id) === archive) return;
+    const list = spaces();
+    if (kind === "spaces" && !list.some((s) => s.id === id)) return;
+    const next = archive ? withArchived(shared(ARCHIVE_KEY), kind, id) : withoutArchived(shared(ARCHIVE_KEY), kind, id);
+    setShared(ARCHIVE_KEY, next);
+    if (kind === "spaces") run("space.move", { id, index: archive ? endIndex(list, id) : restoreIndex(list, next.spaces, id) });
   }
 
   // A request for the Notes copy, then Notes is shown (a hidden one starts and reads a fresh request), then close.
@@ -298,15 +312,17 @@ export class Palette {
     const current = settings();
     const bindings = keys(), layoutName = shared("layout"), order = shared("guide-agents.order");
     const themeList = themes(), family = selectedFamily(herdrSettings()), appearance = this.appearance;
+    const archived = shared(ARCHIVE_KEY);
     const inputs = modelKey({
       query: this.query, tab, notes: this.notes, notesError: this.notesError, doc: this.doc, linking: this.linking,
       starter: this.starter, agents: live, order, layoutName, bindings, hasList, settings: current,
-      sidebarHidden, sidebarRail, sidebarTab, themes: themeList, family, appearance,
+      sidebarHidden, sidebarRail, sidebarTab, themes: themeList, family, appearance, archived,
     });
     if (this.memo && sameKey(this.memo.inputs, inputs)) return this.memo;
 
     const commands = commandList({
       vault: this.vault, sidebarHidden, sidebarTab, space: this.target.space, starter: this.starter, bindings, layoutName,
+      archive: { store: archived, agent: this.target.agent },
     });
     const sc = this.sceneFor();
     const list = buildList({
