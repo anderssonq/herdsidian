@@ -1,5 +1,6 @@
 // Agents in grouped or priority views; parents take their most urgent sub-agent's place.
-// A viewed done agent stays in Done until left.
+// A viewed done agent stays in Done until left. Hover a row for Pin and Archive; archived
+// agents (or those of an archived space) wait in a folded Archived section.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
@@ -10,6 +11,7 @@ import { find, narrow, toggleSidebar } from "./layout.js";
 import { settings } from "./settings.js";
 import { showKeyHint } from "./keys.js";
 import { nextBlocked } from "./blocked.js";
+import { ARCHIVE_KEY, readArchive, withArchived, withoutArchived, isArchivedAgent, prunedAgents } from "./archive.js";
 import { CONTEXT_EVERY_MS, contextTooltip, createContextRefresher, ringStep } from "./agent-context.js";
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
@@ -95,6 +97,7 @@ export default class Agents extends View {
     this.folded = new Set();
     // The whole section's fold (A5): per copy, not kept across restarts.
     this.sectionFolded = false;
+    this.archivedOpen = false; // the Archived header: folded at every start
     // Each agent's last state and when it changed (ms), kept across restarts.
     this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}");
     this.pins = JSON.parse(localStorage.getItem("pins") ?? "[]");
@@ -106,11 +109,13 @@ export default class Agents extends View {
     this.context = createContextRefresher({ exec, readTextFile, sleep: (ms) => this.cx.sleep(ms) });
     this.syncContext(cx);
     // keys.json: "cmd-alt-1": "guide-agents.focus-1" shows the first agent in the list.
-    this.order = [];
+    this.order = []; // the visible agents, then the archived ones (⌘J reaches them too)
+    this.visible = 0; // how many of `order` are visible: ⌘⌥N counts only those
     cx.spawn(async (cx) => {
       for (;;) {
         const c = await nextCommand();
-        const a = c === "next-blocked" ? nextBlocked(this.order, focused()?.pane) : this.order[Number(c.replace("focus-", "")) - 1];
+        const n = Number(c.replace("focus-", "")) - 1;
+        const a = c === "next-blocked" ? nextBlocked(this.order, focused()?.pane) : n < this.visible ? this.order[n] : null;
         if (a) run("pane.focus", { pane: a.pane });
         cx.notify();
       }
@@ -329,12 +334,20 @@ export default class Agents extends View {
     const rankOf = (a) => urgency.get(a.address);
     if (byPriority) list = [...list].sort((x, y) => rankOf(y) - rankOf(x) || this.since(y) - this.since(x) || y.seq - x.seq);
     this.prunePins(all);
+    // Archived agents (their own address or their space) leave the list; written only when a stale address drops.
+    const stored = readArchive(shared(ARCHIVE_KEY));
+    const archive = prunedAgents(stored, all);
+    if (archive !== stored) setShared(ARCHIVE_KEY, archive);
+    const isArch = (a) => isArchivedAgent(archive, a);
+    const away = list.filter(isArch);
+    list = list.filter((a) => !isArch(a));
     const pinned = this.pins.map((p) => list.find((a) => a.address === p)).filter(Boolean);
     const rest = list.filter((a) => !this.pins.includes(a.address));
     list = [...pinned, ...rest];
-    setAgentOrder(list.map((a) => a.address));
-    this.order = list;
-    // The palette's ⌥⌘N hints read this; written only when the order changes.
+    setAgentOrder([...list, ...away].map((a) => a.address));
+    this.order = [...list, ...away];
+    this.visible = list.length;
+    // The palette's ⌥⌘N hints read this (visible agents only); written only when the order changes.
     const published = list.slice(0, 9).map((a) => a.address);
     if (JSON.stringify(published) !== JSON.stringify(shared("guide-agents.order") ?? null)) setShared("guide-agents.order", published);
 
@@ -379,10 +392,11 @@ export default class Agents extends View {
       const tab = tabs.find(tab => tab.id === a.tab);
       return tab ? title(tab, lead(tab)) : a.title || a.program?.name || "";
     };
-    const detail = new Map(list.map(a => [a.address, /^\d+$/.test(label(a)) ? null : label(a)]));
+    const every = [...list, ...away];
+    const detail = new Map(every.map(a => [a.address, /^\d+$/.test(label(a)) ? null : label(a)]));
     const seen = {};
-    for (const a of list) { const k = `${a.space_name}\u0000${detail.get(a.address) ?? ""}`; seen[k] = (seen[k] ?? 0) + 1; }
-    for (const a of list) {
+    for (const a of every) { const k = `${a.space_name}\u0000${detail.get(a.address) ?? ""}`; seen[k] = (seen[k] ?? 0) + 1; }
+    for (const a of every) {
       if (detail.get(a.address) == null && seen[`${a.space_name}\u0000`] > 1) detail.set(a.address, label(a));
     }
 
@@ -408,7 +422,11 @@ export default class Agents extends View {
       const when = this.since(a);
       const n = list.indexOf(a);
       const idle = a.status === "idle" && !a.focused;
-      const isPinned = this.pins.includes(a.address);
+      const arch = isArch(a);
+      const own = archive.agents.includes(a.address); // archived on its own, not only through its space
+      const hot = this.hovered === a.address;
+      const restorable = own && !archive.spaces.includes(a.space); // the only archived row with a button
+      const isPinned = !arch && this.pins.includes(a.address);
       const pin = div()
         .id(`pin-${a.address}`)
         .flex_none()
@@ -426,9 +444,31 @@ export default class Agents extends View {
           cx.notify();
         })
         .child(svg(`mods/workspace-chrome/${isPinned ? "pin-off" : "pin"}.svg`).size(13));
+      // Archive or restore: like the pin, it moves the row away from under the pointer.
+      const keep = (id, tip, file, act) => div()
+        .id(`${id}-${a.address}`)
+        .flex_none()
+        .p(2)
+        .rounded(RADIUS.control)
+        .text_color(t.muted)
+        .cursor_pointer()
+        .hover((s) => s.bg(tk.pill).text_color(t.foreground))
+        .tooltip(tip)
+        .on_click((_e, cx) => {
+          cx.stop_propagation();
+          act();
+          this.hovered = null;
+          cx.notify();
+        })
+        .child(svg(file).size(13));
+      const archiveBtn = () => keep("archive", "Archive", "mods/workspace-chrome/archive.svg", () => {
+        if (isPinned) this.setPins(this.pins.filter((p) => p !== a.address));
+        setShared(ARCHIVE_KEY, withArchived(shared(ARCHIVE_KEY), "agents", a.address));
+      });
+      const restoreBtn = () => keep("restore", "Restore", "mods/guide-agents/archive-restore.svg", () => setShared(ARCHIVE_KEY, withoutArchived(shared(ARCHIVE_KEY), "agents", a.address)));
       // Under a space header the space goes without saying; an automatic tab number says nothing.
-      // Without a space header above (priority, pinned) the row names its space.
-      const full = byPriority || isPinned;
+      // Without a space header above (priority, pinned, archived) the row names its space.
+      const full = byPriority || isPinned || arch;
       const name = full ? a.space_name || label(a) : more ?? (/^\d+$/.test(label(a)) ? a.program?.name || label(a) : label(a));
       const statusLine = div().text_size(11.5).text_color(a.status === "blocked" ? t.blocked : t.muted).font_weight(a.status === "blocked" ? 500 : 400).child(STATUS_TEXT[a.status] ?? "");
       const ctx = showContext && !machine ? this.context?.value(a.address) : null;
@@ -441,8 +481,9 @@ export default class Agents extends View {
         .items_center()
         .gap(10)
         .when(a.focused, (el) => el.bg(tk.accentSoft))
+        .when(arch && !a.focused, (el) => el.opacity(0.6))
         .cursor_pointer()
-        .hover((s) => s.bg(a.focused ? tk.accentSoft : tk.pill))
+        .hover((s) => (arch ? s.bg(a.focused ? tk.accentSoft : tk.pill).opacity(1) : s.bg(a.focused ? tk.accentSoft : tk.pill)))
         .on_hover((on, cx) => {
           if (on) this.hovered = a.address;
           else if (this.hovered === a.address) this.hovered = null;
@@ -459,9 +500,10 @@ export default class Agents extends View {
           .child(ctx ? h_flex().gap(6).items_center().child(statusLine).child(contextRing(t, a.address, ctx)) : statusLine))
         .child(v_flex().flex_none().items_end().gap(1).text_size(11).text_color(t.muted)
           .child(h_flex().h(18).items_center()
-            .when(this.hovered === a.address, el => el.child(pin))
-            .when(this.hovered !== a.address && Boolean(when), el => el.child(duration(now - when))))
-          .child(div().child(n < 9 && showKeyHint(hints, this.hovered, a.address) ? `\u2318\u2325${n + 1}` : "")));
+            .when(hot && !arch, el => el.child(pin).child(archiveBtn()))
+            .when(hot && restorable, el => el.child(restoreBtn()))
+            .when(!(hot && (!arch || restorable)) && Boolean(when), el => el.child(duration(now - when))))
+          .child(div().child(!arch && n < 9 && showKeyHint(hints, this.hovered, a.address) ? `\u2318\u2325${n + 1}` : "")));
     };
 
     // Groups in list order: spaces (grouped) or priority sections. Agents of a
@@ -501,11 +543,38 @@ export default class Agents extends View {
           .when(!byPriority && top && top !== "idle", (el) => el.child(this.status(t, { status: top }, true)))
           .child(svg("mods/workspace-chrome/chevron-right.svg").size(11).flex_none().text_color(t.muted)));
     };
+    // The Archived section after the last group: how many, a dot when one needs you; rows when open.
+    const archivedRows = () => away.length === 0 ? [] : [
+      h_flex()
+        .id("ag-archived")
+        .px(8)
+        .pt(8)
+        .h(30)
+        .flex_none()
+        .gap(6)
+        .items_center()
+        .text_size(11)
+        .font_medium()
+        .text_color(t.muted)
+        .cursor_pointer()
+        .hover((s) => s.text_color(t.foreground))
+        .on_click((_e, cx) => {
+          this.archivedOpen = !this.archivedOpen;
+          cx.notify();
+        })
+        .child(svg(`mods/workspace-chrome/chevron-${this.archivedOpen ? "down" : "right"}.svg`).size(11).flex_none())
+        .child(svg("mods/workspace-chrome/archive.svg").size(13).flex_none())
+        .child(div().truncate().child("Archived"))
+        .child(div().child(String(away.length)))
+        .child(div().flex_1())
+        .when(away.some((a) => a.status === "blocked"), (el) => el.child(div().size(6).rounded_full().flex_none().bg(t.blocked))),
+      ...(this.archivedOpen ? away.flatMap(withKids) : []),
+    ];
     const rows = collapsed
       ? list.flatMap(withKids)
       : this.sectionFolded
         ? []
-        : groups.flatMap((g) => [header(g), ...(this.folded.has(g.id) ? [] : g.members.flatMap(withKids))]);
+        : [...groups.flatMap((g) => [header(g), ...(this.folded.has(g.id) ? [] : g.members.flatMap(withKids))]), ...archivedRows()];
 
     return v_flex()
       .size_full()
@@ -549,7 +618,7 @@ export default class Agents extends View {
             ),
         ),
       )
-      .when(list.length === 0 && !collapsed, (el) =>
+      .when(list.length + away.length === 0 && !collapsed, (el) =>
         el.child(div().px(12).text_size(12).text_color(t.muted).child("No agent status yet. Agents show up here when they report their status. Older versions and agents inside tmux may not.")),
       )
       .child(v_flex().id("ag-list").flex_1().min_h(0).px(collapsed ? 0 : 8).overflow_y_scrollbar().mode("always").children(rows))

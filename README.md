@@ -136,7 +136,8 @@ herdsidian: ~/code/acme-api
   and the sidebar header shows the Herdsidian icon.
 - **Quiet Spaces.** Each space is an avatar, its name and a few signals: ahead/behind pills,
   a dot when blocked, and the `⌃N` key on the first nine rows. The branch is in the row's
-  tooltip.
+  tooltip. Hover a space or an agent for an Archive button: it moves to a folded
+  "Archived" section at the bottom of the list, never closed, and Restore brings it back.
 - **One "Needs you" signal.** A blocked agent shows the same pill with a "!" mark in the
   agents list, the pane header, the status bar and the palette. The status bar pill
   (with the count when more than one) jumps to the blocked agent.
@@ -430,6 +431,7 @@ cp lib/layout.js mods/<mod>/layout.js  # herdsidian, herdsidian-chrome, herdsidi
 cp lib/keys.js mods/<mod>/keys.js      # herdsidian, herdsidian-tabs, guide-agents, guide-spaces
 cp lib/settings.js mods/<mod>/settings.js  # herdsidian, herdsidian-tabs, guide-agents, guide-spaces
 cp lib/agent-files.js mods/<mod>/agent-files.js  # herdsidian-status, guide-agents
+cp lib/archive.js mods/<mod>/archive.js  # guide-agents, guide-spaces
 ```
 
 Check mod changes in Herdr with `herdr-app check`. The "Needs you" pill is one shared

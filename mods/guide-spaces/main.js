@@ -3,6 +3,7 @@
 // is in now: its branch and ahead/behind sit in the row tooltip, ahead/behind also as pills
 // on the row. A space speaks up only when it is blocked or done: a dot on the full row
 // (blocked only), a glyph in the narrow rail (both); the full agent state lives in the agents list. Click to switch, right-click for its menu, drag to reorder.
+// Hover a row for its Archive button; archived spaces wait in a folded Archived section (never closed).
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
@@ -12,6 +13,7 @@ import { narrow } from "./layout.js";
 import { keycap } from "./ui.js";
 import { settings } from "./settings.js";
 import { showKeyHint } from "./keys.js";
+import { ARCHIVE_KEY, readArchive, withArchived, withoutArchived, prunedSpaces, endIndex, restoreIndex, stray } from "./archive.js";
 
 // Where a space is now: its first terminal's live folder, else where it was made.
 // `ps`: panes(), read once by the caller (each read copies every pane).
@@ -75,6 +77,8 @@ export default class Spaces extends View {
     this.machines = [];
     this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]"));
     this.sectionFolded = false; // the Spaces chevron: rows hidden, per copy
+    this.archivedOpen = false; // the Archived header: folded at every start
+    this.putBack = new Set(); // space ids already moved back before the archived ones: never asked again (another screen may disagree)
     this.refreshMachines(cx);
     cx.timer.every(15000, cx => this.refreshMachines(cx));
     // `git status` walks the whole tree, on another machine a process there:
@@ -86,9 +90,28 @@ export default class Spaces extends View {
     const now = Date.now();
     const sp = spaces();
     for (const s of sp) if (!this.shown.has(s.id)) this.born[s.id] ??= now;
+    this.tidy(sp);
     const due = this.due(now, sp, panes());
     if (due.size) this.refreshGit(due, cx);
     if (sp.some((s) => !this.shown.has(s.id))) cx.notify();
+  }
+
+  // From a task, never from render: drops archived ids of spaces that are gone, and puts a visible space
+  // that landed after the archived ones (a new space, a move on another screen) back before them.
+  tidy(sp) {
+    const store = readArchive(shared(ARCHIVE_KEY));
+    const ms = machines();
+    const pruned = prunedSpaces(store, ms, sp);
+    if (pruned !== store) setShared(ARCHIVE_KEY, pruned);
+    // Same rule as the archived ids: forget a put-back id only when its machine is ready and the space is gone,
+    // so a remote reconnect does not move it again.
+    const kept = prunedSpaces({ spaces: [...this.putBack], agents: [] }, ms, sp).spaces;
+    if (kept.length !== this.putBack.size) this.putBack = new Set(kept);
+    const back = stray(sp, pruned.spaces, this.putBack);
+    if (back) {
+      this.putBack.add(back.id);
+      run("space.move", back);
+    }
   }
 
   // Places whose git could have changed: new ones (a new space, a cd), where a
@@ -214,11 +237,12 @@ export default class Spaces extends View {
   }
 
   // Spaces in order, each worktree space moved under its main checkout's.
-  ordered() {
+  // `hidden`: the archived space ids, read once per render.
+  ordered(hidden) {
     const sp = spaces(), ps = panes();
     const ready = (w) => this.shown.has(w.id) || where(w, ps) in this.git || Date.now() - (this.born[w.id] ??= Date.now()) > 1500;
     for (const w of sp) if (!this.shown.has(w.id) && ready(w)) this.shown.add(w.id);
-    const list = sp.map((w, i) => ({ w, i, g: this.git[where(w, ps)] ?? null })).filter((r) => this.shown.has(r.w.id));
+    const list = sp.map((w, i) => ({ w, i, g: this.git[where(w, ps)] ?? null })).filter((r) => this.shown.has(r.w.id) && !hidden.has(r.w.id));
     const mains = new Set(list.filter((r) => r.g && !r.g.linked).map((r) => r.g.repo));
     const nested = (r) => r.g?.linked && mains.has(r.g.repo);
     const out = [];
@@ -234,10 +258,43 @@ export default class Spaces extends View {
     return out;
   }
 
-  // The rows, under a header per machine once one isn't this computer.
-  grouped(t, collapsed) {
+  // Archived spaces, flat, in list order.
+  archivedRows(hidden) {
+    const ps = panes();
+    return spaces().map((w, i) => ({ w, i, g: this.git[where(w, ps)] ?? null, tree: null })).filter((r) => this.shown.has(r.w.id) && hidden.has(r.w.id));
+  }
+
+  archive(w) {
+    setShared(ARCHIVE_KEY, withArchived(shared(ARCHIVE_KEY), "spaces", w.id));
+    run("space.move", { id: w.id, index: endIndex(spaces(), w.id) });
+  }
+
+  restore(w) {
+    const store = withoutArchived(shared(ARCHIVE_KEY), "spaces", w.id);
+    setShared(ARCHIVE_KEY, store);
+    run("space.move", { id: w.id, index: restoreIndex(spaces(), store.spaces, w.id) });
+  }
+
+  // The Archived section after the last machine group: a header (count, a dot when one is blocked), rows when open.
+  archivedSection(t, hidden) {
+    const rows = this.archivedRows(hidden);
+    if (!rows.length) return [];
     const k = tokens(t);
-    const rows = this.ordered();
+    const head = h_flex().id("spaces-archived").h(26).flex_none().px(8).gap(7).items_center().text_size(11).text_color(t.muted)
+      .cursor_pointer().hover(s => s.bg(k.pill))
+      .on_click((_e, cx) => { this.archivedOpen = !this.archivedOpen; cx.notify(); })
+      .child(svg(`mods/workspace-chrome/chevron-${this.archivedOpen ? "down" : "right"}.svg`).size(11).flex_none())
+      .child(svg("mods/workspace-chrome/archive.svg").size(13).flex_none())
+      .child(div().flex_1().truncate().child("Archived"))
+      .when(rows.some((r) => r.w.status === "blocked"), el => el.child(div().size(6).rounded_full().flex_none().bg(t.blocked)))
+      .child(div().flex_none().child(String(rows.length)));
+    return [head, ...(this.archivedOpen ? rows.map((r) => this.row(r, t, true)) : [])];
+  }
+
+  // The rows, under a header per machine once one isn't this computer.
+  grouped(t, collapsed, hidden) {
+    const k = tokens(t);
+    const rows = this.ordered(hidden);
     const draw = (r) => (collapsed ? this.compact(r, t) : this.row(r, t));
     const remote = [...new Set([...rows.map(r => r.w.machine).filter(Boolean), ...this.machines.map(m => m.name)])].sort();
     const loading = m => {
@@ -277,24 +334,50 @@ export default class Spaces extends View {
 
   // Right of the name: ahead/behind pills, a dot when blocked, and the key cap: on every row for
   // "always", on the hovered row for "modifier" (a mod cannot see modifier keys), never for "off".
-  signals({ w, i, g }, t) {
+  // The hovered row swaps its pills for the archive button (restore, in Archived); an archived row has no key cap.
+  signals({ w, i, g, archived }, t) {
     const hints = settings().keyHints;
-    const cap = i < 9 && showKeyHint(hints, this.hovered, w.id);
+    const cap = !archived && i < 9 && showKeyHint(hints, this.hovered, w.id);
+    const hot = this.hovered === w.id;
     const pill = (text, c) => div().flex_none().h(18).px(6).rounded(RADIUS.control).flex().items_center().text_size(11).text_color(c).bg(alpha(c, 0.16)).child(text);
     return h_flex().flex_none().gap(5).items_center()
-      .when(Boolean(g) && g.ahead > 0, (el) => el.child(pill(`\u2191${g.ahead}`, t.ansi2)))
-      .when(Boolean(g) && g.behind > 0, (el) => el.child(pill(`\u2193${g.behind}`, t.ansi1)))
+      .when(!hot && Boolean(g) && g.ahead > 0, (el) => el.child(pill(`\u2191${g.ahead}`, t.ansi2)))
+      .when(!hot && Boolean(g) && g.behind > 0, (el) => el.child(pill(`\u2193${g.behind}`, t.ansi1)))
       .when(w.status === "blocked", (el) => el.child(div().size(6).rounded_full().flex_none().bg(t.blocked)))
+      .when(hot, (el) => el.child(this.rowButton(w, archived, t)))
       .when(cap, (el) => el.child(keycap(t, `\u2303${i + 1}`)));
   }
 
-  row({ w, i, g, tree }, t) {
+  // Archive or restore. The row selects on mouse up and starts a drag on mouse down, so the button stops all three.
+  rowButton(w, archived, t) {
+    const k = tokens(t);
+    return div().id(`space-${archived ? "restore" : "archive"}-${w.id}`).flex_none().p(2).rounded(RADIUS.control).text_color(t.muted).cursor_pointer()
+      .hover((s) => s.bg(k.pill).text_color(t.foreground))
+      .tooltip(archived ? "Restore" : "Archive")
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_mouse_up("left", (_e, cx) => {
+        cx.stop_propagation();
+        // The row never sees this mouse up: a drag released here ends here.
+        this.pressed = this.over = null;
+        cx.notify();
+      })
+      .on_click((_e, cx) => {
+        cx.stop_propagation();
+        archived ? this.restore(w) : this.archive(w);
+        // The row moves away from under the pointer, and no hover-out comes.
+        this.hovered = null;
+        cx.notify();
+      })
+      .child(svg(archived ? "mods/guide-spaces/archive-restore.svg" : "mods/workspace-chrome/archive.svg").size(13));
+  }
+
+  row({ w, i, g, tree }, t, archived = false) {
     const on = w.active;
     const colors = shared("space.colors") ?? {};
     const color = colors[w.id] ?? "ansi6";
     const fill = /^#[0-9a-f]{6}/i.test(color) ? color : MARK[color] ?? t[color] ?? t.accent;
     const k = tokens(t);
-    const tip = spaceTip(g, { tree, name: w.name, hint: i < 9 && settings().keyHints !== "off" ? `⌃${i + 1}` : "" });
+    const tip = spaceTip(g, { tree, name: w.name, hint: !archived && i < 9 && settings().keyHints !== "off" ? `⌃${i + 1}` : "" });
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
@@ -305,8 +388,9 @@ export default class Spaces extends View {
       .justify_center()
       .rounded(RADIUS.card)
       .when(on, (el) => el.bg(k.accentSoft))
-      .when(!on, (el) => el.hover((s) => s.bg(k.pill)))
-      .when(this.pressed === i && this.over !== i, (el) => el.opacity(0.5))
+      .when(!on, (el) => el.hover((s) => (archived ? s.bg(k.pill).opacity(1) : s.bg(k.pill))))
+      .when(archived && !on, (el) => el.opacity(0.6))
+      .when(!archived && this.pressed === i && this.over !== i, (el) => el.opacity(0.5))
       .when(this.pressed !== null && this.over === i && this.pressed !== i, (el) => el.child(
         div().absolute().left(0).right(0).h(2).bg(t.accent)
           .when(this.pressed < i, line => line.bottom(0))
@@ -323,7 +407,7 @@ export default class Spaces extends View {
       })
       .on_mouse_move((_e, cx) => {
         const source = spaces()[this.pressed];
-        const over = source && (source.machine ?? null) === (w.machine ?? null) ? i : null;
+        const over = source && !archived && !this.archivedIds().has(source.id) && (source.machine ?? null) === (w.machine ?? null) ? i : null;
         if (this.pressed !== null && this.over !== over) {
           this.over = over;
           cx.notify();
@@ -334,7 +418,7 @@ export default class Spaces extends View {
         const over = this.over;
         this.pressed = null;
         this.over = null;
-        if (from !== null && over === i && from !== i) run("space.move", { id: spaces()[from].id, index: i + 1 });
+        if (from !== null && over === i && from !== i && !archived) run("space.move", { id: spaces()[from].id, index: i + 1 });
         else if (from === i) run("space.select", { id: w.id });
         cx.notify();
       })
@@ -346,10 +430,15 @@ export default class Spaces extends View {
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.dim)))
           .when(!tree, el => el.child(h_flex().size(20).flex_none().rounded(RADIUS.control).bg(alpha(fill, 0.2)).items_center().justify_center().text_size(11).font_bold().text_color(markLetter(fill, t)).child([...w.name][0]?.toUpperCase() ?? "?")))
           .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).when(on, el => el.font_medium()).child(w.name))
-          .child(this.signals({ w, i, g }, t)),
+          .child(this.signals({ w, i, g, archived }, t)),
       );
   }
 
+  archivedIds() {
+    return new Set(readArchive(shared(ARCHIVE_KEY)).spaces);
+  }
+
+  // `i`: the row's place in spaces(), so its number is its ⌃N key.
   compact({ w, i }, t) {
     return h_flex()
       .id(`space-${w.id}`)
@@ -369,6 +458,7 @@ export default class Spaces extends View {
     const collapsed = narrow();
     const palette = ["ansi6", "ansi3", "ansi4", "ansi5", "ansi2", "ansi1"];
     const sp = spaces();
+    const hidden = this.archivedIds(); // read once per render
     const ids = new Set(sp.map(p => p.id));
     const kept = Object.fromEntries(Object.entries(shared("space.colors") ?? {}).filter(([id]) => ids.has(id)));
     let changed = Object.keys(kept).length !== Object.keys(shared("space.colors") ?? {}).length;
@@ -389,12 +479,12 @@ export default class Spaces extends View {
           .child(svg(`mods/workspace-chrome/chevron-${this.sectionFolded ? "right" : "down"}.svg`).size(11).flex_none())
           .child(div().font_semibold().child("Spaces")))
           .child(div().flex_1())
-          .child(div().id("spaces-count").flex_none().text_size(11).text_color(t.muted).child(String(sp.length))))
+          .child(div().id("spaces-count").flex_none().text_size(11).text_color(t.muted).child(String(sp.filter((s) => !hidden.has(s.id)).length))))
         .when(collapsed, el => el.justify_center())
         .child(div().id("space-new").size(22).flex_none().flex().items_center().justify_center().rounded(RADIUS.control).hover(s => s.bg(k.pill).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
       .child(v_flex().flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
-        .children(hide ? [] : this.grouped(t, collapsed)));
+        .children(hide ? [] : [...this.grouped(t, collapsed, hidden), ...(collapsed ? [] : this.archivedSection(t, hidden))]));
   }
 }
