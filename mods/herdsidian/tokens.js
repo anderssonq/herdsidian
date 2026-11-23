@@ -35,8 +35,15 @@ export function contrast(a, b) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-// True when the theme background is light. A theme without a background counts as dark.
-export const isLight = (t) => typeof t.background === "string" && luminance(t.background) > 0.5;
+// A fully transparent color: the layout's root and theme `background` when the window glass is on.
+export const CLEAR = "#00000000";
+
+// True when the theme background is light. A theme without a background counts as dark. When the layout
+// clears `background` (CLEAR, so window_blur shows), `canvas` decides.
+export const isLight = (t) => {
+  const base = t.background === CLEAR ? t.canvas : t.background;
+  return typeof base === "string" && luminance(base) > 0.5;
+};
 
 // "#rrggbb" blend of a toward b: w = 0 gives a, w = 1 gives b.
 export const mix = (a, b, w) => {
@@ -61,8 +68,9 @@ export function tokens(t) {
     dot: alpha(t.foreground, isLight(t) ? 0.16 : 0.11), // header dot texture
     accentTrack: alpha(t.accent, 0.12), // working bar track
     highlight: alpha(t.foreground, isLight(t) ? 0.08 : 0.05), // inset top line
-    glass: alpha(t.chrome, 0.55),
-    mainGlass: alpha(t.canvas, 0.35),
+    // Over the blurred desktop (window_blur): 85 % theme, 5 % accent tint, so text keeps its contrast on any wallpaper.
+    glass: alpha(mix(t.chrome, t.accent, 0.05), 0.85),
+    mainGlass: alpha(mix(t.canvas, t.accent, 0.05), 0.85),
     line: alpha(t.foreground, 0.07),
     pill: alpha(t.foreground, 0.06), // hover too
     accentSoft: alpha(t.accent, 0.18), // selected rows, folder fill

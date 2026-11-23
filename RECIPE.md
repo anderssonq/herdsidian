@@ -1,8 +1,8 @@
 # Herdsidian
 
 Herdsidian puts an Obsidian vault inside Herdr, in its own layout: the
-Graphite Glass look. Sidebars and bars are tinted glass over a gradient of the
-active theme, and panes are solid cards. Every color comes from the theme, so
+Graphite Glass look. Sidebars and bars are tinted glass over the blurred
+desktop (`window_blur`), and panes are solid cards. Every color comes from the theme, so
 each of the eight themes has its own tint. On the left, the spaces and agents
 lists show the shortcut to each row. On the right, a Notes sidebar browses,
 renders and edits the Markdown notes of an Obsidian vault.
@@ -77,7 +77,7 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      (their status shows at the right).
    - No border between the lists or above the footer.
 2. **Work column**:
-   - `herdsidian-tabs` toolbar (52 px, `window_drag`, `canvas` at 35 %): a
+   - `herdsidian-tabs` toolbar (52 px, `window_drag`, `mainGlass`): a
      rounded track holding the tabs as a segmented control (28 px tabs, radius
      7, the active one `raised` with a 1 px top highlight), a new-tab button, a spacer, then
      at the right a 220 px Search box (`⌘K`), one 30 px icon
@@ -133,7 +133,7 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      (item 3); the layout has no `panel` column. `mods/herdsidian-tabs/sidebar.js` and
      `lib/sidebar.js` turn `herdsidian-tabs.files`/`.changes`/`.notes` into
      `layout.show`/`layout.hide` of the `herdsidian` block plus the selected tab.
-   - `herdsidian-status` bar (28 px, `canvas` at 35 %): machine, branch, the
+   - `herdsidian-status` bar (28 px, `mainGlass`): machine, branch, the
      agent count or "N working" (and the "Needs you" pill), and on the right the
      **Usage** control (h 20, radius `RADIUS.control`, 11 px): the provider of the focused
      pane in full (12 px icon, main percent, a 40×4 bar, window label), a divider, then
@@ -228,14 +228,38 @@ Look (layout root):
   `#d6d6dd`, selection `#345e8c`, accent `#4c9df3`, canvas `#0e0e0e`, chrome
   `#121212`, border `#2a2a2a`, ANSI red `#f14c4c`, green `#3fbf8f`, yellow
   `#e5b95c`, blue `#4c9df3`.
-- Root `background`: `{ "gradient": ["chrome", "canvas"], "angle": 160 }`.
-  The gradient uses theme color names, so it follows the theme: carbon is
-  charcoal to black, nord is blue-grey, catppuccin is violet-black.
-- The layout has no `colors` block. The glass is painted by the mods:
-  sidebars and Notes use `chrome` at 55 %, the toolbar and status bar use
-  `canvas` at 35 %.
-- `terminal_opacity` 1. The pane background is the theme's `background`, so
-  terminals read as solid cards on the glass.
+- Window glass (on by default; ⌘K → Settings → General → Window glass turns
+  it off and on). On: root `background` `"#00000000"`, `"window_blur": true`
+  and `"colors": { "background": "#00000000" }`. Herdr paints the theme
+  `background` under the whole window, so without that override nothing
+  shows through. The terminals then draw on the pane frame: pane
+  `background` `surface` and `terminal_opacity` 0, so they stay solid (in
+  `surface`, a shade off the theme `background`). Off: the root gets the
+  theme gradient `{ "gradient": ["chrome", "canvas"], "angle": 160 }`, no
+  `colors.background`, pane `background` `background` and `terminal_opacity` 1
+  (`work-body` stays `chrome`; a custom `colors.background` or pane frame
+  `background` in a clone is replaced by the switch).
+  `window_blur` stays true when off: macOS sets the blur up when the window
+  opens, and the opaque background hides it, so turning the glass back on
+  needs no restart. `mods/herdsidian/glass.js` (`isGlass`, `withGlass`)
+  makes the change; the palette writes the layout file (never `layout.set`,
+  which resets the person's clicks: theme pick, sizes, hidden sidebars).
+- `work-body` (the row around the panes) has `background` `chrome`, so the
+  4-6 px gaps around the panes match the sidebar instead of showing the bare
+  desktop.
+- Mods never read the theme `background` as a color while the glass is on
+  (it is clear): the pane header, the "!" mark and the actions input use
+  `surface`, and `isLight` falls back to `canvas` when `background` is clear.
+- The glass is painted by the mods: sidebars and Notes use `chrome`, the
+  toolbar and status bar use `canvas`, each with 5 % of `accent` mixed in and
+  at 85 % opacity, so they let 15 % of the desktop through. At 85 % the dark
+  themes keep text at 4.5:1 or more (Nord's `muted` 4.0:1) even over a pure
+  white or black desktop. The light themes over a pure black desktop drop to
+  3.2-3.7:1 for `muted` and down to 3.7:1 for `foreground` (Tokyo Night
+  Light). The avatar letter (`markLetter`) and the agent badge ring are tuned
+  against an opaque `chrome`, so over a wallpaper far from the theme the
+  letter can drop to about 2.9:1 (Nord over white) and the ring shows as a
+  faint edge.
 - Pane border and root divider: the theme's `border` color (a token name, so
   light themes get a visible edge). Pane focus: `accent`.
 - `ui_font`: `.AppleSystemUIFont` (the macOS system font).
@@ -475,8 +499,8 @@ Look (layout root):
   `dot` (`foreground` 11 %, 16 % on a light theme: the header dot texture),
   `accentTrack` (`accent` 12 %: the working bar track), `highlight` (`foreground`
   5 %, 8 % on a light theme: the inset top line),
-  `glass` (`chrome` 55 %), `mainGlass` (`canvas` 35 %), `line` (`foreground`
-  7 %), `pill` (`foreground` 6 %, also hover), `accentSoft` (`accent` 18 %),
+  `glass` (`chrome` + 5 % `accent`, 85 %), `mainGlass` (`canvas` + 5 %
+  `accent`, 85 %), `line` (`foreground` 7 %), `pill` (`foreground` 6 %, also hover), `accentSoft` (`accent` 18 %),
   `glow` (`foreground` 5 %, the top sheen), `glowEnd` (`foreground` 0 %), `blockedSoft` (`blocked`
   15 %), `node` (`muted`), `nodeFar` (`muted` 80 %), `edge` (`foreground`
   22 %, decorative) and `edgeHot` (`foreground`). Constants: `PULSE` and `GLOW_ANGLE`
@@ -486,7 +510,8 @@ Look (layout root):
   (`#rrggbb` blend, w 0 gives a, 1 gives b) and `markLetter(mark, theme)`: the avatar letter
   color, the mark mixed toward white (dark theme) or black (light theme) with weight 0.25,
   raised in 0.05 steps up to 0.6 until it reaches 4.5:1 against the avatar (the mark at 20 % over
-  `chrome`).
+  `chrome`; with `window_blur` the real avatar also carries 15 % of the desktop, so the ratio holds
+  only when the wallpaper is close to the theme).
   `statusDot(theme, status)` gives the dot recipe (fill or ring, pulse).
   Tests: `tests/tokens.test.js`.
 - `lib/ui.js`: `icon(p, size, color)`, a program's icon (a tinted SVG in
@@ -575,12 +600,13 @@ Look (layout root):
   border and the divider accept `#rrggbbaa`. The glass comes from the mods,
   which add alpha with `lib/tokens.js`.
 - A theme name in the JSON cannot carry alpha. Use a name alone (`"accent"`,
-  `"background"`, or in a gradient `["chrome", "canvas"]`) or a full hex.
-  For a transparent theme color, add the alpha in the mod with `alpha()`.
-- Gradient stops accept theme color names: the root `background` uses
-  `["chrome", "canvas"]` at angle 160, and it follows the active theme.
-- There is no blur API, so the glass is transparency only (a color with alpha
-  over the gradient).
+  `"background"`) or a full hex. For a transparent theme color, add the alpha
+  in the mod with `alpha()`. That is why the root is `#00000000` and not a
+  theme gradient, which would hide the desktop.
+- `window_blur` (Herdr App 0.1.16+) blurs the desktop behind the window on
+  macOS, Windows and some Wayland compositors. Where the system cannot blur,
+  the see-through parts show the desktop sharp. `herdr-app shot` saves only
+  the app frame, so it does not show the desktop or the blur: check by eye.
 - `shadow` on the pane frame shows nothing, so the cards have no shadow.
 - `bg()` takes a plain color, not a gradient. The top sheen is painted with
   `window.paint_path(..., Background.linear_gradient(...))`, in

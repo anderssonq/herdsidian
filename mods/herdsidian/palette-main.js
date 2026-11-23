@@ -7,7 +7,7 @@
 
 import { InputState } from "gpui-base";
 import { theme, agents, spaces, panes, focused, keys, layout, shared, setShared, home, run, notify, props, closeOverlay,
-  knownAgents, readTextFile, themes, settings as herdrSettings, appHome } from "herdr";
+  knownAgents, readTextFile, writeTextFile, themes, settings as herdrSettings, appHome } from "herdr";
 import { base, render as toMarkdown } from "./notes.js";
 import { emptyDoc, pickAgent } from "./context.js";
 import { stateDir, loadContext, saveContext, allNotes, noteTime } from "./io.js";
@@ -17,6 +17,7 @@ import {
 } from "./palette.js";
 import { sendText } from "./send.js";
 import { find } from "./layout.js";
+import { isGlass, withGlass } from "./glass.js";
 import { settings, setSetting } from "./settings.js";
 import { themeCalls, selectedFamily, parseAppearance } from "./theme-pick.js";
 import { SIDEBAR_STORE, readSidebar } from "./sidebar.js";
@@ -48,6 +49,8 @@ export class Palette {
     this.previewOn = false; this.previewPath = null; this.previewData = null; this.previewGen = 0;
     this.memo = null; this.list = null; this.sceneMemo = null; this.rankMemo = null;
     this.appearance = null;
+    this.glassBusy = false;
+    this.glass = null; // the window glass of the shown layout file: true, false, or null (no window_blur key: no row)
     this.handle = cx.focus_handle();
     this.on = this.callbacks();
     this.input = this.makeInput(PLACEHOLDER);
@@ -58,6 +61,7 @@ export class Palette {
     if (this.vault) { this.loadNotes(cx); this.loadDoc(cx); }
     if (space) this.loadStarter(cx, space);
     this.loadAppearance(cx);
+    this.loadGlass(cx);
   }
 
   makeInput(placeholder) {
@@ -106,6 +110,49 @@ export class Palette {
     });
   }
 
+  // The shown layout's file, read (never layout(): its look fields are the file's). A layout without
+  // window_blur was not made for the glass, so it gets no row.
+  glassPath() { return `${appHome()}/layouts/${shared("layout")}.json`; }
+
+  loadGlass(cx) {
+    cx.spawn(async (cx) => {
+      let value = null;
+      try {
+        const tree = JSON.parse(await readTextFile(this.glassPath()));
+        value = tree?.window_blur === undefined ? null : isGlass(tree);
+      } catch {}
+      this.glass = value;
+      this.touch(cx);
+    });
+  }
+
+  // Writes the layout file, not layout.set: Herdr reloads the file and keeps the person's clicks
+  // (theme pick, sizes, hidden sidebars), which layout.set resets.
+  // One write at a time (a double click would fail the second write's snapshot), and only a layout made for
+  // the glass: the shown layout may have changed since the row loaded.
+  toggleGlass(cx) {
+    if (this.glassBusy) return;
+    this.glassBusy = true;
+    cx.spawn(async (cx) => {
+      const path = this.glassPath();
+      try {
+        const text = await readTextFile(path);
+        const tree = JSON.parse(text);
+        if (tree?.window_blur === undefined) this.glass = null;
+        else {
+          const on = !isGlass(tree);
+          await writeTextFile(path, JSON.stringify(withGlass(tree, on), null, 2) + "\n", text);
+          this.glass = on;
+        }
+      } catch (e) {
+        notify({ title: "Window glass", body: `Could not change the layout file: ${e?.message ?? e}`, level: "error" });
+      } finally {
+        this.glassBusy = false;
+      }
+      this.touch(cx);
+    });
+  }
+
   touch(cx) {
     if (!this.dead) cx.notify();
   }
@@ -143,6 +190,7 @@ export class Palette {
         for (const [name, args] of themeCalls(change.family, themes())) run(name, args);
         this.loadAppearance(cx);
       } else if (change.type === "setting") setSetting(change.name, change.value);
+      else if (change.type === "glass") this.toggleGlass(cx);
       else run(change.name, change.args);
       if (row.setting.closes) return this.close();
       cx.notify();
@@ -316,7 +364,7 @@ export class Palette {
     const inputs = modelKey({
       query: this.query, tab, notes: this.notes, notesError: this.notesError, doc: this.doc, linking: this.linking,
       starter: this.starter, agents: live, order, layoutName, bindings, hasList, settings: current,
-      sidebarHidden, sidebarRail, sidebarTab, themes: themeList, family, appearance, archived,
+      sidebarHidden, sidebarRail, sidebarTab, themes: themeList, family, appearance, archived, glass: this.glass,
     });
     if (this.memo && sameKey(this.memo.inputs, inputs)) return this.memo;
 
@@ -330,7 +378,7 @@ export class Palette {
       contextPaths: sc.contextPaths, agents: live, commands, hintFor: (address) => agentHint(address, order, bindings, layoutName, hasList),
       rankedNotes: this.rankedFor(tab, sc),
       settings: paletteSettings({
-        settings: current, sidebarHidden, sidebarRail, sidebarTab, themes: themeList, family, appearance,
+        settings: current, sidebarHidden, sidebarRail, sidebarTab, themes: themeList, family, appearance, glass: this.glass,
       }),
     });
     this.memo = { inputs, tab, scene: sc, list };
