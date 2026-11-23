@@ -133,6 +133,13 @@ export function stillNeeded(card, agents, machines) {
   return true;
 }
 
+// Is the person already looking at what the card asks for? A needs-you card whose pane has the keyboard
+// focus (`focus` is herdr's focused()) while Herdr is the active window. Such a card is not shown, and a shown
+// one leaves. In the background (`active` false) the card still shows: nobody is looking. Nor when the pane
+// shows another terminal (terminal.show: `focus.shown`), since the agent is not on screen.
+export const watched = (card, focus, active) =>
+  active && card.kind === "blocked" && !!card.key && card.key === focus?.pane && !focus?.shown;
+
 export function ago(at, now) {
   const s = Math.floor((now - at) / 1000);
   return s < 2 ? "now" : s < 60 ? `${s} s` : `${Math.floor(s / 60)} m`;
