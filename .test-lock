@@ -63,3 +63,5 @@ a66d53f740f8d28d59130e61cb4115afbf037e8a180935052711dca41639211c  tests/archive-
 ab845530d595429f3173c621db64764bb7b1aa1a05d8c85ab66f9a9969e5f76a  tests/archive-command-render.test.js
 57122d23a16b471f770fd4a6afd1d629cb8b0f56224890968cf16ae05ecbff50  tests/tokens.test.js
 4fc91aa8b57bc2a627de3c8f06e83af59c441a314f618d7e03500b4dd153d378  tests/window-glass.test.js
+be6888eecdab361ebc5d11b16ebac044ec9bace16b863ad69aba6e18440b1d35  tests/toast-focus.test.js
+7327920e4ea2eb9897dd590153dd94ce0b251af46c4d3a96c66905c9fb612134  tests/toast-focus-shown.test.js

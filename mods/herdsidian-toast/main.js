@@ -4,8 +4,8 @@
 // The stack copy draws the cards and owns the timers. The model lives in stack.js, the card in card-view.js.
 import { View, div } from "gpui-kit";
 import { v_flex } from "gpui-base";
-import { agents, closeOverlay, keys, layout, machines, openOverlay, panes, props, run, setShared, settings, shared, spaces, theme, window as appWindow } from "herdr";
-import { A, ago, cardFrom, expired, isSticky, nextExpiry, pause, push, remove, resume, stillNeeded, visible, windowSpec } from "./stack.js";
+import { agents, closeOverlay, focused, keys, layout, machines, openOverlay, panes, props, run, setShared, settings, shared, spaces, theme, window as appWindow } from "herdr";
+import { A, ago, cardFrom, expired, isSticky, nextExpiry, pause, push, remove, resume, stillNeeded, visible, watched, windowSpec } from "./stack.js";
 import { cardView, moreRow } from "./card-view.js";
 import { find } from "./layout.js";
 
@@ -78,8 +78,14 @@ export default class Toast extends View {
     // Host copy: never forward its own `overlay` prop.
     const s = read();
     const card = cardFrom(p, { panes: panes(), agents: agents(), spaces: spaces() }, Date.now(), s.next ?? 1);
-    save({ ...push(s, card), next: (s.next ?? 1) + 1 });
-    sync();
+    if (!watched(card, focused(), appWindow()?.active !== false)) {
+      save({ ...push(s, card), next: (s.next ?? 1) + 1 });
+      sync();
+    } else {
+      // The person is on that pane already: no card, and an older one of the same pane (a "finished") goes too.
+      const old = s.cards.filter((c) => c.key === card.key && !isSticky(c)).map((c) => c.id);
+      if (old.length) { save(old.reduce(remove, s)); sync(); }
+    }
     if (typeof p.overlay === "string") closeOverlay(p.overlay); // herdr-app check runs it without one
   }
 
@@ -128,7 +134,16 @@ export default class Toast extends View {
     });
   }
 
+  // Sticky cards whose reason is gone (the agent is not blocked any more, the machine is ready) or that the person is
+  // looking at (watched: their pane has the focus in the active window).
+  unneeded(s) {
+    const focus = focused(), active = appWindow()?.active !== false;
+    return s.cards.filter((c) => isSticky(c) && !c.leaving && !this.pending.has(c.id)
+      && (!stillNeeded(c, agents(), machines()) || watched(c, focus, active))).map((c) => c.id);
+  }
+
   // Herdr inactive: timed cards pause; active again: they resume (unless hovered). Redraws the age labels that changed.
+  // A needs-you card leaves once its pane takes the focus.
   tick(cx) {
     if (replaced()) return;
     const s = read(), t = Date.now();
@@ -136,6 +151,9 @@ export default class Toast extends View {
     const cards = s.cards.map((c) => (active ? (s.hover === c.id ? c : resume(c, t)) : pause(c, t)));
     if (cards.some((c, i) => c !== s.cards[i])) { save({ ...s, cards }); this.armed = null; this.arm(cx); }
     if (cards.some((c) => ago(c.at, t) !== ago(c.at, this.drawn))) cx.notify();
+    // After the save above, so the leaving marks are not overwritten by this tick's copy of the store.
+    const gone = this.unneeded(read());
+    if (gone.length) this.leave(gone, cx);
     this.resync(read(), cx);
   }
 
@@ -179,7 +197,7 @@ export default class Toast extends View {
   // What render may not do itself: schedules it with a zero timer.
   watch(s, cx) {
     if (replaced()) return; // an old window about to close
-    const gone = s.cards.filter((c) => isSticky(c) && !c.leaving && !this.pending.has(c.id) && !stillNeeded(c, agents(), machines())).map((c) => c.id);
+    const gone = this.unneeded(s);
     if (gone.length) cx.timer.after(0, (cx) => { if (!replaced()) this.leave(gone, cx); });
     this.finishLeaving(cx);
     this.resync(s, cx);
