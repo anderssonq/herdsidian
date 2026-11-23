@@ -71,10 +71,12 @@ function blend(base, over, a = over.length === 9 ? parseInt(over.slice(7, 9), 16
 }
 
 // The status badge at a tile's bottom-right corner: an 8 px dot (blocked: a 12 px "!" mark) inside a
-// 2 px ring, opaque so it reads as cut out of the tile. The ring is t.chrome, or on the focused row
-// (accentSoft over glass) that row's composited color, so it doesn't show as a notch.
+// 2 px ring, opaque so it reads as cut out of the tile. The ring is the sidebar glass over t.chrome,
+// or on the focused row accentSoft over that. The glass lets 15 % of the desktop through, which an
+// opaque ring cannot follow, so over a wallpaper far from the theme a faint edge shows around the dot.
 const badge = (t, status, focused) => {
-  const ring = focused ? blend(t.chrome, tokens(t).accentSoft) : t.chrome;
+  const k = tokens(t), sidebar = blend(t.chrome, k.glass);
+  const ring = focused ? blend(sidebar, k.accentSoft) : sidebar;
   const blocked = status === "blocked";
   const size = blocked ? 16 : 12;
   return div().absolute().right(blocked ? -6 : -4).bottom(blocked ? -6 : -4).size(size).flex_none().rounded_full()

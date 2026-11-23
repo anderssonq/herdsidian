@@ -1,4 +1,3 @@
-d4bfadd7bb7b4a6130db711c609e75b2dd93730be769bbbe1ccbbb1e03e3ad31  tests/tokens.test.js
 cedb59f220059481e712a1148006650b9840477dc977b09cc3a91fed510e1eca  tests/next-blocked.test.js
 b57d312e8d0027ab6b5ae87a7082018d1e673cbb5bba5fbae4ce59a72c716a86  tests/lint.test.js
 0785c48ce60f5dbe4f3f8e1c7b6119b07eda3fe5dda4d2034b0850dbfd72f56a  tests/usage.test.js
@@ -62,3 +61,5 @@ e9d4ff19dd07b72fb19f37248a8ec0029b7cf0d9c31417e0a46b4da96ca6f2d5  tests/archive-
 6df39ab7067cbd9ae3fd088204e7da4348e2e4da02a474da6f3c8a12ddb2ec67  tests/archive-command.test.js
 a66d53f740f8d28d59130e61cb4115afbf037e8a180935052711dca41639211c  tests/archive-command-fixes.test.js
 ab845530d595429f3173c621db64764bb7b1aa1a05d8c85ab66f9a9969e5f76a  tests/archive-command-render.test.js
+57122d23a16b471f770fd4a6afd1d629cb8b0f56224890968cf16ae05ecbff50  tests/tokens.test.js
+4fc91aa8b57bc2a627de3c8f06e83af59c441a314f618d7e03500b4dd153d378  tests/window-glass.test.js

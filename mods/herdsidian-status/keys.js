@@ -31,13 +31,20 @@ export const showKeyHint = (hints, hoveredId, id) => hints === "always" || (hint
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
 
 // The Settings rows of the palette's Settings tab: [{ title, rows }].
-export function settingSections({ settings, sidebarHidden, sidebarRail, sidebarTab }) {
+// `glass`: true or false for the window glass of the shown layout (glass.js), null when unknown (no row).
+export function settingSections({ settings, sidebarHidden, sidebarRail, sidebarTab, glass = null }) {
   const tab = SIDEBAR_TABS.includes(sidebarTab) ? sidebarTab : "notes";
   const nextTab = SIDEBAR_TABS[(SIDEBAR_TABS.indexOf(tab) + 1) % SIDEBAR_TABS.length];
   const general = [{
     id: "key-hints", label: "Key hints", detail: keyHintLabel(settings.keyHints),
     action: { type: "setting", name: "keyHints", value: nextKeyHints(settings.keyHints) },
   }];
+  if (typeof glass === "boolean") {
+    general.push({
+      id: "window-glass", label: "Window glass", detail: glass ? "On" : "Off",
+      action: { type: "glass" },
+    });
+  }
   const layout = [{
     id: "right-sidebar", label: "Right sidebar", detail: sidebarHidden ? "Hidden" : "Shown",
     keycap: null, // ⌘⇧O selects Notes; it does not toggle the sidebar

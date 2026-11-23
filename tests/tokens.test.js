@@ -22,8 +22,8 @@ const theme = {
 
 test("tokens carry the exact alpha suffixes", () => {
   const k = tokens(theme);
-  assert.equal(k.glass, "#1a1a1a8c");
-  assert.equal(k.mainGlass, "#0a0a0a59");
+  assert.equal(k.glass, "#1d2125d9");
+  assert.equal(k.mainGlass, "#0d1116d9");
   assert.equal(k.line, "#eeeeee12");
   assert.equal(k.pill, "#eeeeee0f");
   assert.equal(k.accentSoft, "#4c9df32e");

@@ -99,7 +99,7 @@
                     "height": 30,
                     "position": "top"
                   },
-                  "background": "background",
+                  "background": "surface",
                   "border": {
                     "width": 1,
                     "color": "border"
@@ -116,7 +116,8 @@
             }
           ],
           "padding": 4,
-          "gap": 6
+          "gap": 6,
+          "background": "chrome"
         },
         {
           "id": "status",
@@ -145,13 +146,8 @@
       }
     }
   ],
-  "background": {
-    "gradient": [
-      "chrome",
-      "canvas"
-    ],
-    "angle": 160
-  },
+  "background": "#00000000",
+  "window_blur": true,
   "terminal_padding": [
     10,
     6
@@ -168,6 +164,9 @@
   ],
   "theme": "hs_carbon",
   "preview": "layouts/herdsidian.svg",
-  "terminal_opacity": 1,
-  "ui_font": ".AppleSystemUIFont"
+  "terminal_opacity": 0,
+  "ui_font": ".AppleSystemUIFont",
+  "colors": {
+    "background": "#00000000"
+  }
 }

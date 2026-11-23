@@ -129,8 +129,8 @@ herdsidian: ~/code/acme-api
   It never presses Enter. `⇥` previews the note.
 - **Shortcut guide.** Each space shows `⌃1…⌃9` and each agent `⌥⌘1…⌥⌘9`, so you
   jump between agents without the mouse.
-- **Graphite glass look.** Tinted glass over a gradient of the theme, terminals as solid
-  cards. Eight themes, every color derived from the theme:
+- **Graphite glass look.** Tinted glass over the blurred desktop, terminals as solid
+  cards (turn the glass off in ⌘K → Settings → Window glass). Eight themes, every color derived from the theme:
   `hs_carbon` (default), `hs_midnight` (Tokyo Night), `hs_catppuccin` (Mocha),
   `hs_nord`, and a light version of each. The 52 px header bands carry a fine dot texture,
   and the sidebar header shows the Herdsidian icon.
@@ -155,6 +155,8 @@ herdsidian: ~/code/acme-api
 ---
 
 ## Install
+
+Needs Herdr App 0.1.16 or later (for `window_blur`).
 
 Ask your agent, from a Herdr terminal:
 

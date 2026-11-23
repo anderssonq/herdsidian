@@ -113,12 +113,12 @@ export const agentSig = (agents) => agents
   .join("\n");
 
 // The list memo key: everything buildList and commandList read.
-export function modelKey({ query, tab, notes, notesError, doc, linking, starter, agents, order, layoutName, bindings, hasList, settings, sidebarHidden, sidebarRail, sidebarTab, themes, family, appearance, archived }) {
+export function modelKey({ query, tab, notes, notesError, doc, linking, starter, agents, order, layoutName, bindings, hasList, settings, sidebarHidden, sidebarRail, sidebarTab, themes, family, appearance, archived, glass = null }) {
   return [
     query, tab, notes, notesError, doc, linking, starter, agentSig(agents),
     JSON.stringify(order ?? null), layoutName, JSON.stringify(bindings), hasList,
     JSON.stringify(settings ?? null), sidebarHidden, sidebarRail, sidebarTab,
-    JSON.stringify(themes ?? null), family, appearance, JSON.stringify(archived ?? null),
+    JSON.stringify(themes ?? null), family, appearance, JSON.stringify(archived ?? null), glass,
   ];
 }
 
@@ -188,8 +188,8 @@ const APPEARANCE_NOTE = "set in Herdr Settings ↗";
 
 // The palette's Settings tab: [{ title, rows }]. Four theme rows (swatches from themes(), a check on `family`),
 // one Appearance row that points at Herdr Settings and closes the palette, then settingSections (keys.js).
-// Each row's `action` is { type: "theme", family }, { type: "setting", name, value } (the `settings` store)
-// or { type: "run", name, args }. `appearance` is parseAppearance's value (null: unreadable).
+// Each row's `action` is { type: "theme", family }, { type: "setting", name, value } (the `settings` store),
+// { type: "glass" } (the window glass switch) or { type: "run", name, args }. `appearance` is parseAppearance's value (null: unreadable).
 export function paletteSettings(inputs) {
   const { themes, family = null, appearance = null } = inputs;
   const themeRows = FAMILIES.map((f) => ({

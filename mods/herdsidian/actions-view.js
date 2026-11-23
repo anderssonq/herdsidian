@@ -157,7 +157,7 @@ export class VaultSurface {
       .child(h_flex().items_center().child(div().flex_1().text_size(15).font_semibold().child(TITLES[this.p.op] ?? "Name"))
         .child(div().text_size(11).text_color(t.muted).child("Esc")))
       .child(div().pt(12).pb(6).text_size(11.5).text_color(t.muted).child("Name"))
-      .child(Input.new(this.input).h(36).px(10).rounded(RADIUS.control).border_1().border_color(this.inputFocused ? t.accent : t.input).bg(t.background).text_size(12.8).text_color(t.foreground))
+      .child(Input.new(this.input).h(36).px(10).rounded(RADIUS.control).border_1().border_color(this.inputFocused ? t.accent : t.input).bg(t.surface).text_size(12.8).text_color(t.foreground))
       .child(div().id("vault-prompt-message").h(34).pt(6).text_size(11.5).text_color(t.blocked).child(this.message ?? ""))
       .child(h_flex().pt(8).gap(8).justify_end()
         .child(this.button(t, "vault-prompt-cancel", "Cancel", false, () => this.close()))

@@ -68,7 +68,7 @@ export default class Pane extends View {
       .px(10)
       .gap(8)
       .items_center()
-      .bg(t.background)
+      .bg(t.surface) // the pane frame's color; the layout makes `background` transparent
       .border_t(1)
       .border_color(k.highlight)
       .text_size(12)
@@ -80,7 +80,7 @@ export default class Pane extends View {
       .when(bar, el => el.child(bar))
       // Working shows the bar instead of a dot.
       .when(st === "done", el => el.child(dot(t, st, 6)))
-      .when(st === "blocked", el => el.child(needsPill(t, k, t.background)))
+      .when(st === "blocked", el => el.child(needsPill(t, k, t.surface)))
       .when(this.hovered, el => el
         .child(this.button(t, k, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }))
         .child(this.button(t, k, `ph-d-${pane}`, "split-down", "pane.split", { direction: "down", pane }))
