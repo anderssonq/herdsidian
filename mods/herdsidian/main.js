@@ -16,6 +16,7 @@ import { SIDEBAR_STORE, readSidebar } from "./sidebar.js";
 import { tabControl, railTabs, changeCount, tabTips } from "./sidebar-view.js";
 import { FilesTab } from "./files-view.js";
 import { ChangesTab, ChangesWatch } from "./changes-view.js";
+import { GitTab } from "./git-view.js";
 import { keyHint } from "./keys.js";
 import { settings as herdsidianSettings } from "./settings.js"; // herdr has its own settings()
 import { buildIndex, updateIndex, missingRaw, neighborhood, layout as ringLayout, toScreen, zoomAt, sectionMessage, placeLabels, AREA } from "./graph.js";
@@ -81,6 +82,8 @@ export default class Notes extends View {
     this.changesWatch = new ChangesWatch(this.host);
     // The Files tab object is made here too: its 10 s timer needs init's cx. It does no work while the tab is not shown.
     this.filesTab = new FilesTab(this.host);
+    // The Git tab too: its input states and handles need init's cx. Its constructor runs no command.
+    this.gitTab = new GitTab(this.host);
     // A fresh request is left to the first render; an old one was already handled.
     const request = shared("herdsidian.request");
     this.handled = pendingRequest(request, null, this.vault, Date.now()).action === "none" ? request?.id ?? null : null;
@@ -788,6 +791,8 @@ export default class Notes extends View {
     this.handleShared(cx);
     const t = theme();
     const tab = readSidebar(shared(SIDEBAR_STORE)).tab;
+    // The Git tab not shown: its card goes and its next show reloads (AC17, AC45). No command runs.
+    if (tab !== "git" || narrow()) this.gitTab?.left();
     if (narrow()) return this.rail(t, tab);
     const k = tokens(t);
     return v_flex().id("herdsidian").size_full().min_h(0).bg(k.glass).text_color(t.foreground).text_size(13)
@@ -799,9 +804,10 @@ export default class Notes extends View {
       .child(tab === "notes" ? this.notesTab(t, cx) : this.tabBody(tab).render(t, cx));
   }
 
-  // The Files tab object is made in init (its timer needs init's cx); the Changes one on the first render of that tab.
+  // The Files and Git tab objects are made in init (they need init's cx); the Changes one on the first render of that tab.
   tabBody(tab) {
     if (tab === "files") return (this.filesTab ??= new FilesTab(this.host));
+    if (tab === "git") return this.gitTab;
     return (this.changesTab ??= new ChangesTab(this.host));
   }
 

@@ -43,7 +43,7 @@ test("keyHintLabel: modifier reads On hover (P0 fallback)", () => {
 });
 
 test("SIDEBAR_TABS order", () => {
-  assert.deepEqual(SIDEBAR_TABS, ["notes", "files", "changes"]);
+  assert.deepEqual(SIDEBAR_TABS, ["notes", "files", "changes", "git"]);
 });
 
 const base = { settings: { keyHints: "modifier", usageInStatus: true }, sidebarHidden: false, sidebarRail: false };
@@ -83,7 +83,9 @@ test("settingSections: tab detail and next tab follow the order, wrapping", () =
   assert.equal(next("files").detail, "Files");
   assert.equal(next("files").action.name, "herdsidian-tabs.changes");
   assert.equal(next("changes").detail, "Changes");
-  assert.equal(next("changes").action.name, "herdsidian-tabs.notes");
+  assert.equal(next("changes").action.name, "herdsidian-tabs.git");
+  assert.equal(next("git").detail, "Git");
+  assert.equal(next("git").action.name, "herdsidian-tabs.notes");
   assert.equal(next("notes").action.name, "herdsidian-tabs.files");
   // A stored "settings" tab reads as Notes.
   assert.equal(next("settings").detail, "Notes");

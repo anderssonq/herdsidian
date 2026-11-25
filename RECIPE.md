@@ -131,7 +131,7 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      focused one, wrapping). Tooltip "Go to the blocked agent".
    - There is no second right column. Files and Changes are tabs of the right sidebar
      (item 3); the layout has no `panel` column. `mods/herdsidian-tabs/sidebar.js` and
-     `lib/sidebar.js` turn `herdsidian-tabs.files`/`.changes`/`.notes` into
+     `lib/sidebar.js` turn `herdsidian-tabs.files`/`.changes`/`.git`/`.notes` into
      `layout.show`/`layout.hide` of the `herdsidian` block plus the selected tab.
    - `herdsidian-status` bar (28 px, `mainGlass`): machine, branch, the
      agent count or "N working" (and the "Needs you" pill), and on the right the
@@ -142,8 +142,8 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      7-day cost, Kiro's and Grok's monthly use. From 90 % the percent and the bar use
      `blocked`. The theme name is not here (it lives in Settings). `⇧⌘P` still opens commands.
 3. **Right sidebar** (the `herdsidian` block), 380 px (min 44, max 720), hidden until
-   `⇧⌘O`, `⇧⌘E` or `⇧⌘G`. Same glass as the left sidebar. Header 52 px with a
-   segmented control of three equal tabs, **Notes · Files · Changes**, then the
+   `⇧⌘O`, `⇧⌘E`, `⇧⌘G` or `⇧⌘H`. Same glass as the left sidebar. Header 52 px with a
+   segmented control of four equal tabs, **Notes · Files · Changes · Git**, then the
    collapse button. Each tab's tooltip carries its key ("Notes  ⇧⌘O", none when Key hints
    is Off). The Changes tab shows a count badge when there are changes. The chosen
    tab is remembered (stored in `shared("herdsidian.sidebar")` and kept across restarts, default Notes; a stored `settings` reads as Notes).
@@ -155,7 +155,13 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      path is a 30 px `muted` line under the tabs.
    - **Changes tab**: our own list from `git status --porcelain=v1 -z` and `git diff
      --numstat` for the focused pane's repo: path, +N in `ansi2`, −N in `ansi1`, rows
-     28 px. A click opens the file in the Files tab.
+     28 px. A click opens the file's diff in the tab (split from 520 px, unified below), with file
+     tabs. It has no prompt card and reads no session file.
+   - **Git tab**: the focused pane's repo. Branch header, the history (300 commits per page,
+     **Load more**), a commit's detail and diff, and the buttons Fetch, Pull, Push, Branch,
+     Stash and Pop. Every write but Fetch asks in a confirm inside the panel and re-checks
+     the repo before it runs. Pull is fast-forward only; Push never forces. A remote repo on
+     Windows has no network actions in v1. See the `herdsidian` disclosure.
    - **Settings** are in ⌘K → Settings, not in the sidebar: **Theme** (four family rows,
      Carbon, Midnight, Catppuccin and Nord, each showing its dark and light half; a row runs
      `app.theme` for `hs_<family>` and `hs_<family>_light`, so both halves are set; one
@@ -481,6 +487,18 @@ Look (layout root):
     - `actions-view.js`: `VaultSurface`, the menu, the name prompt and the delete
       confirmation, each an overlay copy of `herdsidian`.
     - `actions-main.js`: `VaultActions`, the Notes side that does the work.
+  - The Changes tab, files kept pure (no `herdr`, `gpui-kit` or `gpui-base` import):
+    `diff.js` (hunk parser and line pairing) and `diff-pane.js` (the state of one open diff,
+    shared with the Git tab). `diff-view.js` draws
+    the per-file diff and keeps no state; `changes.js` and `changes-view.js` hold the list.
+    The diff is split from 520 px of sidebar width, unified below; its colors come from
+    `diffTokens` in `lib/tokens.js` (theme red and green, no syntax colors). Keys `[`, `]`,
+    `s` and `Esc` work after a click in the diff.
+  - The Git tab, files kept pure: `git-log.js` (argument builders and parsers), `git-lanes.js`
+    (the graph lane layout), `git-model.js` (the view model) and `git-actions.js` (the
+    command builders, the disabled reasons, the confirm texts and the result text).
+    `git-run.js` (the snapshot read and `ActionGate`, the one place a write runs). `git-graph-view.js`, `git-detail-view.js` and `git-card-view.js`
+    draw the graph, the commit detail and the confirm card; `git-view.js` holds the tab.
   - Tests for the Herdr-side additions are in `tests/io.test.js` (`allNotes`,
       `listNotes`, `noteTime`, `backoffMs`, `afterOutage`, `underVault`, `touches`) and `tests/lint.test.js` (the new rules).
   From `herdr`: `exec` (`sh` to list a folder and to read `XDG_STATE_HOME`,
@@ -554,7 +572,7 @@ Look (layout root):
   terminal has the keyboard. "Off" hides them; header hints are tooltips. Tooltips
   elsewhere keep their key. Changed from ⌘K → Settings, whose Layout
   section also selects the right sidebar tab (`herdsidian-tabs.notes` / `.files` /
-  `.changes`), the sidebar width (`herdsidian.expand` / `herdsidian.rail`, handled by
+  `.changes` / `.git`), the sidebar width (`herdsidian.expand` / `herdsidian.rail`, handled by
   Notes' `nextCommand()`) and Usage in the status bar. Imports `herdr`; in `herdsidian-tabs` it is imported as
   `herdsidianSettings`, because Herdr's own `settings()` is used there too.
 - Copy rule: `lib/tokens.js`, `lib/ui.js`, `lib/layout.js`, `lib/keys.js` and `lib/settings.js` are the
@@ -570,7 +588,7 @@ Look (layout root):
   `cmd-k` → `mod.open:herdsidian`, `cmd-alt-1..9` → `guide-agents.focus-N`,
   `ctrl-1..9` → `space.select:N`, `cmd-alt-[`/`]` → `space.prev`/`next`,
   `cmd-[`/`]` → `agent.prev`/`next`, `cmd-l` → `herdsidian.link`,
-  `cmd-shift-e`/`g` → `herdsidian-tabs.files`/`changes` (the toolbar's `nextCommand()`
+  `cmd-shift-e`/`g`/`h` → `herdsidian-tabs.files`/`changes`/`git` (the toolbar's `nextCommand()`
   routes the sidebar to that tab), so every shortcut the sidebar and the toolbar show works) and `mod:herdsidian` (`cmd-s` →
   `herdsidian.save`, `cmd-e` → `herdsidian.mode`). Inside the palette, `⌘↵` and `⇥`
   are not in `keys.json`: the search field's `submit` event (with `secondary` set for
@@ -661,6 +679,20 @@ Look (layout root):
   (`head -c 4096`), and that folder shows no value. No new network host, no credential read, no
   `kiro-cli` or `grok` run. `agent-context.js` is pure; the parsers shared with Usage live in
   `lib/agent-files.js` (copied into `herdsidian-status` and `guide-agents`, lint checks the copies).
+- Disclosure: `herdsidian` runs `git` for the Git tab, in the focused pane's repo. Reads run
+  only while that tab is shown. Reads: status, branches, remotes, the top stash, the history (300
+  commits per page) and one commit's files and patch. Writes: Fetch, Pull and Push reach the
+  person's remotes with their own credentials (their SSH keys or credential helper); Herdsidian
+  reads and stores no credential and adds no new network host. Pull is fast-forward only and
+  Push never forces. Branch, Stash and Pop change only the local repo. Every write but Fetch
+  asks in the panel and re-checks the repo first. A remote repo on Windows has no network
+  actions in v1. Network actions run with `GIT_TERMINAL_PROMPT=0` (no password prompt).
+  Nothing is ever reset or force-pushed, and no stash is dropped except the one a successful
+  Pop applies. A write keeps running after you leave the tab; when it ends while another tab
+  or another repo is shown, a Herdr notice titled "<folder>: <Action> done" or "<folder>:
+  <Action> failed" is sent, and its body is the first line of git's result (on the same repo
+  with Git shown, the result panel shows instead). Output otherwise stays in
+  memory only: never in `shared()`, `localStorage`, a file or a log. The Changes tab reads no agent session file. A commit's text can be private: use demo data for any published picture.
 - Grok hook: `scripts/grok-status-line.sh` (macOS; only `/bin/sh` and `/usr/bin/plutil`) is
   installed by hand in `~/.grok/config.toml` as `[ui.status_line]` with `type = "command"`;
   Herdsidian never edits that file. It writes only

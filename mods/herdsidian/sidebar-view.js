@@ -3,8 +3,8 @@ import { div, svg } from "gpui-kit";
 import { RADIUS } from "./tokens.js";
 import { SIDEBAR_TABS, keyHint } from "./keys.js";
 
-const LABELS = { notes: "Notes", files: "Files", changes: "Changes" };
-const ICONS = { notes: "file-text", files: "files", changes: "git-compare" };
+const LABELS = { notes: "Notes", files: "Files", changes: "Changes", git: "Git" };
+const ICONS = { notes: "file-text", files: "files", changes: "git-compare", git: "git-branch" };
 
 // Each segment's tooltip: its name and, unless key hints are off, the key bound to its command.
 // `bindings` keys(), `layoutName` the active layout, `hints` the keyHints setting.

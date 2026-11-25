@@ -1,16 +1,20 @@
-// The Changes tab's pure logic (V1): the git commands, their -z outputs parsed into rows, the count.
+// The Changes tab's pure logic: the git commands, their -z outputs parsed into rows, the count, and one file's patch.
 // Pure (no herdr, gpui-kit or gpui-base import), so Node tests import it.
 
 // The most rows the tab draws; the count still includes every changed file.
 export const MAX_ROWS = 500;
 
 // Nothing may write under .git (index lock, fsmonitor cookie): the folder watch would refresh again.
-const QUIET = ["--no-optional-locks", "-c", "core.fsmonitor=false"];
+export const QUIET = ["--no-optional-locks", "-c", "core.fsmonitor=false"];
 export const topArgs = (cwd) => ["-C", cwd, "rev-parse", "--show-toplevel"];
 // --branch puts the branch on the first record: one call gives the entries and where we are.
 export const statusArgs = (root) => [...QUIET, "-C", root, "status", "--porcelain=v1", "-z", "--branch"];
 // Without a commit there is no HEAD to compare with: the work tree against the index.
 export const diffArgs = (root, head) => [...QUIET, "-C", root, "diff", ...(head ? ["HEAD"] : []), "--numstat", "-z"];
+// The patch of one file. --literal-pathspecs: "a*.txt" must not also match "ab.txt"; --no-ext-diff: a diff tool in the
+// person's git config would replace the patch format. -M only for a rename, so its old and new path pair up.
+export const patchArgs = (root, path, from, head) => [...QUIET, "--literal-pathspecs", "-C", root, "diff", ...(head ? ["HEAD"] : []),
+  "-U3", "--no-color", "--no-ext-diff", ...(from ? ["-M"] : []), "--", ...(from ? [from, path] : [path])];
 
 // "## main...origin/main [ahead 1]", "## No commits yet on main", "## HEAD (no branch)".
 export function parseBranch(line) {
@@ -94,6 +98,121 @@ export function mergeRows(entries, stats, limit = MAX_ROWS) {
     const stat = e.kind === "untracked" ? { add: null, del: null } : stats.get(e.path) ?? { add: 0, del: 0 };
     return { path: e.path, from: e.from, status: e.kind, add: stat.add, del: stat.del };
   });
+}
+
+// The +add −del totals of every changed file, past MAX_ROWS too. A binary file (null) adds 0.
+export function sumStats(stats) {
+  let add = 0, del = 0;
+  for (const s of stats.values()) { add += s.add ?? 0; del += s.del ?? 0; }
+  return { add, del };
+}
+
+const HUNK = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@ ?([^]*)$/;
+// git writes CRLF content as is: one "\r" at the end of a line belongs to the file, not to the text drawn.
+const chomp = (text) => (text.endsWith("\r") ? text.slice(0, -1) : text);
+
+// The hunks of a one-row `git diff -U3` patch, every section in git's order. A hunk is read by its counts, not by line prefixes, so a content
+// line that starts with "---", "+++" or "@@" stays content. A "\ No newline" line is a note: no numbers, no count.
+export function parseHunks(patch) {
+  const lines = patch.split("\n"), hunks = [];
+  let hunk = null, oldNo = 0, newNo = 0, oldLeft = 0, newLeft = 0;
+  for (const raw of lines) {
+    const text = chomp(raw);
+    if (hunk && (oldLeft > 0 || newLeft > 0)) {
+      const sign = text[0], body = text.slice(1);
+      if (sign === " " && oldLeft > 0 && newLeft > 0) { hunk.lines.push({ kind: "context", old: oldNo++, new: newNo++, text: body }); oldLeft--; newLeft--; }
+      else if (sign === "-" && oldLeft > 0) { hunk.lines.push({ kind: "del", old: oldNo++, new: null, text: body }); oldLeft--; }
+      else if (sign === "+" && newLeft > 0) { hunk.lines.push({ kind: "add", old: null, new: newNo++, text: body }); newLeft--; }
+      else if (sign === "\\") hunk.lines.push({ kind: "note", old: null, new: null, text });
+      else break;
+      continue;
+    }
+    // A full hunk: the no-newline note of its last line, the next header, or the end of the patch.
+    if (hunk && text.startsWith("\\")) { hunk.lines.push({ kind: "note", old: null, new: null, text }); continue; }
+    const m = HUNK.exec(text);
+    if (m) {
+      const count = (n) => (n === undefined ? 1 : Number(n));
+      hunk = { oldStart: Number(m[1]), oldCount: count(m[2]), newStart: Number(m[3]), newCount: count(m[4]), section: m[5], lines: [] };
+      hunks.push(hunk);
+      oldNo = hunk.oldStart; newNo = hunk.newStart; oldLeft = hunk.oldCount; newLeft = hunk.newCount;
+      continue;
+    }
+    // A rename git cannot pair (under 50 % similar) is two sections: the next one's headers are skipped like the first's.
+    if (hunk && text.startsWith("diff --git ")) { hunk = null; continue; }
+    // Before the first hunk: the diff, index, mode, rename and ---/+++ headers. After a full hunk: the end.
+    if (hunk) break;
+  }
+  return hunks;
+}
+
+// git's binary answers come in the header, before any hunk: the same words inside a hunk are content.
+export function isBinaryPatch(patch) {
+  for (const raw of patch.split("\n")) {
+    const text = chomp(raw);
+    if (text.startsWith("@@")) return false;
+    if (text === "GIT binary patch" || (text.startsWith("Binary files ") && text.endsWith(" differ"))) return true;
+  }
+  return false;
+}
+
+// The most diff lines kept (AC30); the view says how many there were in all.
+export const MAX_LINES = 2000;
+// The first `max` lines across the hunks, in order. A hunk past the cut is dropped, so no title is drawn with no lines.
+export function capLines(hunks, max = MAX_LINES) {
+  const total = hunks.reduce((n, h) => n + h.lines.length, 0);
+  if (total <= max) return { hunks, total, shown: total };
+  const kept = [];
+  let left = max;
+  for (const h of hunks) {
+    if (left <= 0) break;
+    const lines = h.lines.slice(0, left);
+    kept.push(lines.length === h.lines.length ? h : { ...h, lines });
+    left -= lines.length;
+  }
+  return { hunks: kept, total, shown: max };
+}
+
+// The capped hunks of a body, or a notice when nothing is left to draw.
+export function cappedBody(body) {
+  if (body.notice) return body;
+  if (!body.hunks.length) return { notice: "No text changes" };
+  const { hunks, total, shown } = capLines(body.hunks);
+  return { hunks, more: total > shown ? total : 0 };
+}
+
+// Shown in place of the lines of a binary file (Changes and Git).
+export const BINARY = "Binary file, no preview";
+// The first line of a git message.
+export const firstLine = (text) => String(text ?? "").trim().split("\n")[0];
+// A rejected exec read as a failed run, so a read never throws.
+export const execFailed = (e) => ({ code: -1, stdout: "", stderr: String(e?.message ?? e) });
+
+// One patch read ({ code, stdout, stderr }) as a body: git's first error line, the binary notice, or the capped hunks.
+export function patchBody(r) {
+  if (r.code !== 0) return { notice: firstLine(r.stderr) || "Cannot read the diff" };
+  if (isBinaryPatch(r.stdout)) return { notice: BINARY };
+  return cappedBody({ hunks: parseHunks(r.stdout) });
+}
+
+// The largest text readTextFile gives; Herdr refuses more with "exceeds 1 MiB".
+const MAX_TEXT = 1048576;
+// An untracked file, read whole, as one hunk of added lines; or the notice shown instead of lines (AC34).
+export function wholeFile(read) {
+  if (read.error !== undefined) {
+    const message = String(read.error?.message ?? read.error);
+    if (message.includes("exceeds 1 MiB")) return { notice: "File too large to preview" };
+    if (message.includes("UTF-8")) return { notice: "Binary file, no preview" };
+    return { notice: message.split("\n")[0] };
+  }
+  const { text } = read;
+  if (text === null || text === undefined) return { notice: "File not found" };
+  if (text.includes("\0")) return { notice: "Binary file, no preview" };
+  if (text.length >= MAX_TEXT) return { notice: "File too large to preview" };
+  if (text === "") return { notice: "No text changes" };
+  const parts = text.split("\n");
+  if (parts.at(-1) === "") parts.pop();
+  const lines = parts.map((part, i) => ({ kind: "add", old: null, new: i + 1, text: chomp(part) }));
+  return { hunks: [{ oldStart: 0, oldCount: 0, newStart: 1, newCount: lines.length, section: "", lines }] };
 }
 
 // The quiet period after a watch batch before git is read: batches that arrive meanwhile are merged into one refresh.
