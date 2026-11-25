@@ -1,4 +1,4 @@
-// The Changes tab, diff view (V2): header, tabs, origin row, rows, widths, notices, refresh, keys and glass.
+// The Changes tab, diff view (V2): header, tabs, rows, widths, notices, refresh, keys and glass.
 // Written from the spec and the plan's contracts. Colors come from diffTokens, read lazily so a missing export fails one test.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -31,7 +31,6 @@ const C_PATCH = patch("c.txt", "@@ -1 +1 @@", "-a", "\\ No newline at end of fil
 const STATUS = status(" M b.txt", " M c.txt", " M src/a.js", "?? new.txt");
 const NUMSTAT = numstat("1\t2\tb.txt", "1\t1\tc.txt", "1\t1\tsrc/a.js");
 const PATCHES = { "b.txt": B_PATCH, "c.txt": C_PATCH, "src/a.js": A_PATCH };
-const SESSION = `P "2026-11-25T10:00:00.000Z"\nT "Fix the parser"\nF "${ROOT}/src/a.js"\n`;
 
 async function until(fn, what) {
   for (let i = 0; i < 100; i++) {
@@ -42,18 +41,16 @@ async function until(fn, what) {
   return assert.fail(`timed out waiting for ${what}`);
 }
 
-// A mounted tab on a list of files, a width and, with `agent`, a Claude pane whose last turn touched src/a.js.
+// A mounted tab on a list of files and a width.
 async function setup({ theme = THEME, stat = STATUS, nums = NUMSTAT, patches = PATCHES, files = { [`${ROOT}/new.txt`]: "alpha\nbeta\n" },
-  agent = false, space = {}, width, gitOptions = {} } = {}) {
+  space = {}, width, gitOptions = {} } = {}) {
   Object.assign(world, { spaces: [{ id: "s1", active: true, folder: ROOT, ...space }], panes: [{ pane: "p1", cwd: ROOT }], focused: { pane: "p1" } });
-  if (agent) world.agents = [{ address: "a1", pane: "p1", status: "working", program: { key: "claude", name: "Claude Code" } }];
   state.shared["herdsidian.sidebar"] = { tab: "changes" };
-  const git = fakeGit({ status: stat, numstat: nums, patches, session: agent ? () => SESSION : null, ...gitOptions });
+  const git = fakeGit({ status: stat, numstat: nums, patches, ...gitOptions });
   fakeFiles(files);
   const m = mount({ theme });
   m.render();
   const list = await until(() => { const t = m.render(); return walk(t).some((n) => /^change-/.test(n.nodeId ?? "")) && t; }, "the list");
-  if (agent) await until(() => findById(m.render(), "changes-turn"), "the card");
   // The default width is a convenience; a test that names a width needs the resize handler.
   try { m.resize(list, width ?? 400); } catch (error) { if (width !== undefined) throw error; }
   return { m, git, list: m.render() };
@@ -197,21 +194,7 @@ test("AC21 tabs: one per listed file in order, name and counts, a 2 px accent li
 });
 
 // AC22
-test("AC22 the origin row shows the prompt for a turn file only, and none without a card", async () => {
-  const s = await setup({ agent: true });
-  let tree = await open(s, "src/a.js");
-  const origin = findById(tree, "diff-origin");
-  assert.ok(origin, "a turn file has an origin row");
-  assert.ok(texts(origin).includes("Fix the parser"));
-  assert.ok(walk(origin).some((n) => hasCall(n, "truncate")));
-  const at = (id) => walk(tree).findIndex((n) => n.nodeId === id);
-  assert.ok(at("diff-tabs") < at("diff-origin") && at("diff-origin") < at("diff-code"), "tabs, origin, code");
-  s.m.click(findById(tree, "diff-back"));
-  tree = await open(s, "b.txt");
-  assert.equal(findById(tree, "diff-origin"), null, "a file of no turn has no origin row");
-});
-
-test("AC22 with no card there is no origin row", async () => {
+test("AC22 the diff view has no origin row", async () => {
   const s = await setup();
   const tree = await open(s, "src/a.js");
   assert.equal(findById(tree, "diff-origin"), null);
@@ -524,12 +507,10 @@ test("AC41 a left mouse press in diff-view calls focus()", async () => {
 });
 
 // AC43
-test("AC43 glass on: diff-code has the well; header, tabs and card do not", async () => {
-  const s = await setup({ theme: GLASS, agent: true });
+test("AC43 glass on: diff-code has the well; header and tabs do not", async () => {
+  const s = await setup({ theme: GLASS });
   const dk = dkOf(GLASS);
   assert.ok(dk.well, "the glass gives a well");
-  const card = findById(s.list, "changes-turn");
-  assert.equal(walk(card).some((n) => has(n, "bg", dk.well)), false, "the card is not on the well");
   const tree = await open(s, "src/a.js");
   assert.ok(has(findById(tree, "diff-code"), "bg", dk.well));
   assert.equal(walk(findById(tree, "diff-header")).some((n) => has(n, "bg", dk.well)), false);
@@ -693,19 +674,16 @@ test("AC31 a wheel event with no local_position changes nothing", async () => {
 
 // AC15: nothing is read while the store says another tab; one re-read follows on return.
 test("AC15 a read finishing on another tab starts no new read; coming back starts one", async () => {
-  const s = await setup({ agent: true });
+  const s = await setup();
   await open(s, "src/a.js");
   const hold = holdPatches();
   await refresh(s);
   await until(() => hold.started.length === 1, "the held re-read");
   state.shared["herdsidian.sidebar"] = { tab: "files" };
   await refresh(s);
-  const sessions = () => s.git.calls.filter(([cmd]) => cmd === "/bin/sh").length;
-  const before = sessions();
   hold.release();
   for (let i = 0; i < 10; i++) await settle();
   assert.equal(hold.started.length, 1, "no patch exec while the store says files");
-  assert.equal(sessions(), before, "no session call while the store says files");
   state.shared["herdsidian.sidebar"] = { tab: "changes" };
   s.m.render();
   await until(() => hold.started.length === 2, "the re-read on return");

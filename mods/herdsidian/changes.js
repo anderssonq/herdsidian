@@ -5,7 +5,7 @@
 export const MAX_ROWS = 500;
 
 // Nothing may write under .git (index lock, fsmonitor cookie): the folder watch would refresh again.
-const QUIET = ["--no-optional-locks", "-c", "core.fsmonitor=false"];
+export const QUIET = ["--no-optional-locks", "-c", "core.fsmonitor=false"];
 export const topArgs = (cwd) => ["-C", cwd, "rev-parse", "--show-toplevel"];
 // --branch puts the branch on the first record: one call gives the entries and where we are.
 export const statusArgs = (root) => [...QUIET, "-C", root, "status", "--porcelain=v1", "-z", "--branch"];
@@ -170,6 +170,28 @@ export function capLines(hunks, max = MAX_LINES) {
     left -= lines.length;
   }
   return { hunks: kept, total, shown: max };
+}
+
+// The capped hunks of a body, or a notice when nothing is left to draw.
+export function cappedBody(body) {
+  if (body.notice) return body;
+  if (!body.hunks.length) return { notice: "No text changes" };
+  const { hunks, total, shown } = capLines(body.hunks);
+  return { hunks, more: total > shown ? total : 0 };
+}
+
+// Shown in place of the lines of a binary file (Changes and Git).
+export const BINARY = "Binary file, no preview";
+// The first line of a git message.
+export const firstLine = (text) => String(text ?? "").trim().split("\n")[0];
+// A rejected exec read as a failed run, so a read never throws.
+export const execFailed = (e) => ({ code: -1, stdout: "", stderr: String(e?.message ?? e) });
+
+// One patch read ({ code, stdout, stderr }) as a body: git's first error line, the binary notice, or the capped hunks.
+export function patchBody(r) {
+  if (r.code !== 0) return { notice: firstLine(r.stderr) || "Cannot read the diff" };
+  if (isBinaryPatch(r.stdout)) return { notice: BINARY };
+  return cappedBody({ hunks: parseHunks(r.stdout) });
 }
 
 // The largest text readTextFile gives; Herdr refuses more with "exceeds 1 MiB".

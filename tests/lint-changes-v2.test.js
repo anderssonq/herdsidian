@@ -23,8 +23,8 @@ const lint = (cwd) => {
   return { code: r.status, stderr: r.stderr };
 };
 
-// The three files of the shared session rule: the canonical one and the two copies.
-const SESSION = ["lib/agent-session.js", "mods/guide-agents/agent-session.js", "mods/herdsidian/agent-session.js"];
+// The two files of the shared session rule: the canonical one and its copy.
+const SESSION = ["lib/agent-session.js", "mods/guide-agents/agent-session.js"];
 const SAME = "export const TAIL_BYTES = 262144;\n";
 
 after(() => {
@@ -36,7 +36,7 @@ test("the real tree passes lint (true today)", () => {
   assert.equal(r.code, 0, r.stderr);
 });
 
-test("AC44 lint passes when the three agent-session files are the same", () => {
+test("AC44 lint passes when the two agent-session files are the same", () => {
   const dir = copyRepo();
   for (const f of SESSION) writeFileSync(join(dir, f), SAME);
   const r = lint(dir);
@@ -54,7 +54,7 @@ for (const copy of SESSION.slice(1)) {
   });
 }
 
-for (const name of ["diff", "turn"]) {
+for (const name of ["diff"]) {
   for (const spec of ["herdr", "gpui-kit", "gpui-base"]) {
     test(`lint fails when mods/herdsidian/${name}.js imports ${spec}`, () => {
       const dir = copyRepo();

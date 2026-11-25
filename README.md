@@ -92,8 +92,8 @@ herdsidian: ~/code/acme-api
 
 ## Features
 
-- **One right sidebar, three tabs.** **Notes · Files · Changes**, 380 px, so the
-  terminal keeps its room. `⇧⌘E` opens Files, `⇧⌘G` Changes and `⇧⌘O` Notes. The key of the
+- **One right sidebar, four tabs.** **Notes · Files · Changes · Git**, 380 px, so the
+  terminal keeps its room. `⇧⌘E` opens Files, `⇧⌘G` Changes, `⇧⌘H` Git and `⇧⌘O` Notes. The key of the
   tab already shown hides the sidebar. Each tab's tooltip shows its key. The tab you chose is remembered. It collapses to a 44 px rail with one icon per tab.
 - **Notes tab.** Folders, notes and search. Read mode renders
   frontmatter, headings and links; `⌘E` switches to Edit and `⌘S` saves. A button copies the
@@ -106,9 +106,14 @@ herdsidian: ~/code/acme-api
   width the view is split (old and new side by side); below that it is unified. Added lines
   use the theme's green and removed lines its red, with the changed words marked. File tabs
   under the sub-header switch between files. After a click in the diff: `]` next file, `[`
-  previous file, `s` switch Split and Unified, `Esc` back to the list. For a Claude Code
-  agent in the focused pane, a card shows the last prompt you typed ("K of N files changed in
-  this turn") and a dot marks the files that turn edited. Other agents get no card. See "What it runs and stores".
+  previous file, `s` switch Split and Unified, `Esc` back to the list.
+- **Git tab.** The fourth right-sidebar tab, opened with `⇧⌘H`. It shows the repo of the
+  focused pane: the branch, the history (300 commits, then **Load more**) and the detail of
+  a commit. Buttons: **Fetch**, **Pull**, **Push**, **Branch**, **Stash** and **Pop**. Every
+  write except Fetch first asks you to confirm in the panel, and checks the repo again before
+  it runs. Pull is fast-forward only and Push never forces. Fetch, Pull and Push reach your
+  remotes with your own credentials. A remote repo on Windows has no network actions in this
+  version. See "What it runs and stores".
 - **Toolbar sidebar toggle.** One icon button right of Search shows or hides the right
   sidebar. It is lit while the sidebar is shown. It is the only sidebar control in the toolbar; its tooltip shows no key.
 - **Usage in the status bar.** The limits of your agent CLIs sit at the right of the status
@@ -187,7 +192,8 @@ Then press `⇧⌘O` and **Choose a vault**.
    `mods/` into `~/.config/herdr-app/` (same paths). If you installed an earlier
    version, remove the old `themes/herdsidian_*.json` files.
 2. Merge the `layout:herdsidian` and `mod:herdsidian` sections of `keys.json` into
-   `~/.config/herdr-app/keys.json`.
+   `~/.config/herdr-app/keys.json`. If you edited that file before the Git tab, add this line
+   to `layout:herdsidian`: `"cmd-shift-h": "herdsidian-tabs.git"`.
 3. Check the mods:
    ```sh
    cd ~/.config/herdr-app/mods
@@ -223,7 +229,7 @@ Then bind a key in `keys.json`, for example
 | Keys | What it does |
 |---|---|
 | `⇧⌘O` | Show the right sidebar on Notes; pressed on Notes, hide it |
-| `⇧⌘E` / `⇧⌘G` | Show the right sidebar on Files / Changes; pressed on that tab, hide it |
+| `⇧⌘E` / `⇧⌘G` / `⇧⌘H` | Show the right sidebar on Files / Changes / Git; pressed on that tab, hide it |
 | `⌘J` | Focus the next agent that needs you (wraps) |
 | `⌘L` | Link the open note to the focused agent's space (no note open: open the picker) |
 | `⌘K` | Open the Herdsidian palette (the toolbar's Search box does the same) |
@@ -232,7 +238,7 @@ Then bind a key in `keys.json`, for example
 | `⇥` | In the palette: preview the selected note |
 | `↑` / `↓` | In the palette: move the selection |
 | `Esc` | Close the palette |
-| `[` / `]` / `s` / `Esc` | In a Changes diff, after a click in it: previous / next file, switch Split and Unified, back to the list |
+| `[` / `]` / `s` / `Esc` | In a Changes diff or a Git commit diff, after a click in it: previous / next file, switch Split and Unified, back to the list (Git: back to the history) |
 | `⌘E` / `⌘S` | In a note: switch Read and Edit / save |
 | `⌘/` | Herdr's list of every shortcut (`app.help`) |
 | `⌃1` … `⌃9` | Go to space 1–9 |
@@ -395,15 +401,19 @@ in the theme's opaque `popover` color. `⌘K` again closes it.
   from its first 4 KiB, and that folder then shows no value), and for Grok the hook's files in
   `herdsidian/grok`. It adds no network host and
   reads no credential. Off in Settings, it reads nothing and starts no timer.
-- **Last prompt** (`herdsidian`, Changes tab). Only for a Claude Code agent in the focused pane,
-  and only while the Changes tab is shown. It runs one read-only `/bin/sh` (`find`, `stat`,
-  `sort`, `head`, `tail`, `grep`, `awk`) on the agent's session log in `~/.claude/projects`,
-  picked as for the Context window (logs changed in the last day, up to 5 newest checked,
-  interactive only), only the last 256 KiB, to read the last prompt you typed and the
-  files that turn edited. It never prints assistant text or tool output: it outputs only the
-  prompt, its time and the edited paths. The text stays in memory: it is never saved, put
-  in a notice or sent anywhere. It adds no network host and reads no credential. Remote agents
-  and other programs, Codex too, are not read.
+- **Git tab** (`herdsidian`). For the focused pane's repo. Reads run only while the Git tab is
+  shown, with `git` (status, branches, the log of 300 commits at a time, one commit's detail).
+  Fetch, Pull and Push run `git` against your remotes with your own credentials (your SSH keys
+  or credential helper); Herdsidian stores none and adds no network host. Pull is
+  fast-forward only. Push never forces. Branch, Stash and Pop change only the local repo.
+  Every write except Fetch asks you first and re-checks the repo. A remote repo on Windows has
+  no network actions in this version. Network actions run with `GIT_TERMINAL_PROMPT=0`, so
+  git never asks for a password. Nothing is ever reset or force-pushed, and no stash is
+  dropped except the one a successful Pop applies. A write keeps running if you leave the
+  tab; when it ends while another tab or another repo is shown, Herdr shows a notice titled
+  "<folder>: <Action> done" or "<folder>: <Action> failed", and its body is the first line of
+  git's result (on the same repo with Git shown, the result panel shows instead). The
+  output is otherwise kept in memory and never saved.
 - The **Files** tab is code moved from a copy of Herdr's `files` (0.1.13) into the `herdsidian`
   mod; its folder icon is the vault's folder, in the accent color. It does not get later fixes
   to Herdr's `files`. The **Changes** tab is our own list: Herdr's `changes` mod cannot be

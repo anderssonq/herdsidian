@@ -137,6 +137,37 @@ export function diffTokens(t) {
   };
 }
 
+// Git tab colors (Decision 7). Six lanes in the order ansi4, ansi2, ansi5, ansi3, ansi6, ansi1. `line` and
+// `pillText` are the lane color pushed toward black (light theme) or white (dark theme) in 0.05 steps until
+// they reach 3:1 and 4.5:1 on every sidebar surface (glass off: the glass over chrome; glass on: the glass
+// over white and over black). `errorText` is t.blocked pushed to 4.5:1. t.background is never read as a color.
+export function gitTokens(t) {
+  const glass = t.background === CLEAR;
+  const sheet = tokens(t).glass;
+  const sidebars = glass ? ["#ffffff", "#000000"].map((b) => over(sheet, b)) : [over(sheet, t.chrome)];
+  const toward = isLight(t) ? "#000000" : "#ffffff";
+  const push = (base, min, under = (s) => s) => {
+    for (let i = 0; i <= 20; i++) {
+      const c = mix(base, toward, i / 20);
+      if (sidebars.every((s) => contrast(c, under(s)) >= min)) return c;
+    }
+    return toward;
+  };
+
+  const lanes = ["ansi4", "ansi2", "ansi5", "ansi3", "ansi6", "ansi1"].map((key) => {
+    const raw = t[key];
+    const pillBg = alpha(raw, 0.16);
+    return {
+      raw,
+      ink: contrast("#000000", raw) >= contrast("#ffffff", raw) ? "#000000" : "#ffffff",
+      line: push(raw, 3),
+      pillBg,
+      pillText: push(raw, 4.5, (s) => over(pillBg, s)),
+    };
+  });
+  return { lanes, errorText: push(t.blocked, 4.5) };
+}
+
 // Status dot recipe: a fill or a ring, and whether it pulses.
 export function statusDot(t, status) {
   if (status === "working") return { fill: t.working, ring: null, pulse: true };

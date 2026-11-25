@@ -6,7 +6,7 @@
 // usageInStatus: show the Usage line in the status bar. contextInSidebar: show the context window on agent rows.
 export const SETTING_DEFAULTS = { keyHints: "modifier", usageInStatus: true, contextInSidebar: true };
 export const KEY_HINT_VALUES = ["modifier", "always", "off"];
-export const SIDEBAR_TABS = ["notes", "files", "changes"];
+export const SIDEBAR_TABS = ["notes", "files", "changes", "git"];
 
 export const nextKeyHints = (v) => KEY_HINT_VALUES[(KEY_HINT_VALUES.indexOf(v) + 1) % KEY_HINT_VALUES.length];
 export const keyHintLabel = (v) => ({ modifier: "On hover", always: "Always", off: "Off" })[v];

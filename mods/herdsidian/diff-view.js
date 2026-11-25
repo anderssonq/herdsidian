@@ -1,9 +1,12 @@
-// The diff view of the Changes tab (V2): header, file tabs, origin row, note and the virtual list of rows.
-// A pure function of a plain model `m` plus callbacks `on`; changes-view.js owns the state. Plan: .spec/herdsidian-changes-v2-plan.md.
+// The diff view of the Changes and Git tabs: header, file tabs, note and the virtual list of rows. Plans:
+// .spec/herdsidian-changes-v2-plan.md and .spec/herdsidian-git-tab-plan.md.
+// diffView is a function of a plain model `m` plus callbacks `on`; changes-view.js and git-view.js own the state, and
+// paneParts builds the part of `m` and `on` that comes from their DiffPane.
 // A row made inside the list renderer has no id, no handler, no hover and no tooltip (the host throws): the handlers sit outside it.
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, Scrollbar } from "gpui-base";
-import { RADIUS, tokens } from "./tokens.js";
+import { settings } from "herdr";
+import { RADIUS, CLEAR, tokens } from "./tokens.js";
 import { iconButton } from "./icon-button.js";
 import { ROW_H, CODE_SIZE, MAX_LINES, SIGN_W, splitPath, numWidth } from "./diff.js";
 
@@ -27,7 +30,7 @@ const modeButton = (t, m, on, mode, label) =>
 function header(t, k, m, on) {
   const { dir, name } = splitPath(m.file.path);
   return h_flex().id("diff-header").flex_none().pt(2).pr(8).pb(6).pl(8).gap(4).items_center()
-    .child(iconButton("diff-back", t, "chevron-left", "Back to the changes", (_e, cx) => on.back(cx)))
+    .child(iconButton("diff-back", t, "chevron-left", m.backTip ?? "Back to the changes", (_e, cx) => on.back(cx)))
     .child(v_flex().id("diff-path").flex_1().min_w(0)
       .child(div().truncate().font_semibold().child(name))
       .child(div().truncate().text_size(10.5).text_color(t.muted).child(`${dir}${name}`)))
@@ -36,7 +39,7 @@ function header(t, k, m, on) {
       .child(modeButton(t, m, on, "split", "Split")))
     .child(m.prev ? iconButton("diff-prev", t, ARROW_UP, "Previous file", (_e, cx) => on.prev(cx)) : idleButton("diff-prev", t, ARROW_UP, "Previous file"))
     .child(m.next ? iconButton("diff-next", t, ARROW_DOWN, "Next file", (_e, cx) => on.next(cx)) : idleButton("diff-next", t, ARROW_DOWN, "Next file"))
-    .child(iconButton("diff-open-files", t, "file-text", "Open in Files", (_e, cx) => on.openFiles(cx)));
+    .when(!m.hideOpenFiles, (el) => el.child(iconButton("diff-open-files", t, "file-text", "Open in Files", (_e, cx) => on.openFiles(cx))));
 }
 
 // One tab per listed file; the open one has a 2 px accent line under it.
@@ -138,9 +141,40 @@ const notice = (t, text) => div().id("diff-notice").flex_1().min_h(0).p(12).text
 // The header and tabs are the real ones; only the code area waits.
 const loading = (t) => div().flex_1().min_h(0).p(12).text_size(12).text_color(t.muted).child("Loading diff…");
 
-// -> Element. `m`: { file, files, index, prev, next, mode, note, origin, body, pan, height, wellOn, handles, font? }
+// Herdr's zoom (1 when unknown): sizes and event positions come in window px.
+export const zoomOf = () => {
+  const zoom = settings()?.zoom;
+  return typeof zoom === "number" && zoom > 0 ? zoom : 1;
+};
+
+// The part of diffView's `m` and `on` that comes from a tab's DiffPane: the mode, the body (loading, rows or a notice),
+// the pan and sizes, the font, and the toggle, wheel and size callbacks. `open` is the diff named in the header, with
+// `reading` while another file is read; `current()` gives the diff drawn when an event comes.
+export function paneParts(t, pane, open, reading, current) {
+  const { mode, note } = pane.mode();
+  const body = reading ? { loading: true } : open.body.hunks ? { rows: pane.rowsOf(open, mode), more: open.body.more } : open.body;
+  const font = settings()?.font_family;
+  return {
+    m: { mode, note, body, pan: pane.pan, height: pane.code?.height ?? null, wellOn: t.background === CLEAR,
+      font: typeof font === "string" && font ? font : undefined },
+    on: {
+      toggle: (mode, cx) => { pane.toggle(mode, current()); cx.notify(); },
+      wheel: (e, cx) => { if (pane.wheel(e, zoomOf(), current())) cx.notify(); },
+      size: ({ width, height }, cx) => {
+        const zoom = zoomOf();
+        if (!pane.sized({ width: width / zoom, height: height / zoom })) return;
+        pane.clamp(current());
+        cx.notify();
+      },
+    },
+  };
+}
+
+// -> Element. `m`: { file, files, index, prev, next, mode, note, body, pan, height, wellOn, handles, font?, hideOpenFiles?, backTip? }
 //   file/files: list rows { path, from, status, add, del } · prev/next: a path or null · mode: "unified" | "split" as shown
-//   note: show the narrow-sidebar note · origin: the prompt text or null · pan: { old, new } in px
+//   note: show the narrow-sidebar note · pan: { old, new } in px
+//   hideOpenFiles: true leaves out the "Open in Files" button (then openFiles is not needed) · backTip: the tooltip of the
+//   back button (default "Back to the changes")
 //   body: { rows, more } (rows from unifiedRows or splitRows; `more` is the real line count when capped) or { notice } or { loading: true }
 //   height: the code area's height in css px, or null · handles: { focus, tabs } made in a spawn task, or undefined
 // `on`, each with the gpui `cx` last: back(cx) · openFiles(cx) · prev(cx) · next(cx) · pick(path, cx) · toggle(mode, cx)
@@ -153,7 +187,6 @@ export function diffView(t, dk, m, on) {
     .on_mouse_down("left", (e, cx) => on.press(e, cx))
     .child(header(t, k, m, on))
     .child(tabs(t, dk, m, on))
-    .when(Boolean(m.origin), (el) => el.child(div().id("diff-origin").flex_none().px(10).pb(4).truncate().text_size(11).text_color(t.muted).child(m.origin)))
     .when(Boolean(m.note), (el) => el.child(div().id("diff-note").flex_none().px(10).pb(4).text_size(11).text_color(t.muted).child("Split needs a sidebar of 520 px or more: shown unified.")))
     .when(Boolean(m.body.notice && m.file.from), (el) => el.child(banner(dk, renamed(m.file), null)))
     .child(m.body.loading ? loading(t) : m.body.notice ? notice(t, m.body.notice) : code(t, k, dk, m, on));

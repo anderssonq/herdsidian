@@ -62,6 +62,8 @@ function scene({ entries = SIMPLE, agent = null, reply = null, git = {}, theme =
 }
 const listed = async (m, id = "change-a.txt") => until(() => { const t = m.render(); return findById(t, id) && t; }, "the rows");
 const rowIds = (tree) => walk(tree).map((n) => n.nodeId).filter((id) => /^change-/.test(id ?? ""));
+// The ids of the removed last-prompt card and its row dots; no state may draw one.
+const cardIds = (tree) => walk(tree).map((n) => n.nodeId).filter((id) => /^(changes-turn|changes-dot-)/.test(id ?? ""));
 const find = (tree, id, text) => walk(findById(tree, id)).find((n) => n.kids.includes(text));
 
 test("the kit mounts the Changes tab and finds changes-summary", async () => {
@@ -74,54 +76,54 @@ test("the kit mounts the Changes tab and finds changes-summary", async () => {
 });
 
 // AC2
-test("AC2: Loading changes... shows with no card and no row", async () => {
+test("AC2: Loading changes... shows with no row and no card id", async () => {
   const { m } = scene({ agent: claude(), reply: session() });
   state.exec = () => new Promise(() => {});
   const tree = m.render();
   assert.ok(texts(tree).some((s) => s.includes("Loading changes…")));
-  assert.equal(findById(tree, "changes-turn"), null);
+  assert.deepEqual(cardIds(tree), []);
   assert.deepEqual(rowIds(tree), []);
 });
 
-test("AC2: No folder shows with no card and no row", async () => {
+test("AC2: No folder shows with no row and no card id", async () => {
   const { m } = scene({ agent: claude(), reply: session() });
   Object.assign(world, { spaces: [], panes: [], focused: null });
   m.render();
   await settle();
   const tree = m.render();
   assert.ok(texts(tree).some((s) => s.includes("No folder")));
-  assert.equal(findById(tree, "changes-turn"), null);
+  assert.deepEqual(cardIds(tree), []);
   assert.deepEqual(rowIds(tree), []);
 });
 
-test("AC2: Not a git repository shows with no card and no row", async () => {
+test("AC2: Not a git repository shows with no row and no card id", async () => {
   const { m } = scene({ agent: claude(), reply: session(), git: { fail: "top" } });
   m.render();
   await settle();
   const tree = m.render();
   assert.ok(texts(tree).some((s) => s.includes("Not a git repository")));
-  assert.equal(findById(tree, "changes-turn"), null);
+  assert.deepEqual(cardIds(tree), []);
   assert.deepEqual(rowIds(tree), []);
 });
 
-test("AC2: a git error shows no card and no row", async () => {
+test("AC2: a git error shows no row and no card id", async () => {
   const { m, sessions } = scene({ agent: claude(), reply: session(), git: { fail: "status" } });
   m.render();
   await settle();
   const tree = m.render();
-  assert.equal(findById(tree, "changes-turn"), null);
+  assert.deepEqual(cardIds(tree), []);
   assert.deepEqual(rowIds(tree), []);
   assert.equal(findById(tree, "changes-total"), null);
   assert.equal(sessions().length, 0, "no session read while the list is not ready");
 });
 
-test("AC2: an exec that throws shows no card and no row", async () => {
+test("AC2: an exec that throws shows no row and no card id", async () => {
   const { m } = scene({ agent: claude(), reply: session() });
   state.exec = async () => { throw new Error("cannot run"); };
   m.render();
   await settle();
   const tree = m.render();
-  assert.equal(findById(tree, "changes-turn"), null);
+  assert.deepEqual(cardIds(tree), []);
   assert.deepEqual(rowIds(tree), []);
 });
 
@@ -162,14 +164,16 @@ test("AC5: 500 rows at most, then N more files not shown", async () => {
   assert.deepEqual(texts(findById(tree, "changes-summary")), ["520 files changed on main"]);
 });
 
-test("AC5: no id starts with change- except the rows, with a card and with a diff open", async () => {
+test("AC5: no id starts with change- except the rows, with a diff open", async () => {
   const { m } = scene({ agent: claude(), reply: session() });
-  const tree = await until(() => { const t = m.render(); return findById(t, "changes-turn") && t; }, "the card");
+  const tree = await listed(m);
   const rows = new Set(["change-a.txt", "change-sub/inner.txt", "change-fresh.txt"]);
   assert.ok(rowIds(tree).length === 3 && rowIds(tree).every((id) => rows.has(id)));
   m.click(findById(tree, "change-a.txt"));
   const diff = await until(() => { const t = m.render(); return findById(t, "diff-view") && t; }, "the diff view");
   assert.ok(rowIds(diff).every((id) => rows.has(id)), `unexpected ids: ${rowIds(diff)}`);
+  assert.deepEqual(cardIds(tree), []);
+  assert.deepEqual(cardIds(diff), []);
 });
 
 // AC6
@@ -257,63 +261,6 @@ test("AC9: a row click shows diff-view and does not select a tab", async () => {
   assert.equal(state.shared["herdsidian.sidebar"].tab, "changes");
 });
 
-// AC11
-test("AC11: the card shows the dot, agent, pane, time, prompt and footer", async () => {
-  const { m } = scene({ agent: claude(), reply: session("make the list shiny"), theme: FULL });
-  const tree = await until(() => { const t = m.render(); return findById(t, "changes-turn") && t; }, "the card");
-  const head = findById(tree, "changes-turn-head");
-  const headTexts = texts(head);
-  assert.ok(headTexts.includes("Claude Code"));
-  assert.ok(headTexts.includes("api"));
-  assert.ok(headTexts.includes("5 min ago"));
-  assert.ok(texts(findById(tree, "changes-turn-text")).includes("make the list shiny"));
-  assert.deepEqual(texts(findById(tree, "changes-turn-foot")), ["Last prompt · 2 of 3 files changed in this turn"]);
-  const dot = walk(head).find((n) => has(n, "bg", FULL.working));
-  assert.ok(dot && dot.calls.some(([name]) => name === "loop"), "a working agent has a pulsing dot");
-});
-
-test("AC11: an idle agent has a ring dot", async () => {
-  const { m } = scene({ agent: claude({ status: "idle" }), reply: session(), theme: FULL });
-  const tree = await until(() => { const t = m.render(); return findById(t, "changes-turn") && t; }, "the card");
-  const dot = walk(findById(tree, "changes-turn-head")).find((n) => has(n, "border_color", FULL.idle));
-  assert.ok(dot, "an idle agent has a ring");
-  assert.equal(dot.calls.some(([name]) => name === "bg"), false);
-  assert.equal(dot.calls.some(([name]) => name === "loop"), false);
-});
-
-test("AC11: the prompt is two lines until a click shows it whole, and a second click clamps it again", async () => {
-  const { m } = scene({ agent: claude(), reply: session("a very long prompt ".repeat(30)) });
-  let tree = await until(() => { const t = m.render(); return findById(t, "changes-turn") && t; }, "the card");
-  // The plan (Decision 2): the API has no line clamp, so two lines is a fixed height plus overflow_hidden.
-  const clamped = (t) => {
-    const nodes = walk(findById(t, "changes-turn-text"));
-    return nodes.some((n) => n.calls.some(([name]) => name === "overflow_hidden")) && nodes.some((n) => n.calls.some(([name]) => name === "h"));
-  };
-  assert.equal(clamped(tree), true);
-  // gpui reads a bare number in line_height as a multiplier of the font size, so the line height is a px string.
-  const nodes = walk(findById(tree, "changes-turn-text"));
-  const lineHeight = nodes.flatMap((n) => n.calls).find(([name]) => name === "line_height")?.[1][0];
-  assert.match(String(lineHeight), /^\d+(\.\d+)?px$/, "line_height is a length in px, not a multiplier");
-  const fixed = nodes.flatMap((n) => n.calls).find(([name]) => name === "h")?.[1][0];
-  assert.equal(Number(fixed), 2 * parseFloat(lineHeight), "the fixed height is two lines");
-  m.click(findById(tree, "changes-turn-text"));
-  tree = m.render();
-  assert.equal(clamped(tree), false);
-  m.click(findById(tree, "changes-turn-text"));
-  assert.equal(clamped(m.render()), true);
-});
-
-// Claude Code only (scope cut of 2026-11-25)
-test("AC10: a Codex pane gets no card and no session read", async () => {
-  const codex = claude({ program: { key: "codex", name: "Codex" } });
-  const { m, sessions } = scene({ agent: codex, reply: session() });
-  const tree = await listed(m);
-  await settle();
-  assert.equal(findById(m.render(), "changes-turn"), null);
-  assert.equal(sessions().length, 0);
-  assert.ok(tree);
-});
-
 // AC15
 test("AC15: render makes no exec and no read in its own tick", async () => {
   const { m, fake } = scene({ agent: claude(), reply: session() });
@@ -330,67 +277,6 @@ test("AC15: render makes no exec and no read in its own tick", async () => {
   assert.deepEqual(reads, []);
 });
 
-test("AC15: five renders give one session read", async () => {
-  const { m, sessions } = scene({ agent: claude(), reply: session() });
-  await listed(m);
-  for (let i = 0; i < 5; i++) m.render();
-  await settle();
-  for (let i = 0; i < 5; i++) m.render();
-  await settle();
-  assert.equal(sessions().length, 1);
-  assert.ok(findById(m.render(), "changes-turn"));
-});
-
-test("AC15: a second read comes after a watch refresh and after a new target", async () => {
-  const { m, sessions } = scene({ agent: claude(), reply: session() });
-  await listed(m);
-  await until(() => sessions().length === 1, "the first read");
-  const rev = m.watch.rev;
-  const watcher = await until(() => world.watchers.find((w) => w.root === REPO), "the folder watch");
-  watcher.resolve([`${REPO}/a.txt`]);
-  await until(() => m.watch.rev > rev, "the refresh");
-  m.render();
-  await until(() => sessions().length === 2, "the read after the refresh");
-  world.agents = [claude({ address: "t9" })];
-  m.render();
-  await until(() => sessions().length === 3, "the read for the new target");
-  m.render();
-  await settle();
-  assert.equal(sessions().length, 3);
-});
-
-test("AC15: no read happens while the store says another tab", async () => {
-  const { m, sessions } = scene({ agent: claude(), reply: session() });
-  await listed(m);
-  await until(() => sessions().length === 1, "the first read");
-  state.shared["herdsidian.sidebar"] = { tab: "files" };
-  const rev = m.watch.rev;
-  const watcher = await until(() => world.watchers.find((w) => w.root === REPO), "the folder watch");
-  watcher.resolve([`${REPO}/a.txt`]);
-  await until(() => m.watch.rev > rev, "the refresh");
-  await settle();
-  assert.equal(sessions().length, 1);
-});
-
-// AC16
-test("AC16: a dot shows on turn rows only", async () => {
-  const { m } = scene({ agent: claude(), reply: session("go", [`${REPO}/a.txt`]), theme: FULL });
-  const tree = await until(() => { const t = m.render(); return findById(t, "changes-dot-a.txt") && t; }, "the dot");
-  assert.ok(has(findById(tree, "changes-dot-a.txt"), "bg", FULL.accent));
-  assert.equal(findById(tree, "changes-dot-sub/inner.txt"), null);
-  assert.equal(findById(tree, "changes-dot-fresh.txt"), null);
-  assert.ok(walk(findById(tree, "change-a.txt")).some((n) => n.nodeId === "changes-dot-a.txt"), "the dot is inside its row");
-});
-
-test("AC16: with no card there are no dots", async () => {
-  const { m } = scene({ agent: claude(), reply: "" });
-  const tree = await listed(m);
-  await settle();
-  const after = m.render();
-  assert.equal(findById(after, "changes-turn"), null);
-  assert.deepEqual(walk(tree).concat(walk(after)).filter((n) => /^changes-dot-/.test(n.nodeId ?? "")), []);
-});
-
 // AC47
 test("AC47: the tab works with a host of exactly cx, selectTab, files, vault, changes and a dead host.cx", async () => {
   const { m } = scene({ agent: claude(), reply: session() });
@@ -400,7 +286,7 @@ test("AC47: the tab works with a host of exactly cx, selectTab, files, vault, ch
   const host = { get cx() { touched.push("cx"); throw new Error("host.cx used"); }, selectTab: () => {}, files: () => m.files, vault: () => null, changes: () => m.watch };
   const tab = new ChangesTab(host);
   const render = () => during(m.cx, (c) => tab.render(T, c));
-  const tree = await until(() => { const t = render(); return findById(t, "change-a.txt") && findById(t, "changes-turn") && t; }, "rows and card");
+  const tree = await until(() => { const t = render(); return findById(t, "change-a.txt") && t; }, "the rows");
   assert.equal(findById(tree, "tab-changes") !== null, true);
   during(m.cx, (c) => findById(tree, "change-a.txt").onClick(null, c));
   assert.ok(findById(render(), "diff-view"));

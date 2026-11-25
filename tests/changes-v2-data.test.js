@@ -1,5 +1,5 @@
-// The Changes tab V2, the data it shows: the total (AC4), the last-prompt card (AC10, AC13), when a patch is
-// read (AC33), the untracked whole-file read (AC34) and where the prompt text may live. Claude Code only.
+// The Changes tab V2, the data it shows: the total (AC4), when a patch is
+// read (AC33) and the untracked whole-file read (AC34).
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { mount, fakeGit, fakeFiles, reset, world, state, findById, walk, texts, has, rowsOf, settle } from "./support/changes-kit.js";
@@ -41,12 +41,11 @@ async function until(fn, what) {
 }
 
 const shows = (m, id) => until(() => { const t = m.render(); return findById(t, id) && t; }, id);
-// A few more ticks after the list shows, so a card read that would start has finished.
+// A few more ticks after the list shows, so a read that would start has finished.
 async function calm(m) {
   for (let i = 0; i < 4; i++) { m.render(); await settle(); }
   return m.render();
 }
-const sessionCalls = (git) => git.calls.filter(([cmd]) => cmd === "/bin/sh");
 const patchCalls = (git) => git.calls.filter(([cmd, args]) => cmd === "git" && args.includes("diff") && args.includes("-U3"));
 const nodeWith = (tree, text) => walk(tree).find((n) => n.kids.includes(text));
 const isInside = (outer, inner) => walk(outer).includes(inner);
@@ -108,74 +107,6 @@ test("AC4: no changes-total with no changes, with only zero counts, or in a stat
     const tree = await calm(m);
     assert.equal(findById(tree, "changes-total"), null, name);
   }
-});
-
-// AC10: when the card shows.
-
-test("AC10: a Claude Code target with a prompt shows the card between the summary and the rows", async () => {
-  const { m, git } = scene({ session: turn("fix the bug", [`${ROOT}/a.txt`]) });
-  const tree = await shows(m, "changes-turn");
-  assert.ok(texts(findById(tree, "changes-turn-text")).join("").includes("fix the bug"));
-  const order = walk(tree).map((n) => n.nodeId);
-  assert.ok(order.indexOf("changes-summary") < order.indexOf("changes-turn"), "the card is under the summary");
-  assert.ok(order.indexOf("changes-turn") < order.indexOf("change-a.txt"), "the card is above the rows");
-  assert.ok(sessionCalls(git).length >= 1);
-  assert.equal(sessionCalls(git)[0][0], "/bin/sh");
-});
-
-const noTarget = [
-  ["a Codex pane (Claude Code only)", { agentList: [agent("p1", "codex", "Codex")] }],
-  ["another program", { agentList: [agent("p1", "opencode", "opencode")] }],
-  ["no agent (a plain terminal)", { agentList: [] }],
-  ["two Claude agents in the folder", { agentList: [claude("p1"), claude("p2")], paneList: [pane("p1"), pane("p2")] }],
-];
-for (const [name, opts] of noTarget) {
-  test(`AC10: no card and no /bin/sh call for ${name}; one Claude agent there then gives the card`, async () => {
-    const { m, git } = scene({ ...opts, session: turn("fix the bug", [`${ROOT}/a.txt`]) });
-    await shows(m, "change-a.txt");
-    const tree = await calm(m);
-    assert.equal(findById(tree, "changes-turn"), null);
-    assert.deepEqual(sessionCalls(git), []);
-    assert.ok(findById(tree, "change-a.txt"), "the list still shows");
-    // The control: the same tab with one Claude agent in the focused pane is a new target, so it reads and shows the card.
-    world.agents = [claude("p1")];
-    await shows(m, "changes-turn");
-    assert.ok(sessionCalls(git).length >= 1);
-  });
-}
-
-const badReads = [
-  ["a read that rejects", async () => { throw new Error("spawn failed"); }],
-  ["a read with a non-zero exit", async () => ({ stdout: "", stderr: "boom", code: 1 })],
-  ["an empty read", async () => ""],
-];
-for (const [name, session] of badReads) {
-  test(`AC10: no card for ${name}`, async () => {
-    const { m, git } = scene({ session });
-    await shows(m, "change-a.txt");
-    await until(() => sessionCalls(git).length > 0, "the session read");
-    const tree = await calm(m);
-    assert.equal(findById(tree, "changes-turn"), null);
-    assert.ok(findById(tree, "change-a.txt"), "the list still shows");
-  });
-}
-
-// AC13: the footer.
-
-test("AC13: the footer counts only turn files that are in the list now, over the summary count", async () => {
-  // a.txt twice, c.txt relative to the cwd, b.txt written then reverted (not in the list), a path outside the repo.
-  const paths = [`${ROOT}/a.txt`, `${ROOT}/b.txt`, "c.txt", `${ROOT}/a.txt`, "/elsewhere/z.txt"];
-  const { m } = scene({ session: turn("fix the bug", paths) });
-  const tree = await shows(m, "changes-turn-foot");
-  assert.equal(texts(findById(tree, "changes-turn-foot")).join(""), "Last prompt · 2 of 3 files changed in this turn");
-});
-
-test("AC13: N is the summary count, also past the 500 rows", async () => {
-  const names = Array.from({ length: 520 }, (_, i) => `f${String(i).padStart(3, "0")}.txt`);
-  const { m } = scene({ status: "## main\0" + names.map((n) => ` M ${n}\0`).join(""), numstat: names.map((n) => `1\t0\t${n}\0`).join(""),
-    session: turn("fix the bug", [`${ROOT}/f000.txt`, `${ROOT}/f499.txt`]) });
-  const tree = await shows(m, "changes-turn-foot");
-  assert.equal(texts(findById(tree, "changes-turn-foot")).join(""), "Last prompt · 2 of 520 files changed in this turn");
 });
 
 // AC33: a patch is read only when a file opens.
@@ -256,26 +187,3 @@ for (const [name, files, marks, notice] of notices) {
   });
 }
 
-// Where the prompt text lives: in the tab only.
-
-test("the prompt text is in no shared value, no toast and no localStorage value", async () => {
-  const secret = "PRIVATE-PROMPT-q7 rename the parser";
-  // Records every localStorage write; the original is put back at the end.
-  const stored = [], original = globalThis.localStorage;
-  const base = original ?? { getItem: () => null, setItem() {}, removeItem() {} };
-  globalThis.localStorage = { ...base, getItem: (k) => base.getItem(k), removeItem: (k) => base.removeItem(k),
-    setItem: (key, value) => { stored.push([key, String(value)]); base.setItem(key, value); } };
-  try {
-    const { m } = scene({ session: turn(secret, [`${ROOT}/a.txt`]), patches: { "a.txt": PATCH("a.txt") } });
-    await shows(m, "changes-turn");
-    // Open a turn file too, so the origin row has used the prompt.
-    m.click(findById(m.render(), "change-a.txt"));
-    await shows(m, "diff-view");
-    await calm(m);
-    assert.equal(JSON.stringify(state.shared).includes("PRIVATE-PROMPT-q7"), false);
-    assert.equal(JSON.stringify(state.toasts).includes("PRIVATE-PROMPT-q7"), false);
-    assert.equal(stored.some(([key, value]) => `${key}${value}`.includes("PRIVATE-PROMPT-q7")), false);
-  } finally {
-    globalThis.localStorage = original;
-  }
-});

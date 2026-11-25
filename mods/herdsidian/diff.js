@@ -50,7 +50,7 @@ export function sizeBar(file, max) {
   return { add: green, del: filled - green };
 }
 
-// Q8: the age of a turn in one unit, floored.
+// Q8: the age of a commit in one unit, floored.
 export function ago(atMs, nowMs) {
   if (!Number.isFinite(atMs) || !Number.isFinite(nowMs)) return "";
   const age = nowMs - atMs;
@@ -202,6 +202,9 @@ export const viewMode = (pick, width) => {
   if (width < SPLIT_MIN) return { mode: "unified", note: true };
   return { mode: "split", note: false };
 };
+
+// The diff keys of both tabs: [ and ] the previous and next file, s the other mode, escape back. -> its handler, or null.
+export const diffKey = (keystroke, on) => ({ "[": on.prev, "]": on.next, s: on.toggle, escape: on.close })[keystroke] ?? null;
 
 export function neighbors(files, path) {
   const index = files.findIndex((file) => file.path === path);

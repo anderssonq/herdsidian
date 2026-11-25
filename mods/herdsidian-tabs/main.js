@@ -2,7 +2,7 @@
 // Tabs as a segmented control, +, Search, the right-sidebar toggle and the window buttons.
 // Colors come from theme() through ./tokens.js (ADR-0001). The drag / rename / menu
 // code is the shipped code; only the render chain is restyled.
-// This mod also routes the right-sidebar keys (⇧⌘E, ⇧⌘G, ⌘⇧O) and the palette rows to the sidebar.
+// This mod also routes the right-sidebar keys (⇧⌘E, ⇧⌘G, ⇧⌘H, ⌘⇧O) and the palette rows to the sidebar.
 
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
@@ -10,7 +10,7 @@ import { spaces, panes, run, openOverlay, theme, window, shared, setShared, layo
 import { RADIUS, alpha, tokens } from "./tokens.js";
 import { dot, glow, headerDots, icon } from "./ui.js";
 import { find } from "./layout.js";
-import { keyHint, showKeyHint } from "./keys.js";
+import { SIDEBAR_TABS, keyHint, showKeyHint } from "./keys.js";
 import { SIDEBAR_STORE, readSidebar, routeTab } from "./sidebar.js";
 import { settings as herdsidianSettings } from "./settings.js"; // herdr has its own settings()
 
@@ -23,12 +23,12 @@ export default class Tabs extends View {
   init(_props, cx) {
     this.pressed = null;
     this.hovered = null; // the tab under the pointer: where the "modifier" key hint shows
-    // keys.json "layout:herdsidian": cmd-shift-e / cmd-shift-g / cmd-shift-o -> herdsidian-tabs.files | changes | notes.
+    // keys.json "layout:herdsidian": cmd-shift-e / cmd-shift-g / cmd-shift-h / cmd-shift-o -> herdsidian-tabs.files | changes | git | notes.
     // The palette rows run the same commands.
     cx.spawn(async (cx) => {
       for (;;) {
         const c = await nextCommand();
-        if (c === "files" || c === "changes" || c === "notes") this.route(c);
+        if (SIDEBAR_TABS.includes(c)) this.route(c);
         cx.notify();
       }
     });

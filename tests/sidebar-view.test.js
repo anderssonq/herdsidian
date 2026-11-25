@@ -1,4 +1,4 @@
-// The right sidebar shell (V1): the 3-tab header, the tab bodies, the rail icons and the key bindings.
+// The right sidebar shell (V1): the 4-tab header, the tab bodies, the rail icons and the key bindings.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -8,7 +8,7 @@ const { default: Notes } = await import("../mods/herdsidian/main.js");
 const { tabControl, tabTips } = await import("../mods/herdsidian/sidebar-view.js");
 
 const VAULT = "/vault/my notes", NOTE = "03-Knowledge/Git.md", STORE = "herdsidian.sidebar";
-const TABS = ["notes", "files", "changes"];
+const TABS = ["notes", "files", "changes", "git"];
 
 beforeEach(() => {
   state.shared = {}; state.runs = []; state.toasts = []; state.commands = []; state.files = {};
@@ -30,24 +30,24 @@ const mount = async ({ rail = false, open = false } = {}) => {
 const selectedSegments = (tree) => TABS.filter((id) => findById(tree, `sidebar-tab-${id}`)?.calls.some(([name, args]) => name === "font_weight" && args[0] === 500));
 const pressed = (tree, prefix) => TABS.filter((id) => findById(tree, `${prefix}${id}`)?.calls.some(([name]) => name === "bg"));
 
-test("the header has the three segments, in order, and no Settings segment", async () => {
+test("the header has the four segments, in order, and no Settings segment", async () => {
   const { tree } = await mount();
   const order = walk(tree()).map((n) => n.nodeId).filter((id) => id?.startsWith("sidebar-tab-"));
   assert.deepEqual(order, TABS.map((id) => `sidebar-tab-${id}`));
   assert.equal(findById(tree(), "sidebar-tab-settings"), null);
 });
 
-test("the segments say Notes, Files and Changes", async () => {
+test("the segments say Notes, Files, Changes and Git", async () => {
   const { tree } = await mount();
   const labels = TABS.map((id) => findById(tree(), `sidebar-tab-${id}`).kids.find((k) => typeof k === "string"));
-  assert.deepEqual(labels, ["Notes", "Files", "Changes"]);
+  assert.deepEqual(labels, ["Notes", "Files", "Changes", "Git"]);
 });
 
 const tipOf = (node) => node.calls.find(([name]) => name === "tooltip")?.[1][0];
 
 test("each segment has a tooltip with its name (the stub binds no keys)", async () => {
   const { tree } = await mount();
-  for (const [id, label] of [["notes", "Notes"], ["files", "Files"], ["changes", "Changes"]]) {
+  for (const [id, label] of [["notes", "Notes"], ["files", "Files"], ["changes", "Changes"], ["git", "Git"]]) {
     assert.equal(tipOf(findById(tree(), `sidebar-tab-${id}`)), label, id);
   }
 });
@@ -56,18 +56,19 @@ const BINDINGS = [
   { section: "layout:herdsidian", keys: "cmd-shift-o", action: "herdsidian-tabs.notes" },
   { section: "layout:herdsidian", keys: "cmd-shift-e", action: "herdsidian-tabs.files" },
   { section: "layout:herdsidian", keys: "cmd-shift-g", action: "herdsidian-tabs.changes" },
+  { section: "layout:herdsidian", keys: "cmd-shift-h", action: "herdsidian-tabs.git" },
 ];
 
 test("tabTips puts the key in each tooltip", () => {
   assert.deepEqual(tabTips(BINDINGS, "herdsidian", "modifier"), {
-    notes: "Notes  ⇧⌘O", files: "Files  ⇧⌘E", changes: "Changes  ⇧⌘G",
+    notes: "Notes  ⇧⌘O", files: "Files  ⇧⌘E", changes: "Changes  ⇧⌘G", git: "Git  ⇧⌘H",
   });
   assert.equal(tabTips(BINDINGS, "herdsidian", "always").files, "Files  ⇧⌘E");
 });
 
 test("tabTips has no key when key hints are off or nothing is bound", () => {
-  assert.deepEqual(tabTips(BINDINGS, "herdsidian", "off"), { notes: "Notes", files: "Files", changes: "Changes" });
-  assert.deepEqual(tabTips({}, "herdsidian", "modifier"), { notes: "Notes", files: "Files", changes: "Changes" });
+  assert.deepEqual(tabTips(BINDINGS, "herdsidian", "off"), { notes: "Notes", files: "Files", changes: "Changes", git: "Git" });
+  assert.deepEqual(tabTips({}, "herdsidian", "modifier"), { notes: "Notes", files: "Files", changes: "Changes", git: "Git" });
 });
 
 test("the mounted Notes mod puts the bound key in the Files tooltip, unless key hints are off", async () => {
@@ -215,8 +216,8 @@ test("clicking a rail icon selects the tab and expands the rail", async () => {
 
 test("the Notes buttons stay in the rail below the tab icons", async () => {
   const { tree } = await mount({ rail: true });
-  const order = walk(tree()).map((n) => n.nodeId).filter((id) => id === "sidebar-rail-changes" || id === "notes-search-rail" || id === "notes-new-rail");
-  assert.deepEqual(order, ["sidebar-rail-changes", "notes-search-rail", "notes-new-rail"]);
+  const order = walk(tree()).map((n) => n.nodeId).filter((id) => id === "sidebar-rail-git" || id === "notes-search-rail" || id === "notes-new-rail");
+  assert.deepEqual(order, ["sidebar-rail-git", "notes-search-rail", "notes-new-rail"]);
   assert.equal(findById(tree(), "sidebar-rail-settings"), null);
 });
 
@@ -225,5 +226,6 @@ test("keys.json binds the sidebar keys", () => {
   assert.equal(keys["cmd-shift-o"], "herdsidian-tabs.notes");
   assert.equal(keys["cmd-shift-e"], "herdsidian-tabs.files");
   assert.equal(keys["cmd-shift-g"], "herdsidian-tabs.changes");
+  assert.equal(keys["cmd-shift-h"], "herdsidian-tabs.git");
   assert.equal(keys["cmd-j"], "guide-agents.next-blocked");
 });
