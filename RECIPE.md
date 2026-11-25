@@ -155,7 +155,8 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      path is a 30 px `muted` line under the tabs.
    - **Changes tab**: our own list from `git status --porcelain=v1 -z` and `git diff
      --numstat` for the focused pane's repo: path, +N in `ansi2`, −N in `ansi1`, rows
-     28 px. A click opens the file in the Files tab.
+     28 px. A click opens the file's diff in the tab (split from 520 px, unified below), with file
+     tabs and, for a Claude Code pane, the last-prompt card (see the `herdsidian` disclosure).
    - **Settings** are in ⌘K → Settings, not in the sidebar: **Theme** (four family rows,
      Carbon, Midnight, Catppuccin and Nord, each showing its dark and light half; a row runs
      `app.theme` for `hs_<family>` and `hs_<family>_light`, so both halves are set; one
@@ -481,6 +482,14 @@ Look (layout root):
     - `actions-view.js`: `VaultSurface`, the menu, the name prompt and the delete
       confirmation, each an overlay copy of `herdsidian`.
     - `actions-main.js`: `VaultActions`, the Notes side that does the work.
+  - The Changes tab, files kept pure (no `herdr`, `gpui-kit` or `gpui-base` import):
+    `diff.js` (hunk parser and line pairing), `turn.js` (the session read scripts and
+    parser; see the `herdsidian` disclosure) and `agent-session.js` (a copy of
+    `lib/agent-session.js`, the rule that maps a pane to its session). `diff-view.js` draws
+    the per-file diff and keeps no state; `changes.js` and `changes-view.js` hold the list.
+    The diff is split from 520 px of sidebar width, unified below; its colors come from
+    `diffTokens` in `lib/tokens.js` (theme red and green, no syntax colors). Keys `[`, `]`,
+    `s` and `Esc` work after a click in the diff.
   - Tests for the Herdr-side additions are in `tests/io.test.js` (`allNotes`,
       `listNotes`, `noteTime`, `backoffMs`, `afterOutage`, `underVault`, `touches`) and `tests/lint.test.js` (the new rules).
   From `herdr`: `exec` (`sh` to list a folder and to read `XDG_STATE_HOME`,
@@ -661,6 +670,19 @@ Look (layout root):
   (`head -c 4096`), and that folder shows no value. No new network host, no credential read, no
   `kiro-cli` or `grok` run. `agent-context.js` is pure; the parsers shared with Usage live in
   `lib/agent-files.js` (copied into `herdsidian-status` and `guide-agents`, lint checks the copies).
+- Disclosure: `herdsidian` reads one agent session file (the last-prompt card and the files
+  edited in that turn, in the Changes tab). Only for the focused pane's Claude Code agent, only
+  while the Changes tab is shown, at most once per refresh or pane change. It runs one read-only
+  `/bin/sh -c` with `find`, `stat`, `sort`, `head`, `tail`, `grep` and `awk` on the newest matching
+  session log in `~/.claude/projects` (the same rule as the Context window), and looks only at
+  the last 256 KiB. It prints the last prompt the person typed, its time and the paths the turn
+  edited. It never prints assistant text or tool output. A prompt older than that tail gives no
+  card. Remote and ambiguous agents, and every other program (Codex too), give nothing. The text
+  stays in memory only: never in `shared()`, `localStorage`, a file, a toast or a log, and
+  nothing leaves the machine. No new network host, no credential read. The scripts live in
+  `mods/herdsidian/turn.js` only; the session rule is `lib/agent-session.js` (copied into
+  `herdsidian` and `guide-agents`, lint checks the copies). It can show private prompt text:
+  use demo data for any published picture.
 - Grok hook: `scripts/grok-status-line.sh` (macOS; only `/bin/sh` and `/usr/bin/plutil`) is
   installed by hand in `~/.grok/config.toml` as `[ui.status_line]` with `type = "command"`;
   Herdsidian never edits that file. It writes only

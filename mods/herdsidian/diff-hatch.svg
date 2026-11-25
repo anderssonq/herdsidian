@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="20" viewBox="0 0 2400 20">
+  <!-- Filler of the empty side of a split row. A MASK: render with svg(...).w(2400).h(20).text_color(k.line) in a clipping cell,
+       so the theme sets the color. 45 degree strokes, 1 px wide, every 6 px; one row is 20 px high. -->
+  <defs>
+    <pattern id="h" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1" height="6" fill="#000"/></pattern>
+  </defs>
+  <rect width="2400" height="20" fill="url(#h)"/>
+</svg>

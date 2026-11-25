@@ -8,16 +8,15 @@
 import {
   finite, formatTokens, isReadable, object, grokListScript, kiroListScript, parseGrokState, parseKiroSession, parseListing,
 } from "./agent-files.js";
+import { FRESH_MINUTES, TAIL_BYTES, claudeDir, sessionTargets } from "./agent-session.js";
 
 export const CONTEXT_KEYS = ["claude", "codex", "kiro", "grok"];
 export const CONTEXT_EVERY_MS = 30000;
 const CONTEXT_LIMIT_MS = 10000;
-const FRESH_MS = 86400000;
-const TAIL_BYTES = 262144;
+const FRESH_MS = FRESH_MINUTES * 60000;
 const never = new Promise(() => {});
 
-// Claude Code's project folder name: every character outside [A-Za-z0-9] becomes "-".
-export const claudeDir = (cwd) => cwd.replace(/[^A-Za-z0-9]/g, "-");
+export { claudeDir };
 
 // Args: Claude folder names. Per folder, "@@ <dir>", then a walk over the top-level *.jsonl files
 // modified in the last 24 h, newest first, at most 5, each looked at in its last 256 KiB only.
@@ -31,7 +30,7 @@ export const claudeDir = (cwd) => cwd.replace(/[^A-Za-z0-9]/g, "-");
 export const CLAUDE_CONTEXT_SCRIPT = `for d in "$@"; do
   case "$d" in ""|*/*|.|..) continue;; esac
   printf '@@ %s\\n' "$d"
-  find "$HOME/.claude/projects/$d" -maxdepth 1 -type f -name '*.jsonl' -mmin -1440 -exec stat -f '%m %N' {} + 2>/dev/null | sort -rn | head -n 5 | while read -r m f; do
+  find "$HOME/.claude/projects/$d" -maxdepth 1 -type f -name '*.jsonl' -mmin -${FRESH_MINUTES} -exec stat -f '%m %N' {} + 2>/dev/null | sort -rn | head -n 5 | while read -r m f; do
     e=$(tail -c ${TAIL_BYTES} "$f" 2>/dev/null | grep -o -E '"entrypoint":"[^"]*"' | sort -u)
     case "$e" in ""|*'"entrypoint":"cli"'*) ;; *) continue;; esac
     printf '## %s\\n' "$f"
@@ -48,7 +47,7 @@ exit 0`;
 // loop over the args per file: the args ("K <line>") and the listing ("L <line>") are sorted
 // together on the line, so a known file's "K" comes right before its own "L".
 export const CODEX_CONTEXT_SCRIPT = `k=
-{ find "$HOME/.codex/sessions" -type f -name '*.jsonl' -mmin -1440 -exec stat -f 'L %m %z %N' {} + 2>/dev/null; [ "$#" -eq 0 ] || printf 'K %s\\n' "$@"; } | LC_ALL=C sort -k 2 | while read -r t m z f; do
+{ find "$HOME/.codex/sessions" -type f -name '*.jsonl' -mmin -${FRESH_MINUTES} -exec stat -f 'L %m %z %N' {} + 2>/dev/null; [ "$#" -eq 0 ] || printf 'K %s\\n' "$@"; } | LC_ALL=C sort -k 2 | while read -r t m z f; do
   if [ "$t" = K ]; then k="$m $z $f"; continue; fi
   printf '@@ %s\\n' "$m"
   printf '## %s %s\\n' "$z" "$f"
@@ -58,8 +57,8 @@ export const CODEX_CONTEXT_SCRIPT = `k=
 done
 exit 0`;
 
-export const KIRO_CONTEXT_SCRIPT = kiroListScript(1440);
-export const GROK_CONTEXT_SCRIPT = grokListScript(1440);
+export const KIRO_CONTEXT_SCRIPT = kiroListScript(FRESH_MINUTES);
+export const GROK_CONTEXT_SCRIPT = grokListScript(FRESH_MINUTES);
 
 // Args: paths of Kiro session files too big for readTextFile. Per file, "@@ <path>", then the
 // cwd from its first 4 KiB (Kiro writes it right after the session id). Nothing else is printed.
@@ -209,20 +208,9 @@ export function grokContext(state, nowMs) {
   return contextValue({ percent, usedTokens: tokens, windowTokens: size }, state.updated_at);
 }
 
-// -> Map<address, { key, cwd }> of the agents that can have a value: local, a supported program,
-// a pane with a cwd, and no other such agent of the same program in the same folder.
+// -> Map<address, { key, cwd }> of the agents that can have a value (see sessionTargets).
 export function contextTargets(agents, panes) {
-  const cwdOf = new Map((panes ?? []).map((p) => [p?.pane, p?.cwd]));
-  const listed = [];
-  for (const a of agents ?? []) {
-    const key = a?.program?.key, cwd = cwdOf.get(a?.pane);
-    if (typeof a?.address !== "string" || a.address.includes("/") || !CONTEXT_KEYS.includes(key)) continue;
-    if (typeof cwd !== "string" || cwd === "") continue;
-    listed.push([a.address, { key, cwd }]);
-  }
-  const count = new Map();
-  for (const [, t] of listed) count.set(`${t.key}\u0000${t.cwd}`, (count.get(`${t.key}\u0000${t.cwd}`) ?? 0) + 1);
-  return new Map(listed.filter(([, t]) => count.get(`${t.key}\u0000${t.cwd}`) === 1));
+  return sessionTargets(agents, panes, CONTEXT_KEYS);
 }
 
 // Newest parsed file per folder: `when` gives a file's age key, `cwdOf` its folder.

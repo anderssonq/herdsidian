@@ -85,6 +85,58 @@ export function tokens(t) {
   };
 }
 
+// "#rrggbbaa" composited over an opaque "#rrggbb".
+function over(top, under) {
+  const a = parseInt(top.slice(7, 9), 16) / 255;
+  const [ct, cu] = [rgb(top), rgb(under)];
+  return hex(ct.map((c, i) => Math.round(c * a + cu[i] * (1 - a))));
+}
+
+// Diff colors (Changes V2). Tints and marks keep the AC42 values. The four text colors are the base
+// color pushed toward black (light theme) or white (dark theme) in 0.05 steps until each reaches 4.5:1
+// on every surface it sits on: glass off, the sidebar is the glass over chrome and the code area is the
+// sidebar; glass on, the sidebar is the glass over white and over black, the code area is the well over each.
+export function diffTokens(t) {
+  const light = isLight(t);
+  const glass = t.background === CLEAR;
+  const a = light ? 0.16 : 0.12;
+  const addLine = alpha(t.ansi2, a);
+  const delLine = alpha(t.ansi1, a);
+  const addWord = alpha(t.ansi2, a * 2.4);
+  const delWord = alpha(t.ansi1, a * 2.4);
+  const hunk = alpha(t.foreground, 0.04);
+  const well = glass ? alpha(t.chrome, 0.6) : null;
+
+  const sheet = tokens(t).glass;
+  const sidebars = glass ? ["#ffffff", "#000000"].map((b) => over(sheet, b)) : [over(sheet, t.chrome)];
+  const surfaces = sidebars.map((sidebar) => {
+    const code = glass ? over(well, sidebar) : sidebar;
+    return {
+      sidebar, code,
+      addLine: over(addLine, code), delLine: over(delLine, code), hunk: over(hunk, code),
+      addWord: over(addWord, over(addLine, code)), delWord: over(delWord, over(delLine, code)),
+    };
+  });
+
+  const toward = light ? "#000000" : "#ffffff";
+  const push = (base, on) => {
+    for (let i = 0; i <= 20; i++) {
+      const c = mix(base, toward, i / 20);
+      if (surfaces.every((s) => on.every((k) => contrast(c, s[k]) >= 4.5))) return c;
+    }
+    return toward;
+  };
+
+  return {
+    addLine, delLine, addWord, delWord,
+    addMark: t.ansi2, delMark: t.ansi1, hunk, well,
+    text: push(t.foreground, ["code", "addWord", "delWord"]),
+    numText: push(t.muted, ["code", "addLine", "delLine", "hunk"]),
+    addText: push(t.ansi2, ["sidebar", "code", "addLine"]),
+    delText: push(t.ansi1, ["sidebar", "code", "delLine"]),
+  };
+}
+
 // Status dot recipe: a fill or a ring, and whether it pulses.
 export function statusDot(t, status) {
   if (status === "working") return { fill: t.working, ring: null, pulse: true };

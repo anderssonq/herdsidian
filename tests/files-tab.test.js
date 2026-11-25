@@ -277,25 +277,29 @@ test("Changes tab: a 30 px summary and 28 px rows with +N, −N and new", async 
   assert.equal(find("change-fresh.txt", "+0"), undefined);
 });
 
-test("Changes tab: clicking a row selects Files and previews that file", async () => {
+test("Changes tab: clicking a row opens its diff and does not select Files", async () => {
   world.cwd = fixture();
-  state.files[`${world.cwd}/a.txt`] = "one\ntwo\n";
   state.shared["herdsidian.sidebar"] = { tab: "changes" };
   const m = mount();
   const out = await until(() => { const t = m.render(m.changes); return findById(t, "change-a.txt") && t; }, "the rows");
   m.click(findById(out, "change-a.txt"));
-  assert.deepEqual(m.selected, ["files"]);
-  assert.equal(state.shared["herdsidian.sidebar"].tab, "files");
-  const preview = await until(() => { const t = m.render(m.files); return walk(t).some((n) => n.kind === "editor") && t; }, "the preview");
-  assert.ok(texts(findById(preview, "files-path")).includes("a.txt"));
+  const diff = await until(() => { const t = m.render(m.changes); return findById(t, "diff-view") && t; }, "the diff view");
+  assert.ok(findById(diff, "diff-open-files"), "the diff has the Open in Files button");
+  assert.deepEqual(m.selected, [], "a row click does not select Files");
+  assert.equal(state.shared["herdsidian.sidebar"].tab, "changes");
 });
 
-test("Changes tab: a file in a closed folder is revealed in the tree", async () => {
+test("Changes tab: Open in Files selects Files, previews the file and reveals its closed folder", async () => {
   world.cwd = fixture();
   state.files[`${world.cwd}/sub/inner.txt`] = "x\nq\nr\n";
+  state.shared["herdsidian.sidebar"] = { tab: "changes" };
   const m = mount();
   const out = await until(() => { const t = m.render(m.changes); return findById(t, "change-sub/inner.txt") && t; }, "the rows");
   m.click(findById(out, "change-sub/inner.txt"));
+  const diff = await until(() => { const t = m.render(m.changes); return findById(t, "diff-open-files") && t; }, "the Open in Files button");
+  m.click(findById(diff, "diff-open-files"));
+  assert.deepEqual(m.selected, ["files"]);
+  assert.equal(state.shared["herdsidian.sidebar"].tab, "files");
   const preview = await until(() => { const t = m.render(m.files); return walk(t).some((n) => n.kind === "editor") && t; }, "the preview");
   assert.ok(texts(findById(preview, "files-path")).includes("sub/inner.txt"));
   m.click(findById(preview, "files-back"));

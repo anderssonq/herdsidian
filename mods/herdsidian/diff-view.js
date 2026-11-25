@@ -1,0 +1,160 @@
+// The diff view of the Changes tab (V2): header, file tabs, origin row, note and the virtual list of rows.
+// A pure function of a plain model `m` plus callbacks `on`; changes-view.js owns the state. Plan: .spec/herdsidian-changes-v2-plan.md.
+// A row made inside the list renderer has no id, no handler, no hover and no tooltip (the host throws): the handlers sit outside it.
+import { div, svg } from "gpui-kit";
+import { h_flex, v_flex, v_virtual_list, Scrollbar } from "gpui-base";
+import { RADIUS, tokens } from "./tokens.js";
+import { iconButton } from "./icon-button.js";
+import { ROW_H, CODE_SIZE, MAX_LINES, SIGN_W, splitPath, numWidth } from "./diff.js";
+
+const MINUS = "−";
+const HATCH = "mods/herdsidian/diff-hatch.svg";
+const ARROW_UP = "mods/herdsidian/arrow-up.svg";
+const ARROW_DOWN = "mods/herdsidian/arrow-down.svg";
+const MONO = "Menlo";
+const SIGNS = { context: " ", add: "+", del: MINUS };
+
+// A header button that cannot act: muted, no hover, no click.
+const idleButton = (id, t, icon, tip) =>
+  div().id(id).size(28).flex_none().flex().items_center().justify_center().text_color(t.muted).tooltip(tip)
+    .child(svg(icon).size(14));
+
+const modeButton = (t, m, on, mode, label) =>
+  div().id(`diff-mode-${mode}`).px(7).h(20).flex().items_center().rounded(RADIUS.control).text_size(11.5).cursor_pointer()
+    .text_color(m.mode === mode ? t.foreground : t.muted).when(m.mode === mode, (el) => el.bg(t.raised))
+    .hover((s) => s.text_color(t.foreground)).on_click((_e, cx) => on.toggle(mode, cx)).child(label);
+
+function header(t, k, m, on) {
+  const { dir, name } = splitPath(m.file.path);
+  return h_flex().id("diff-header").flex_none().pt(2).pr(8).pb(6).pl(8).gap(4).items_center()
+    .child(iconButton("diff-back", t, "chevron-left", "Back to the changes", (_e, cx) => on.back(cx)))
+    .child(v_flex().id("diff-path").flex_1().min_w(0)
+      .child(div().truncate().font_semibold().child(name))
+      .child(div().truncate().text_size(10.5).text_color(t.muted).child(`${dir}${name}`)))
+    .child(h_flex().flex_none().p(1).gap(1).items_center().rounded(RADIUS.control).bg(k.pill)
+      .child(modeButton(t, m, on, "unified", "Unified"))
+      .child(modeButton(t, m, on, "split", "Split")))
+    .child(m.prev ? iconButton("diff-prev", t, ARROW_UP, "Previous file", (_e, cx) => on.prev(cx)) : idleButton("diff-prev", t, ARROW_UP, "Previous file"))
+    .child(m.next ? iconButton("diff-next", t, ARROW_DOWN, "Next file", (_e, cx) => on.next(cx)) : idleButton("diff-next", t, ARROW_DOWN, "Next file"))
+    .child(iconButton("diff-open-files", t, "file-text", "Open in Files", (_e, cx) => on.openFiles(cx)));
+}
+
+// One tab per listed file; the open one has a 2 px accent line under it.
+function tab(t, dk, file, open, on) {
+  return v_flex().id(`diff-tab-${file.path}`).flex_none().cursor_pointer().tooltip(file.path)
+    .on_click((_e, cx) => on.pick(file.path, cx))
+    .child(h_flex().h(26).px(10).gap(6).items_center().text_size(12).text_color(open ? t.foreground : t.muted)
+      .child(div().child(splitPath(file.path).name))
+      .when(file.add > 0, (el) => el.child(div().text_size(11).text_color(dk.addText).child(`+${file.add}`)))
+      .when(file.del > 0, (el) => el.child(div().text_size(11).text_color(dk.delText).child(`${MINUS}${file.del}`))))
+    .child(div().h(2).w_full().when(open, (el) => el.bg(t.accent)));
+}
+
+function tabs(t, dk, m, on) {
+  return h_flex().id("diff-tabs").flex_none().overflow_x_scroll()
+    .when(Boolean(m.handles?.tabs), (el) => el.track_scroll(m.handles.tabs))
+    .children(m.files.map((file, i) => tab(t, dk, file, i === m.index, on)));
+}
+
+// The code of one side, clipped; its content moves left by `pan`.
+const codeCell = (dk, cell, pan) => {
+  const text = cell.text;
+  const word = cell.word;
+  const piece = (str, tint) => div().flex_none().whitespace_nowrap().when(Boolean(tint), (el) => el.bg(tint)).child(str);
+  const tint = cell.kind === "add" ? dk.addWord : dk.delWord;
+  const pieces = word && text.length > 0
+    ? [text.slice(0, word[0]), text.slice(word[0], word[1]), text.slice(word[1])].map((s, i) => (s ? piece(s, i === 1 ? tint : null) : null)).filter(Boolean)
+    : text ? [piece(text, null)] : [];
+  return div().flex_1().min_w(0).h_full().overflow_hidden()
+    .child(h_flex().relative().left(-pan).h_full().flex_none().items_center().text_color(dk.text).children(pieces));
+};
+
+const numCell = (dk, nw, n) => div().w(nw).flex_none().px(4).text_right().text_color(dk.numText).child(n === null || n === undefined ? "" : String(n));
+
+const signCell = (dk, kind) => div().w(SIGN_W).flex_none().text_center()
+  .text_color(kind === "add" ? dk.addText : kind === "del" ? dk.delText : dk.numText).child(SIGNS[kind]);
+
+const lineTint = (dk, kind) => (kind === "add" ? dk.addLine : kind === "del" ? dk.delLine : null);
+
+// A muted line over the whole row: hunk titles use the tint, banners and notes do not.
+const banner = (dk, text, tint) =>
+  div().w_full().h(ROW_H).flex_none().px(8).flex().items_center().truncate().text_color(dk.numText).when(Boolean(tint), (el) => el.bg(tint)).child(text);
+
+function unifiedRow(dk, nw, row, pan) {
+  if (row.type === "hunk") return banner(dk, row.title, dk.hunk);
+  if (row.type === "note") return h_flex().w_full().h(ROW_H).flex_none().items_center().child(div().w(nw * 2 + SIGN_W).flex_none()).child(div().truncate().text_color(dk.numText).child(row.text));
+  return h_flex().w_full().h(ROW_H).flex_none().items_center().when(Boolean(lineTint(dk, row.kind)), (el) => el.bg(lineTint(dk, row.kind)))
+    .child(numCell(dk, nw, row.old)).child(numCell(dk, nw, row.new)).child(signCell(dk, row.kind))
+    .child(codeCell(dk, row, pan.new));
+}
+
+// One side of a split row; a null cell is the filler of the side that has no line.
+function splitSide(k, dk, nw, cell, pan) {
+  if (!cell) {
+    return div().flex_1().min_w(0).h_full().relative().overflow_hidden()
+      .child(svg(HATCH).w(2400).h(ROW_H).absolute().top(0).left(0).text_color(k.line));
+  }
+  if (cell.kind === "note") return h_flex().flex_1().min_w(0).h_full().items_center().child(div().w(nw + SIGN_W).flex_none()).child(div().truncate().text_color(dk.numText).child(cell.text));
+  return h_flex().flex_1().min_w(0).h_full().items_center().when(Boolean(lineTint(dk, cell.kind)), (el) => el.bg(lineTint(dk, cell.kind)))
+    .child(numCell(dk, nw, cell.no)).child(signCell(dk, cell.kind))
+    .child(codeCell(dk, cell, pan));
+}
+
+function splitRow(k, dk, nw, row, pan) {
+  if (row.type === "hunk") return banner(dk, row.title, dk.hunk);
+  return h_flex().w_full().h(ROW_H).flex_none()
+    .child(splitSide(k, dk, nw, row.left, pan.old))
+    .child(div().w(1).h_full().flex_none().bg(k.line))
+    .child(splitSide(k, dk, nw, row.right, pan.new));
+}
+
+const renamed = (file) => `Renamed from ${file.from}`;
+
+// The rows the list shows: a rename note first, the model's rows, the cap note last. Only indexes are mapped, nothing is copied.
+function listing(m) {
+  const { rows, more } = m.body;
+  const head = m.file.from ? [{ type: "banner", text: renamed(m.file) }] : [];
+  const tail = more ? [{ type: "banner", text: `Showing the first ${MAX_LINES} of ${more} lines.` }] : [];
+  return { count: head.length + rows.length + tail.length, at: (i) => (i < head.length ? head[i] : i < head.length + rows.length ? rows[i - head.length] : tail[i - head.length - rows.length]) };
+}
+
+function code(t, k, dk, m, on) {
+  const list = listing(m);
+  const nw = numWidth(m.body.rows);
+  const row = (r) => (r.type === "banner" ? banner(dk, r.text, null) : m.mode === "split" ? splitRow(k, dk, nw, r, m.pan) : unifiedRow(dk, nw, r, m.pan));
+  const lines = v_virtual_list("diff-lines", list.count, ROW_H, (i) => String(i),
+    (range) => Array.from({ length: Math.max(0, range.end - range.start) }, (_, i) => row(list.at(range.start + i))))
+    .w_full().when(Number.isFinite(m.height), (el) => el.h(m.height)).when(!Number.isFinite(m.height), (el) => el.size_full());
+  return div().id("diff-code").flex_1().min_h(0).relative().overflow_hidden().font_family(m.font ?? MONO).text_size(CODE_SIZE).text_color(dk.text)
+    .when(Boolean(m.wellOn && dk.well), (el) => el.bg(dk.well))
+    .on_size_change((size, cx) => on.size(size, cx))
+    .on_scroll_wheel((e, cx) => on.wheel(e, cx))
+    .child(lines)
+    .child(Scrollbar.vertical("diff-lines").viewport_from_layout().absolute().inset_0());
+}
+
+const notice = (t, text) => div().id("diff-notice").flex_1().min_h(0).p(12).text_size(12).text_color(t.muted).child(text);
+
+// The header and tabs are the real ones; only the code area waits.
+const loading = (t) => div().flex_1().min_h(0).p(12).text_size(12).text_color(t.muted).child("Loading diff…");
+
+// -> Element. `m`: { file, files, index, prev, next, mode, note, origin, body, pan, height, wellOn, handles, font? }
+//   file/files: list rows { path, from, status, add, del } · prev/next: a path or null · mode: "unified" | "split" as shown
+//   note: show the narrow-sidebar note · origin: the prompt text or null · pan: { old, new } in px
+//   body: { rows, more } (rows from unifiedRows or splitRows; `more` is the real line count when capped) or { notice } or { loading: true }
+//   height: the code area's height in css px, or null · handles: { focus, tabs } made in a spawn task, or undefined
+// `on`, each with the gpui `cx` last: back(cx) · openFiles(cx) · prev(cx) · next(cx) · pick(path, cx) · toggle(mode, cx)
+//   key(event, cx) · press(event, cx) · wheel(event, cx) · size({ width, height }, cx) (raw window px; the caller divides by the zoom)
+export function diffView(t, dk, m, on) {
+  const k = tokens(t);
+  return v_flex().id("diff-view").flex_1().min_h(0)
+    .when(Boolean(m.handles?.focus), (el) => el.track_focus(m.handles.focus))
+    .on_key_down((e, cx) => on.key(e, cx))
+    .on_mouse_down("left", (e, cx) => on.press(e, cx))
+    .child(header(t, k, m, on))
+    .child(tabs(t, dk, m, on))
+    .when(Boolean(m.origin), (el) => el.child(div().id("diff-origin").flex_none().px(10).pb(4).truncate().text_size(11).text_color(t.muted).child(m.origin)))
+    .when(Boolean(m.note), (el) => el.child(div().id("diff-note").flex_none().px(10).pb(4).text_size(11).text_color(t.muted).child("Split needs a sidebar of 520 px or more: shown unified.")))
+    .when(Boolean(m.body.notice && m.file.from), (el) => el.child(banner(dk, renamed(m.file), null)))
+    .child(m.body.loading ? loading(t) : m.body.notice ? notice(t, m.body.notice) : code(t, k, dk, m, on));
+}
