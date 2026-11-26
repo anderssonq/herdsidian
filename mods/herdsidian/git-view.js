@@ -1,7 +1,7 @@
 // The Git tab of the right sidebar: the repo state, the commit graph, the detail of the selected commit, its per-file
 // diff and the six actions behind ActionGate (the one place a write runs, ADR-0009). Plan: .spec/herdsidian-git-tab-plan.md.
 // main.js makes the GitTab in init (its input states and handles need init's cx) and calls left() when another tab or
-// the rail shows. `host`: { cx, selectTab, files, vault, changes }; host.cx is used in the constructor only.
+// the rail shows. `host`: { cx, selectTab, files, vault, changes, textMenu }; host.cx is used in the constructor only.
 // render never awaits and never runs a command: each read starts in cx.spawn with a generation number and the repo key.
 import { div } from "gpui-kit";
 import { v_flex, InputState, ScrollHandle, VirtualListScrollHandle } from "gpui-base";
@@ -11,7 +11,7 @@ import { emptyFor } from "./empty-state-view.js";
 import { location } from "./files-view.js";
 import { SIDEBAR_STORE, SIDEBAR_LAYOUT_STORE, shownTabs } from "./sidebar.js";
 import { DiffPane } from "./diff-pane.js";
-import { diffView, paneParts, zoomOf } from "./diff-view.js";
+import { diffView, diffMenuOn, paneParts, zoomOf } from "./diff-view.js";
 import { neighbors, diffKey } from "./diff.js";
 import { BINARY, firstLine, execFailed, patchBody } from "./changes.js";
 import { LOG_PAGE, logArgs, parseLog, commitFilesArgs, parseCommitFiles, commitPatchArgs } from "./git-log.js";
@@ -431,6 +431,8 @@ export class GitTab {
       pick: (path, cx) => this.openFile(path, cx),
       key: (e, cx) => this.keyDown(e, cx),
       press: () => this.handles.focus?.focus(),
+      // No Open in Files here either (see hideOpenFiles).
+      menu: diffMenuOn(this.host, parts, open, loading, { root: this.repo?.root ?? null, canOpen: false }),
     });
   }
 

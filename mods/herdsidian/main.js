@@ -36,6 +36,9 @@ import { autoFromIndex, spaceWhere } from "./palette.js";
 import { Palette } from "./palette-main.js";
 import { VaultSurface } from "./actions-view.js";
 import { VaultActions } from "./actions-main.js";
+import { TextMenu } from "./text-menu-view.js";
+import { TextMenus } from "./text-menu-main.js";
+import { editorMenu, readMenu, selectionOf } from "./text-menu.js";
 
 // The ⌘K palette is another copy of this mod; the two copies talk through shared() keys (ADR-0003).
 // A key is written only when its value changed, so a write never wakes the other copy for nothing.
@@ -84,19 +87,22 @@ async function directory(path) {
 
 export default class Notes extends View {
   init(_props, cx) {
-    // The palette and the tree's menu and dialogs are copies of this mod: they start none of the Notes work below.
+    // The palette, the tree's menu and dialogs, the sidebar tab menu and the text menu are copies of this mod: they
+    // start none of the Notes work below.
     if (props()?.overlay) {
-      this.overlay = props().vaultSurface ? new VaultSurface(cx) : props().sidebarMenu ? new TabMenu(cx) : new Palette(cx);
+      this.overlay = props().vaultSurface ? new VaultSurface(cx) : props().sidebarMenu ? new TabMenu(cx)
+        : props().textMenu ? new TextMenu(cx) : new Palette(cx);
       return;
     }
     // No vault until one is chosen: the panel asks for it.
     this.vault = localStorage.getItem("vault");
     publish("herdsidian.vault", this.vault);
-    this.pathEpoch = 0; this.moving = false; this.actions = new VaultActions(this);
+    this.pathEpoch = 0; this.moving = false; this.actions = new VaultActions(this); this.textMenus = new TextMenus(this); this.readSel = null;
     // What the Files and Changes tab objects (Files made in init, Changes on its first render) may call back.
     // A tab picked here also fixes the split pair at once, so a swap is never drawn from a stale pair.
     const selectTab = (tab) => { setShared(SIDEBAR_STORE, { tab }); fixSplit(); };
-    this.host = { cx, selectTab, files: () => this.tabBody("files"), vault: () => this.vault, changes: () => this.changesWatch };
+    this.host = { cx, selectTab, files: () => this.tabBody("files"), vault: () => this.vault, changes: () => this.changesWatch,
+      textMenu: (event, cx, model) => this.textMenus.open(event, cx, model) };
     // The tab bar: the last motion step, the drag state, the measured control width and its pointer handlers.
     this.motion = null; this.tabDrag = null; this.tabsPx = null; this.tabOn = this.tabHandlers();
     // The git watch starts with the mod, not with the tab: its count feeds the Changes tab badge.
@@ -168,6 +174,7 @@ export default class Notes extends View {
   // so the work runs in a spawn after the render (no notify or state change inside it).
   handleShared(cx) {
     this.actions.consume(cx);
+    this.textMenus.consume(cx);
     const request = shared("herdsidian.request");
     const { action, id } = pendingRequest(request, this.handled, this.vault, Date.now());
     if (request && id !== this.handled) {
@@ -386,7 +393,7 @@ export default class Notes extends View {
       }
       const asking = path === this.note ? this.asking : null;
       this.close();
-      this.note = path; this.selected = path; this.loaded = text; this.error = null; this.asking = asking;
+      this.note = path; this.selected = path; this.loaded = text; this.error = null; this.asking = asking; this.readSel = null;
       this.recent = pushRecent(this.recent, path);
       storeRecent(this.vault, this.recent);
       const t = theme();
@@ -409,12 +416,12 @@ export default class Notes extends View {
 
   // The person touched the read view (or left it): the marks go and the baseline is the text now.
   clearMarks(cx) {
-    this.marks = null; this.baseline = null;
+    this.marks = null; this.baseline = null; this.readSel = null; // the block views go: their selection with them
     cx?.notify();
   }
 
   setMode(mode) {
-    this.mode = mode;
+    this.mode = mode; this.readSel = null; // the read view is drawn anew: no selection survives it
     if (mode !== "read") this.clearMarks();
     if (mode === "read" && this.editor) this.preview = render(this.editor.value());
   }
@@ -614,7 +621,8 @@ export default class Notes extends View {
         act("ask-discard", "Discard", (_e, cx) => { const next = this.asking; this.dirty = false; this.asking = null; next(cx); cx.notify(); }),
         act("ask-cancel", "Cancel", (_e, cx) => { this.asking = null; cx.notify(); }),
       ])))
-      .child(read ? this.readView(t) : div().flex_1().min_h(0).px(6).child(Editor.new(this.editor).size_full()));
+      .child(read ? this.readMenuFrame(this.readView(t)) : div().id("notes-edit").flex_1().min_h(0).px(6).on_mouse_down("right", (e, cx) => this.editMenu(e, cx))
+        .child(Editor.new(this.editor).size_full()));
   }
 
   // The rendered note: one TextView.markdown, or, while change marks show, one per block with the
@@ -622,7 +630,10 @@ export default class Notes extends View {
   // must not: clearing swaps the TextViews, which would eat the click on a link.
   readView(t) {
     const frame = div().id("notes-read").flex_1().min_h(0).px(16).pb(16).overflow_y_scrollbar().text_size(13).text_color(t.foreground);
-    const view = (id, markdown) => TextView.markdown(id, markdown).selectable(true).on_link_click((url, cx) => this.follow(url, cx));
+    // The last settled selection, kept with the source its view rendered and its note; a null from another view keeps it.
+    const note = this.note;
+    const view = (id, markdown) => TextView.markdown(id, markdown).selectable(true).on_link_click((url, cx) => this.follow(url, cx))
+      .on_selection_change((sel) => { if (sel) this.readSel = { id, sel, markdown, note }; else if (this.readSel?.id === id) this.readSel = null; });
     const marks = this.marks;
     if (!marks) return frame.child(view(`md-${this.note}`, this.preview));
     const tk = tokens(t), marked = new Set(marks.marked), clear = (_e, cx) => this.clearMarks(cx);
@@ -635,6 +646,28 @@ export default class Notes extends View {
           ? div().relative().bg(tk.changeMark).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)).child(body)
           : div().child(body);
       }));
+  }
+
+  // The right-click menu sits on a frame around the reader: notes-read's own handlers only clear the marks, and
+  // a press there must not (see readView); opening the menu clears nothing.
+  readMenuFrame(reader) {
+    return v_flex().id("notes-read-menu").flex_1().min_h(0).on_mouse_down("right", (e, cx) => this.readMenu(e, cx)).child(reader);
+  }
+
+  // Right-click on the rendered note: copy, copy as Markdown and send the selection, copy the path, edit.
+  readMenu(event, cx) {
+    if (!this.note) return;
+    const sel = this.readSel?.note === this.note ? this.readSel : null;
+    const model = readMenu({ selection: sel?.sel ?? null, markdown: sel?.markdown, path: `${this.vault}/${this.note}` });
+    this.textMenus.open(event, cx, { ...model, target: { surface: "read", note: this.note } });
+  }
+
+  // Right-click on the note being edited: cut, copy, paste, select all, send the selection, copy the path.
+  editMenu(event, cx) {
+    if (!this.note || !this.editor) return;
+    const value = this.editor.value(), range = selectionOf(this.editor);
+    const model = editorMenu({ surface: "edit", value, range, path: `${this.vault}/${this.note}` });
+    this.textMenus.open(event, cx, { ...model, target: { surface: "edit", note: this.note, range, length: value.length } });
   }
 
   // The focused agent, its space and its folder, read live (A3, F3). The memory of the last agent

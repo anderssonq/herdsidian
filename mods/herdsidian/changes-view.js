@@ -1,7 +1,7 @@
 // The Changes tab of the right sidebar (V2): the files `git status` lists for the focused pane's repo, with their
 // +N / −N counts, and a per-file diff inside the tab.
 // main.js makes the ChangesWatch once in init (its count feeds the tab badge) and the ChangesTab on the first render.
-// `host`: { cx, selectTab, files, changes } from main.js. host.cx is valid only during init: the watch uses it in its
+// `host`: { cx, selectTab, files, vault, changes, textMenu } from main.js. host.cx is valid only during init: the watch uses it in its
 // constructor and nowhere else; later work uses the context each call or task is given.
 import { div } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
@@ -9,7 +9,7 @@ import { exec, readTextFile, watchFolder, shared, setShared } from "herdr";
 import { RADIUS, tokens, diffTokens } from "./tokens.js";
 import { location } from "./files-view.js";
 import { SIDEBAR_STORE, SIDEBAR_LAYOUT_STORE, shownTabs } from "./sidebar.js";
-import { diffView, paneParts, zoomOf } from "./diff-view.js";
+import { diffView, diffMenuOn, paneParts, zoomOf } from "./diff-view.js";
 import { DiffPane } from "./diff-pane.js";
 import { emptyFor, cleanState } from "./empty-state-view.js";
 import { badgeOf, splitPath, maxChange, sizeBar, neighbors, diffKey } from "./diff.js";
@@ -288,6 +288,7 @@ export class ChangesTab {
       pick: (path, cx) => this.openFile(path, cx),
       key: (e, cx) => this.key(e, cx),
       press: () => this.host.changes().handles?.focus?.focus(),
+      menu: diffMenuOn(this.host, parts, open, loading, { root: open.root ?? null, canOpen: Boolean(open.root) }),
     });
   }
 
