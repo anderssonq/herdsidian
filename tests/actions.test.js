@@ -124,6 +124,14 @@ test("refuses a slash", () => {
   assert.match(r.reason, /"\/"/);
 });
 
+test("refuses a colon, with its own reason", () => {
+  for (const t of ["a:b", "Meeting: notes", ":x"]) {
+    const r = validateName(t);
+    assert.equal(r.ok, false, t);
+    assert.equal(r.reason, 'The name cannot contain ":"');
+  }
+});
+
 test("refuses . and .. with their own reason", () => {
   for (const t of [".", " .. "]) {
     const r = validateName(t);

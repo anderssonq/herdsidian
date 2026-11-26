@@ -5,7 +5,7 @@
 import { exec, writeTextFile } from "herdr";
 import { PRUNE } from "./io.js";
 import { dirOf, leafOf } from "./notes.js";
-import { nextUntitled, folderCounts, isSameItem } from "./actions.js";
+import { nextUntitled, takenName, folderCounts, isSameItem, validateName } from "./actions.js";
 import { utf8Length } from "./refs.js";
 
 const real = { exec, writeTextFile };
@@ -99,6 +99,36 @@ export async function makeNote(absDir, deps = real) {
     return { ok: true, name, reason: null };
   } catch (e) {
     return { ok: false, name: null, reason: why(e) };
+  }
+}
+
+// A note with a typed name. Create-only: the folder is listed first (a missing one ends here, nothing is
+// written), a taken name is refused, `still` is asked right before the one write, and that write has a null
+// previous, so a file that appeared meanwhile is kept. Never a number suffix, never a second write.
+// -> { ok: true, name } | { ok: false, taken, exists, stopped, reason }
+export async function makeNamedNote(absDir, name, { deps = real, still = () => true } = {}) {
+  const bad = (extra) => ({ ok: false, taken: false, exists: false, stopped: false, reason: null, ...extra });
+  // One plain leaf only: a slash or ".." would write outside the folder.
+  const v = validateName(name);
+  if (!v.ok || v.name !== name) return bad({ reason: v.reason ?? "The name is not valid" });
+  let path;
+  try {
+    const dir = trim(absDir);
+    path = `${dir}/${name}`;
+    if (takenName(await listNames(dir, deps), name)) return bad({ taken: true, reason: "That name is taken" });
+    if (!still()) return bad({ stopped: true, reason: "Stopped" });
+    await deps.writeTextFile(path, "", null);
+    return { ok: true, name, reason: null };
+  } catch (e) {
+    let there = false;
+    if (path) {
+      try {
+        there = await exists(path, deps);
+      } catch {
+        there = false;
+      }
+    }
+    return bad({ exists: there, reason: why(e) });
   }
 }
 

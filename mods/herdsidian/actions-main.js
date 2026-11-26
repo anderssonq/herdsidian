@@ -1,14 +1,19 @@
 // The Notes side of the tree's right-click actions. The overlay copies only post a request; this copy holds
 // the open note, the unsaved state, the open folders and the recents, so it checks again and does the work.
 // A rename follows plan Decision 4 in its exact order: the move comes first, and links are written only after it.
+// It also owns the New note name prompt (sidebar-motion-layout plan, ### Name prompt): a typed name is create-only.
 
 import { notify, openOverlay, settings, shared } from "herdr";
+import { InputState } from "gpui-base";
 import { dirOf, leafOf } from "./notes.js";
 import { ACTION_KEY, isSameItem, menuItems, movePath, movedState, pendingAction, placeMenu, removedState, resultMessage,
   safeRel, takenName, under, validateName } from "./actions.js";
 import { listNotes, recentOf, saveContext, stateDir, storeRecent } from "./io.js";
 import { updateReferences } from "./ref-update.js";
-import { exists, listNames, makeFolder, makeNote, moveItem, moveSameItem, snapshotFiles, trashItem, why } from "./vault-io.js";
+import { exists, listNames, makeFolder, makeNamedNote, makeNote, moveItem, moveSameItem, snapshotFiles, trashItem, why } from "./vault-io.js";
+import { checkNoteName, folderLabel, takenText } from "./note-name.js";
+import { noteNameRow } from "./note-name-view.js";
+import { SIDEBAR_LAYOUT_STORE, SIDEBAR_STORE, shownTabs } from "./sidebar.js";
 
 const absOf = (vault, rel) => (rel ? `${vault}/${rel}` : vault);
 const joinRel = (dir, name) => (dir ? `${dir}/${name}` : name);
@@ -26,6 +31,15 @@ export class VaultActions {
     this.busy = false; // a rename or a delete runs; a create may still start (AC39)
     // shared() is persisted: a request found at start is old, and must not replay a delete.
     this.handled = shared(ACTION_KEY)?.id ?? null;
+    // The name prompt is open while `naming` is { dir, vault }. nameBusy guards a submit until its write is done.
+    this.naming = null; this.nameMessage = null; this.nameBusy = false;
+    this.nameInput = InputState.new({ placeholder: "Untitled" });
+    this.nameInput.on("change", (_e, cx) => {
+      if (this.nameMessage === null) return;
+      this.nameMessage = null;
+      cx.notify();
+    });
+    this.nameInput.on("submit", (_e, cx) => this.submitNoteName(cx));
   }
 
   // The right-click handler of a row, or of the tree's empty space with kind "root". It changes no view state (AC4).
@@ -53,7 +67,7 @@ export class VaultActions {
   }
 
   start({ vault, op, path, kind, name }, cx) {
-    if (op === "new-note") this.createNote(path, cx, vault);
+    if (op === "new-note") this.askNoteName(path, cx, vault);
     else if (op === "new-folder") this.newFolder(path, name, cx, vault);
     else if (op === "rename") this.rename(path, kind, name, cx, vault);
     else this.remove(path, cx, vault);
@@ -111,12 +125,126 @@ export class VaultActions {
         const made = await makeNote(absOf(vault, dir));
         if (!made.ok) return failed("create a note in", dir, made.reason);
         if (view.vault !== vault) return;
-        const path = joinRel(dir, made.name);
-        view.all = [...view.all, path]; view.liveNotes = null;
-        this.showFolder(dir);
-        view.open(path, cx, "edit");
-        view.load(cx);
+        this.openNew(dir, made.name, cx);
       } catch (e) { failed("create a note in", dir, why(e)); } finally { cx.notify(); }
+    });
+  }
+
+  // A note just made in the view's vault: in the tree, its folder open, opened in edit mode.
+  openNew(dir, name, cx) {
+    const view = this.view, path = joinRel(dir, name);
+    view.all = [...view.all, path]; view.liveNotes = null;
+    this.showFolder(dir);
+    view.open(path, cx, "edit");
+    view.load(cx);
+  }
+
+  // Opens the name prompt for `dir`, or moves an open one there with its text kept. Nothing is written yet.
+  askNoteName(dir, cx, vault = this.view.vault) {
+    const safe = safeRel(dir, { allowRoot: true });
+    if (!safe.ok) return failed("create a note in", dir, safe.reason);
+    // A render closed the prompt without clearing the text: a reopened prompt starts empty.
+    if (!this.naming) this.clearText();
+    // A new object, so a submit still running for the old folder sees the change and stops.
+    this.naming = { dir, vault };
+    this.nameMessage = null;
+    if (!shownTabs(shared(SIDEBAR_STORE), shared(SIDEBAR_LAYOUT_STORE)).includes("notes")) this.view.host?.selectTab("notes");
+    this.nameInput.focus();
+    cx.notify();
+  }
+
+  // Escape, the X, another vault, an opened note, Notes not shown. A caller in render passes no cx: it may not notify.
+  cancelNoteName(cx) {
+    this.closeName();
+    cx?.notify();
+  }
+
+  // Render-safe: the prompt state only. The text is cleared by closeName, or by askNoteName when it reopens.
+  closeNoteName() {
+    this.naming = null; this.nameMessage = null;
+  }
+
+  closeName() {
+    this.closeNoteName();
+    this.clearText();
+  }
+
+  clearText() {
+    if (this.nameInput.value() !== "") this.nameInput.set_value("");
+  }
+
+  // The row at the top of the Notes tab while the prompt is open.
+  nameRow(t, k) {
+    const model = { label: folderLabel(this.naming?.dir ?? ""), input: this.nameInput, message: this.nameMessage, busy: this.nameBusy };
+    return noteNameRow(t, k, model, {
+      cancel: (cx) => this.cancelNoteName(cx),
+      key: (e, cx) => {
+        if (e.key !== "escape") return;
+        this.cancelNoteName(cx);
+        cx.stop_propagation();
+      },
+    });
+  }
+
+  // Plan ### Name prompt, steps 1 to 9. Do not reorder them: each guard protects the note named after it.
+  submitNoteName(cx) {
+    // 1. Closed, or a submit already runs: one prompt makes at most one file.
+    if (!this.naming || this.nameBusy) return;
+    // 2. A refused name only says why; the prompt and the text stay.
+    const checked = checkNoteName(this.nameInput.value());
+    if (checked.kind === "refused") {
+      this.nameMessage = checked.reason;
+      return cx.notify();
+    }
+    // 3.
+    this.nameBusy = true;
+    const view = this.view, asked = this.naming, { dir, vault } = asked;
+    // Step 5's test, asked again by makeNamedNote right before its write.
+    const still = () => view.vault === vault && this.naming === asked;
+    // A request for a vault the view has left says so; a prompt closed or moved stops in silence.
+    const stop = () => { if (view.vault !== vault) dropped(vault); };
+    cx.notify();
+    cx.spawn(async (cx) => {
+      try {
+        // 4.
+        if (!(await this.present(vault, dir, cx))) {
+          if (this.naming === asked) this.closeName();
+          return;
+        }
+        // 5.
+        if (!still()) return stop();
+        // 6.
+        const abs = absOf(vault, dir);
+        const made = checked.kind === "untitled" ? await makeNote(abs) : await makeNamedNote(abs, checked.name, { still });
+        // 7.
+        if (made.stopped) return stop();
+        if (made.taken) {
+          this.nameMessage = takenText(checked.name);
+          return;
+        }
+        if (!made.ok && made.exists) {
+          // The file appeared between the listing and the create-only write: it is kept as it is.
+          this.nameMessage = takenText(checked.name);
+          notify({ title: takenText(checked.name), level: "warning" });
+          return;
+        }
+        if (!made.ok) return failed("create a note in", dir, made.reason);
+        // 8. An Untitled write has no still() guard: a vault left meanwhile keeps its note, as createNote does.
+        if (view.vault !== vault) return;
+        // The prompt was closed or moved during the write: the file stays and shows, but nothing opens over a newer prompt.
+        if (this.naming !== asked) {
+          view.load(cx);
+          return;
+        }
+        this.closeName();
+        this.openNew(dir, made.name, cx);
+      } catch (e) {
+        failed("create a note in", dir, why(e));
+      } finally {
+        // 9.
+        this.nameBusy = false;
+        cx.notify();
+      }
     });
   }
 

@@ -47,6 +47,7 @@ export function validateName(typed) {
   const refuse = (reason) => ({ ok: false, reason });
   if (!name) return refuse("The name is empty");
   if (name.includes("/")) return refuse('The name cannot contain "/"');
+  if (name.includes(":")) return refuse('The name cannot contain ":"');
   if (name === "." || name === "..") return refuse('The name cannot be "." or ".."');
   if (name.startsWith(".")) return refuse('The name cannot start with "."');
   if (name === "node_modules") return refuse('"node_modules" is reserved');

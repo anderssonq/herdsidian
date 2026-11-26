@@ -7,7 +7,7 @@ import { v_flex, h_flex, Editor, EditorState } from "gpui-base";
 import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, shared, home, notify } from "herdr";
 import { RADIUS } from "./tokens.js";
 import { iconButton } from "./icon-button.js";
-import { SIDEBAR_STORE, readSidebar } from "./sidebar.js";
+import { SIDEBAR_STORE, SIDEBAR_LAYOUT_STORE, shownTabs } from "./sidebar.js";
 import { PER_FOLDER, TOTAL, locate, parseListing, capEntries, languageOf, parseMarks, relativeTo, ancestors, tildePath } from "./files-tree.js";
 
 // The focused pane's folder; Changes looks at the same one.
@@ -57,7 +57,7 @@ export class FilesTab {
 
   // The timer and the folder watch: work only while this tab is the one shown; otherwise the next render catches up.
   tick(cx) {
-    if (readSidebar(shared(SIDEBAR_STORE)).tab === "files") this.refresh(cx);
+    if (shownTabs(shared(SIDEBAR_STORE), shared(SIDEBAR_LAYOUT_STORE)).includes("files")) this.refresh(cx);
     else this.stale = true;
   }
 

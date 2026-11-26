@@ -78,3 +78,6 @@ f83d4c7376f72d9fd323e3f3d2b23e6ad1795d98dd8006bcaa5ebd5f7ee69dd0  tests/changes-
 994c520d8061821f8debea058e31b459225e84482414dceb6084e710486b6f91  tests/git-gate-review.test.js
 3dbfa7c078d8ad0f1ac67f7067de6709dcd1ff59b507e767566f455f622392bd  tests/git-confirm-view.test.js
 db5e3cae5f0a107c1dfa7aab0e27e5657bf9e0251999fc5a082e4e7db5ebb8e0  tests/support/git-kit.js
+94582ef2307ee0acb53604448f05a7e0c3a6581813b0b37855d653f6e9ac8afe  tests/sidebar-order-store.test.js
+26433c0b2b8d92b019337d2a604b6723b027aedd566406a55ddc2d1872ea8902  tests/note-name-fs.test.js
+f5e379e897006dffb2b55c8d2ebf74b26559e2af79d3850f453a2e06652e7098  tests/support/sidebar-kit.js
