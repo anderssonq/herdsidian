@@ -143,7 +143,7 @@ export class ChangesTab {
   constructor(host) {
     this.host = host;
     // list: the last ready read ({ root, head, on, files }), so a diff kept through a git error still has its tabs.
-    // shown: the diff drawn ({ root, file, rev, body }); pending: the one being read. pane: its mode, widths and pan.
+    // shown: the diff drawn ({ root, file, rev, body }); pending: the one being read. pane: its mode, widths and wrapped rows.
     this.pane = new DiffPane(); this.list = null; this.shown = null; this.pending = null;
     this.generation = 0;
     this.hook = (cx) => this.applied(cx);
@@ -175,7 +175,7 @@ export class ChangesTab {
       if (!this.pending && this.shown && this.shown.rev !== watch.rev) {
         const file = listed(this.shown);
         if (file) this.load(file, cx);
-        else this.shown = { ...this.shown, rev: watch.rev, body: { notice: GONE }, rows: null, long: null };
+        else this.shown = { ...this.shown, rev: watch.rev, body: { notice: GONE }, rows: null };
       }
     }
   }
@@ -200,9 +200,8 @@ export class ChangesTab {
     const { root, file, rev } = this.pending;
     const moved = this.shown?.file.path !== file.path;
     this.pending = null;
-    this.shown = { root, file, rev, body, rows: null, long: null };
-    if (!moved) return this.pane.clamp(this.shown);
-    this.pane.reset();
+    this.shown = { root, file, rev, body, rows: null };
+    if (!moved) return;
     const index = this.list.files.findIndex((f) => f.path === file.path);
     if (index >= 0) this.host.changes().handles?.tabs?.scroll_to_item(index);
   }
@@ -228,7 +227,7 @@ export class ChangesTab {
     const act = diffKey(e.keystroke, {
       prev: () => n.prev && this.openFile(n.prev, cx),
       next: () => n.next && this.openFile(n.next, cx),
-      toggle: () => this.pane.toggle(this.pane.mode().mode === "split" ? "unified" : "split", this.shown),
+      toggle: () => this.pane.toggle(this.pane.mode().mode === "split" ? "unified" : "split"),
       close: () => this.close(),
     });
     if (!act) return;
@@ -239,9 +238,7 @@ export class ChangesTab {
 
   // The tab's width in logical px: it picks split or unified before and while a diff shows.
   resized({ width }, cx) {
-    if (!this.pane.resized(width / zoomOf())) return;
-    this.pane.clamp(this.shown);
-    cx.notify();
+    if (this.pane.resized(width / zoomOf())) cx.notify();
   }
 
   // "+N" green, "−N" red; untracked files say "new" and binary ones "bin" (no counts).
@@ -280,7 +277,7 @@ export class ChangesTab {
     const loading = this.pending && this.pending.file.path !== this.shown?.file.path;
     const open = loading ? this.pending : this.shown, file = open.file, files = this.list?.files ?? [];
     const { index, prev, next } = neighbors(files, file.path);
-    const parts = paneParts(t, this.pane, open, loading, () => this.shown);
+    const parts = paneParts(t, this.pane, open, loading);
     const m = { ...parts.m, file, files, index, prev, next, handles: this.host.changes().handles };
     return diffView(t, diffTokens(t), m, {
       ...parts.on,

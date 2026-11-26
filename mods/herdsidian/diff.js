@@ -1,5 +1,5 @@
 // The Changes tab's pure view model, with no Herdr or GPUI imports so it can be tested with node:
-// list badges and size bars, the diff rows (unified and split, with changed-word ranges), the view mode and the pan.
+// list badges and size bars, the diff rows (unified and split, with changed-word ranges), the view mode and the wrap.
 export const ROW_H = 20;
 export const CODE_SIZE = 12;
 export const CHAR_W = 7.68; // the advance of one monospace character at CODE_SIZE
@@ -8,6 +8,7 @@ export { MAX_LINES } from "./changes.js";
 export const NUM_PAD = 8; // the number column is digits of CHAR_W plus this
 export const SIGN_W = 16;
 const SPLIT_MIN = 520;
+const WRAP_PAD = 8; // room at the right of a code cell, under the vertical scrollbar
 const WORD_LIMIT = 0.7;
 
 const BAR_BLOCKS = 5;
@@ -170,19 +171,6 @@ export function splitRows(hunks) {
   return rows;
 }
 
-// AC31: the widest line of each side, in characters; a context line is on both sides.
-export function longest(hunks) {
-  let old = 0;
-  let neu = 0;
-  for (const hunk of hunks) {
-    for (const line of hunk.lines) {
-      if (line.kind === "context" || line.kind === "del") old = Math.max(old, line.text.length);
-      if (line.kind === "context" || line.kind === "add") neu = Math.max(neu, line.text.length);
-    }
-  }
-  return { old, new: neu, all: Math.max(old, neu) };
-}
-
 // The number column follows the widest line number of the shown rows; two digits at least.
 export function numWidth(rows) {
   let widest = 2;
@@ -212,18 +200,70 @@ export function neighbors(files, path) {
   return { index, prev: files[index - 1]?.path ?? null, next: files[index + 1]?.path ?? null };
 }
 
-export function panLimit(chars, cellWidth) {
-  const limit = chars * CHAR_W - cellWidth;
-  return Number.isFinite(limit) && limit > 0 ? limit : 0;
+// AC31: the characters that fit in a code cell of `cellWidth` px; Infinity (no wrap) while the width is unknown.
+export const wrapCols = (cellWidth) => (Number.isFinite(cellWidth) ? Math.max(1, Math.floor((cellWidth - WRAP_PAD) / CHAR_W)) : Infinity);
+
+// The code cell width of `mode` in a code area of `width` px: the area less the gutter, halved in split around the 1 px line.
+export const cellWidth = (width, rows, mode) => (mode === "split" ? (width - 1) / 2 : width) - gutter(rows, mode);
+
+// The cells one code point takes: a tab TAB_COLS (assumed; the host's tab width is not checked live), an East Asian
+// wide character or an emoji 2, anything else 1. Symbol blocks are counted wide as a whole: too many cells only wraps
+// earlier. Every WIDE range is at U+1100 or above, which the fast path of chunks relies on.
+// Limit: the cut is per code point, so it can fall inside a grapheme (a skin tone, a flag, a combining mark).
+const TAB_COLS = 4;
+const WIDE = /[\u1100-\u115f\u231a-\u231b\u23e9-\u23f3\u25fd-\u25fe\u2600-\u27bf\u2b1b-\u2b1c\u2b50\u2b55\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6\u{1b000}-\u{1b16f}\u{1f000}-\u{1faff}\u{20000}-\u{3fffd}]/u;
+const colsOf = (ch) => (ch === "\t" ? TAB_COLS : WIDE.test(ch) ? 2 : 1);
+
+// The pieces of `text` that take at most `cols` cells (colsOf), each with the part of `word` it holds ([start, end)
+// in UTF-16 units, or null). A cut never splits a code point; a piece holds at least one.
+function chunks(text, word, cols) {
+  // Fast path: no tab and nothing at U+1100 or above, so one UTF-16 unit is one cell.
+  if (text.length <= cols && !/[\t\u1100-\u{3fffd}]/u.test(text)) return [{ text, word }];
+  const ends = [];
+  let used = 0;
+  let i = 0;
+  for (const ch of text) {
+    const w = colsOf(ch);
+    if (used > 0 && used + w > cols) { ends.push(i); used = 0; }
+    used += w;
+    i += ch.length;
+  }
+  if (ends.length === 0) return [{ text, word }];
+  ends.push(text.length);
+  let s = 0;
+  return ends.map((e) => {
+    const a = word ? Math.max(word[0], s) : 0, b = word ? Math.min(word[1], e) : 0;
+    const piece = { text: text.slice(s, e), word: word && a < b ? [a - s, b - s] : null };
+    s = e;
+    return piece;
+  });
 }
 
-// AC31: a mostly sideways wheel pans, and so does a vertical one with Shift; a plain vertical wheel scrolls the list.
-export function panStep(pan, side, event, limits) {
-  const { x = 0, y = 0 } = event.delta ?? {};
-  let step = 0;
-  if (Math.abs(x) > Math.abs(y)) step = x;
-  else if (event.modifiers?.shift) step = y;
-  else return pan;
-  const next = Math.max(0, Math.min(pan[side] - step, limits[side] ?? 0));
-  return next === pan[side] ? pan : { ...pan, [side]: next };
+// One split cell cut into pieces; a later piece has no number (cont). A null side stays null: the filler on every row.
+function cellPieces(cell, cols) {
+  if (!cell || cell.kind === "note") return [cell];
+  return chunks(cell.text, cell.word, cols).map((c, i) => (i === 0 ? { ...cell, ...c } : { kind: cell.kind, no: null, cont: true, ...c }));
+}
+
+// AC31: a line wider than `cols` cells goes on as more rows of the same height, cut at `cols` cells (colsOf). The next rows have
+// no numbers and no sign (cont). In split, a pair takes as many rows as its longer side; the shorter side goes on with
+// an empty cell of its own kind. Hunk titles and notes are not cut. Rows that fit are returned as they are.
+export function wrapRows(rows, mode, cols) {
+  if (!Number.isFinite(cols)) return rows;
+  const out = [];
+  for (const row of rows) {
+    if (mode === "split" && row.type === "pair") {
+      const left = cellPieces(row.left, cols), right = cellPieces(row.right, cols);
+      if (left.length === 1 && right.length === 1) { out.push(row); continue; }
+      for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
+        const side = (pieces, cell) => pieces[i] ?? (cell ? { kind: cell.kind, no: null, cont: true, text: "", word: null } : null);
+        out.push({ type: "pair", left: side(left, row.left), right: side(right, row.right) });
+      }
+    } else if (mode !== "split" && row.type === "line") {
+      const pieces = chunks(row.text, row.word, cols);
+      if (pieces.length === 1) { out.push(row); continue; }
+      pieces.forEach((c, i) => out.push(i === 0 ? { ...row, ...c } : { type: "line", kind: row.kind, old: null, new: null, cont: true, ...c }));
+    } else out.push(row);
+  }
+  return out;
 }

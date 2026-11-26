@@ -1,11 +1,11 @@
-// The state of one open diff: split or unified, the tab and code widths, the horizontal pan and its limits.
+// The state of one open diff: split or unified, the tab and code widths, and the rows cut to the code width.
 // Pure, so the Changes tab and the Git tab share one copy. The host reads the zoom and hands it in.
-// `shown` is the diff drawn: { body, rows, long }; rows and long are built here once per diff and kept on it.
-import { unifiedRows, splitRows, longest, gutter, viewMode, panLimit, panStep } from "./diff.js";
+// `shown` is the diff drawn: { body, rows }; rows are built here once per diff, mode and width, and kept on it.
+import { unifiedRows, splitRows, viewMode, wrapRows, wrapCols, cellWidth } from "./diff.js";
 
 export class DiffPane {
   constructor() {
-    this.pick = "split"; this.width = null; this.code = null; this.pan = { old: 0, new: 0 };
+    this.pick = "split"; this.width = null; this.code = null;
   }
 
   // The tab's width in logical px: it picks split or unified before and while a diff shows.
@@ -15,7 +15,7 @@ export class DiffPane {
     return true;
   }
 
-  // The code area's size in logical px: the pan limits use its width once known.
+  // The code area's size in logical px: the wrap uses its width once known.
   sized(size) {
     if (size.width === this.code?.width && size.height === this.code?.height) return false;
     this.code = size;
@@ -26,52 +26,20 @@ export class DiffPane {
     return viewMode(this.pick, this.width);
   }
 
-  toggle(mode, shown) {
+  toggle(mode) {
     this.pick = mode;
-    this.clamp(shown);
   }
 
-  // The rows of the shown diff in `mode`, built once per diff.
+  // AC31: the rows of the shown diff in `mode`, cut to the code width (the tab width until the code area is measured).
+  // The rows of a mode are built once per diff; only the last cut is kept, so a sidebar drag holds one copy.
   rowsOf(shown, mode) {
     shown.rows ??= {};
-    return (shown.rows[mode] ??= mode === "split" ? splitRows(shown.body.hunks) : unifiedRows(shown.body.hunks));
-  }
-
-  // The most each side may pan in the mode shown, or null with no lines or no width yet.
-  limits(shown) {
+    const rows = (shown.rows[mode] ??= mode === "split" ? splitRows(shown.body.hunks) : unifiedRows(shown.body.hunks));
     const width = this.code?.width ?? this.width;
-    if (!shown?.body.hunks || !Number.isFinite(width)) return null;
-    const { mode } = this.mode();
-    const long = (shown.long ??= longest(shown.body.hunks)), edge = gutter(this.rowsOf(shown, mode), mode);
-    if (mode === "unified") return { old: 0, new: panLimit(long.all, width - edge) };
-    const cell = (width - 1) / 2 - edge;
-    return { old: panLimit(long.old, cell), new: panLimit(long.new, cell) };
-  }
-
-  // New content, a new mode or a new width: no offset past the end of the longest line.
-  clamp(shown) {
-    const limits = this.limits(shown) ?? { old: 0, new: 0 };
-    const next = { old: Math.min(this.pan.old, limits.old), new: Math.min(this.pan.new, limits.new) };
-    if (next.old !== this.pan.old || next.new !== this.pan.new) this.pan = next;
-  }
-
-  // AC31: the wheel over the code area pans the side under the pointer (unified has only the new one).
-  // Positions and deltas come in window px: both are divided by the zoom.
-  wheel(e, zoom, shown) {
-    const limits = this.limits(shown);
-    if (!limits || !e.local_position) return false;
-    const width = this.code?.width ?? this.width;
-    const split = this.mode().mode === "split";
-    const side = split && e.local_position.x / zoom < width / 2 ? "old" : "new";
-    const delta = { x: (e.delta?.x ?? 0) / zoom, y: (e.delta?.y ?? 0) / zoom };
-    const next = panStep(this.pan, side, { delta, modifiers: e.modifiers }, limits);
-    if (next === this.pan) return false;
-    this.pan = next;
-    return true;
-  }
-
-  // Another file: the pan starts at 0.
-  reset() {
-    this.pan = { old: 0, new: 0 };
+    // No width yet (or a 0 before layout): no cut, as wrapCols(null) says.
+    const cols = Number.isFinite(width) && width > 0 ? wrapCols(cellWidth(width, rows, mode)) : Infinity;
+    const key = `${mode}:${cols}`;
+    if (shown.rows.cut?.key !== key) shown.rows.cut = { key, rows: wrapRows(rows, mode, cols) };
+    return shown.rows.cut.rows;
   }
 }

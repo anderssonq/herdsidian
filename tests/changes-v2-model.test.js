@@ -1,7 +1,7 @@
 // Changes V2, the pure view model: diff.js plus isBinaryPatch and capLines of changes.js. Written from the plan's contracts.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { badgeOf, splitPath, maxChange, sizeBar, ago, neighbors, unifiedRows, viewMode, longest, panLimit, panStep, CHAR_W } from "../mods/herdsidian/diff.js";
+import { badgeOf, splitPath, maxChange, sizeBar, ago, neighbors, unifiedRows, viewMode, wrapRows, wrapCols, cellWidth, CHAR_W } from "../mods/herdsidian/diff.js";
 import { isBinaryPatch, capLines } from "../mods/herdsidian/changes.js";
 import * as diff from "../mods/herdsidian/diff.js";
 import * as changes from "../mods/herdsidian/changes.js";
@@ -157,7 +157,7 @@ test("AC30: MAX_LINES has one source: changes.js owns it and diff.js re-exports 
   assert.match(source, /MAX_LINES[^;]*from\s+["']\.\/changes\.js["']/, "diff.js must import or re-export it from ./changes.js");
 });
 
-// The number column grows with the widest line number, so the pan limit follows it (AC25, AC31).
+// The number column grows with the widest line number, so the wrap width follows it (AC25, AC31).
 const uRow = (old, nu) => ({ type: "line", kind: "context", old, new: nu, text: "x" });
 const pRow = (left, right) => ({ type: "pair", left: left === null ? null : { kind: "del", no: left, text: "x", word: null }, right: right === null ? null : { kind: "add", no: right, text: "x", word: null } });
 const noise = [{ type: "hunk", title: "Line 1" }, { type: "note", text: "\\ No newline at end of file" }];
@@ -196,55 +196,87 @@ test("AC31: gutter is one number column plus the sign in split, two plus the sig
   assert.equal(diff.gutter([], "unified"), 2 * colOf(2) + diff.SIGN_W);
 });
 
-test("AC31: longest measures the longest line of each side; context counts for both", () => {
-  const h = hunk([line("context", 1, 1, "xyz"), line("del", 2, null, "abcdef"), line("add", null, 2, "ab")]);
-  assert.deepEqual(longest([h]), { old: 6, new: 3, all: 6 });
-  assert.deepEqual(longest([h, hunk([line("add", null, 9, "0123456789")])]), { old: 6, new: 10, all: 10 });
+// AC31 (2026-11-26, scope change by Andersson): a long line wraps onto more rows of the same height; there is no pan.
+const uLine = (kind, old, nu, text, word = null) => ({ type: "line", kind, old, new: nu, text, word });
+const cell = (kind, no, text, word = null) => ({ kind, no, text, word });
+
+test("AC31: wrapCols is the whole characters that fit, at least 1, and Infinity while the width is unknown", () => {
+  assert.equal(wrapCols(null), Infinity);
+  assert.equal(wrapCols(undefined), Infinity);
+  assert.equal(wrapCols(0), 1);
+  const cols = wrapCols(400);
+  assert.ok(Number.isInteger(cols) && cols >= 1);
+  assert.ok(cols * CHAR_W <= 400, "the cut text fits in the cell");
+  assert.ok(wrapCols(800) > cols, "a wider cell holds more characters");
 });
 
-test("AC31: panLimit is the width of the text past the cell, never below 0", () => {
-  assert.ok(Math.abs(panLimit(100, 500) - (100 * CHAR_W - 500)) < 0.001);
-  assert.equal(panLimit(10, 500), 0);
-  assert.equal(panLimit(0, 500), 0);
+test("AC31: cellWidth is the area less the gutter in unified, and half the area less one number column in split", () => {
+  const rows = [uRow(1, 1)];
+  assert.equal(cellWidth(600, rows, "unified"), 600 - diff.gutter(rows, "unified"));
+  const split = [pRow(1, 1)];
+  assert.equal(cellWidth(601, split, "split"), 300 - diff.gutter(split, "split"));
 });
 
-// Assumed shapes: pan { old, new }, side "old" | "new", limits { old, new }, event { delta: { x, y }, modifiers: { shift } }.
-const limits = { old: 400, new: 400 };
-const wheel = (x, y, shift = false) => ({ delta: { x, y }, modifiers: { shift } });
-
-test("AC31: panStep moves by delta.x when it is larger than delta.y", () => {
-  const pan = { old: 0, new: 100 };
-  const out = panStep(pan, "new", wheel(30, 5), limits);
-  assert.equal(Math.abs(out.new - 100), 30);
-  assert.equal(out.old, 0);
+test("AC31: unified: a long line becomes rows of at most cols characters; only the first keeps the numbers", () => {
+  const rows = [{ type: "hunk", title: "Line 1" }, uLine("add", null, 7, "abcdefghij"), uLine("context", 8, 8, "xy")];
+  const out = wrapRows(rows, "unified", 4);
+  assert.deepEqual(out.map((r) => r.text ?? r.title), ["Line 1", "abcd", "efgh", "ij", "xy"]);
+  assert.deepEqual([out[1].old, out[1].new, out[1].cont], [null, 7, undefined]);
+  for (const r of out.slice(2, 4)) assert.deepEqual([r.type, r.kind, r.old, r.new, r.cont], ["line", "add", null, null, true]);
+  assert.equal(out[4], rows[2], "a line that fits is kept as it is");
 });
 
-test("AC31: panStep moves by delta.y only with Shift", () => {
-  const pan = { old: 100, new: 100 };
-  const out = panStep(pan, "old", wheel(0, 40, true), limits);
-  assert.equal(Math.abs(out.old - 100), 40);
-  assert.equal(out.new, 100);
+test("AC31: the changed-word range is cut with the line, and a piece with none of it has null", () => {
+  const out = wrapRows([uLine("del", 3, null, "abcdefghij", [2, 6])], "unified", 4);
+  assert.deepEqual(out.map((r) => r.word), [[2, 4], [0, 2], null]);
 });
 
-test("AC31: a vertical wheel with no Shift changes nothing and returns the same object", () => {
-  const pan = { old: 50, new: 50 };
-  assert.equal(panStep(pan, "new", wheel(0, 40), limits), pan);
-  assert.equal(panStep(pan, "new", wheel(3, 40), limits), pan);
+test("AC31: Infinity or lines that fit return the same rows", () => {
+  const rows = [uLine("add", null, 1, "a".repeat(500))];
+  assert.equal(wrapRows(rows, "unified", Infinity), rows);
+  const short = [uLine("add", null, 1, "abc"), { type: "note", text: "\\ No newline at end of file" }];
+  assert.deepEqual(wrapRows(short, "unified", 3), short);
 });
 
-test("AC31: panStep clamps at 0 and at the limit", () => {
-  const pan = { old: 100, new: 100 };
-  const ends = [panStep(pan, "new", wheel(1000, 0), limits).new, panStep(pan, "new", wheel(-1000, 0), limits).new].sort((a, b) => a - b);
-  assert.deepEqual(ends, [0, 400]);
+test("AC31: split: a pair takes the rows of its longer side; the shorter side goes on with an empty cell of its kind", () => {
+  const row = { type: "pair", left: cell("del", 4, "abcdefghij"), right: cell("add", 4, "abc") };
+  const out = wrapRows([row], "split", 4);
+  assert.equal(out.length, 3);
+  assert.deepEqual(out.map((r) => r.left.text), ["abcd", "efgh", "ij"]);
+  assert.deepEqual(out.map((r) => r.left.no), [4, null, null]);
+  assert.deepEqual(out.map((r) => r.right.text), ["abc", "", ""]);
+  assert.deepEqual(out.map((r) => r.right.no), [4, null, null]);
+  assert.ok(out.slice(1).every((r) => r.left.cont && r.right.cont && r.left.kind === "del" && r.right.kind === "add"));
 });
 
-test("AC31: panStep returns the same object when the pan is already at the end it is pushed to", () => {
-  const atZero = { old: 0, new: 0 };
-  const atLimit = { old: 400, new: 400 };
-  const same = [panStep(atZero, "new", wheel(1000, 0), limits), panStep(atZero, "new", wheel(-1000, 0), limits)].filter((p) => p === atZero);
-  assert.equal(same.length, 1);
-  const sameEnd = [panStep(atLimit, "new", wheel(1000, 0), limits), panStep(atLimit, "new", wheel(-1000, 0), limits)].filter((p) => p === atLimit);
-  assert.equal(sameEnd.length, 1);
+test("AC31: split: a side with no line stays null (the filler) on every row of the pair", () => {
+  const out = wrapRows([{ type: "pair", left: null, right: cell("add", 9, "abcdefghij", [5, 10]) }], "split", 4);
+  assert.equal(out.length, 3);
+  assert.ok(out.every((r) => r.left === null));
+  assert.deepEqual(out.map((r) => r.right.word), [null, [1, 4], [0, 2]]);
+});
+
+test("AC31: a cut never splits an emoji, and wide characters and tabs take more than one cell", () => {
+  const emoji = wrapRows([uLine("add", null, 1, "abc\u{1F600}def")], "unified", 4).map((r) => r.text);
+  assert.deepEqual(emoji, ["abc", "\u{1F600}de", "f"], "the emoji takes 2 cells and stays whole");
+  const cjk = wrapRows([uLine("add", null, 1, "\u6f22\u5b57\u6f22\u5b57\u6f22")], "unified", 4).map((r) => r.text);
+  assert.deepEqual(cjk, ["\u6f22\u5b57", "\u6f22\u5b57", "\u6f22"], "2 wide characters fill 4 cells");
+  const tab = wrapRows([uLine("context", 1, 1, "\tab")], "unified", 4).map((r) => r.text);
+  assert.deepEqual(tab, ["\t", "ab"], "a tab takes 4 cells");
+  const short = wrapRows([uLine("add", null, 1, "\u6f22\u5b57\u6f22")], "unified", 4).map((r) => r.text);
+  assert.deepEqual(short, ["\u6f22\u5b57", "\u6f22"], "3 units but 6 cells is still cut");
+  const checks = wrapRows([uLine("add", null, 1, "\u2705\u2705\u2705\u2b50")], "unified", 4).map((r) => r.text);
+  assert.deepEqual(checks, ["\u2705\u2705", "\u2705\u2b50"], "emoji symbols below U+1F300 take 2 cells");
+  const word = wrapRows([uLine("add", null, 1, "ab\u{1F600}\u{1F600}cd", [2, 6])], "unified", 4).map((r) => [r.text, r.word]);
+  assert.deepEqual(word, [["ab\u{1F600}", [2, 4]], ["\u{1F600}cd", [0, 2]]], "the word range is cut on code-point edges");
+  const one = wrapRows([uLine("add", null, 1, "\u6f22")], "unified", 1).map((r) => r.text);
+  assert.deepEqual(one, ["\u6f22"], "a piece holds at least one character, even when it is wider than the cell");
+});
+
+test("AC31: hunk titles are never cut, and the unified rule does not touch split rows", () => {
+  const rows = [{ type: "hunk", title: "x".repeat(50) }];
+  assert.deepEqual(wrapRows(rows, "split", 4), rows);
+  assert.deepEqual(wrapRows(rows, "unified", 4), rows);
 });
 
 test("AC35: isBinaryPatch is true for both git texts before the first hunk", () => {

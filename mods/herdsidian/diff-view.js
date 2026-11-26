@@ -59,8 +59,8 @@ function tabs(t, dk, m, on) {
     .children(m.files.map((file, i) => tab(t, dk, file, i === m.index, on)));
 }
 
-// The code of one side, clipped; its content moves left by `pan`.
-const codeCell = (dk, cell, pan) => {
+// The code of one side, clipped; a line too long for the cell already comes cut into rows (wrapRows).
+const codeCell = (dk, cell) => {
   const text = cell.text;
   const word = cell.word;
   const piece = (str, tint) => div().flex_none().whitespace_nowrap().when(Boolean(tint), (el) => el.bg(tint)).child(str);
@@ -69,13 +69,14 @@ const codeCell = (dk, cell, pan) => {
     ? [text.slice(0, word[0]), text.slice(word[0], word[1]), text.slice(word[1])].map((s, i) => (s ? piece(s, i === 1 ? tint : null) : null)).filter(Boolean)
     : text ? [piece(text, null)] : [];
   return div().flex_1().min_w(0).h_full().overflow_hidden()
-    .child(h_flex().relative().left(-pan).h_full().flex_none().items_center().text_color(dk.text).children(pieces));
+    .child(h_flex().h_full().flex_none().items_center().text_color(dk.text).children(pieces));
 };
 
 const numCell = (dk, nw, n) => div().w(nw).flex_none().px(4).text_right().text_color(dk.numText).child(n === null || n === undefined ? "" : String(n));
 
-const signCell = (dk, kind) => div().w(SIGN_W).flex_none().text_center()
-  .text_color(kind === "add" ? dk.addText : kind === "del" ? dk.delText : dk.numText).child(SIGNS[kind]);
+// A row that goes on from the line above (cont) shows no sign.
+const signCell = (dk, kind, cont) => div().w(SIGN_W).flex_none().text_center()
+  .text_color(kind === "add" ? dk.addText : kind === "del" ? dk.delText : dk.numText).child(cont ? "" : SIGNS[kind]);
 
 const lineTint = (dk, kind) => (kind === "add" ? dk.addLine : kind === "del" ? dk.delLine : null);
 
@@ -83,32 +84,32 @@ const lineTint = (dk, kind) => (kind === "add" ? dk.addLine : kind === "del" ? d
 const banner = (dk, text, tint) =>
   div().w_full().h(ROW_H).flex_none().px(8).flex().items_center().truncate().text_color(dk.numText).when(Boolean(tint), (el) => el.bg(tint)).child(text);
 
-function unifiedRow(dk, nw, row, pan) {
+function unifiedRow(dk, nw, row) {
   if (row.type === "hunk") return banner(dk, row.title, dk.hunk);
   if (row.type === "note") return h_flex().w_full().h(ROW_H).flex_none().items_center().child(div().w(nw * 2 + SIGN_W).flex_none()).child(div().truncate().text_color(dk.numText).child(row.text));
   return h_flex().w_full().h(ROW_H).flex_none().items_center().when(Boolean(lineTint(dk, row.kind)), (el) => el.bg(lineTint(dk, row.kind)))
-    .child(numCell(dk, nw, row.old)).child(numCell(dk, nw, row.new)).child(signCell(dk, row.kind))
-    .child(codeCell(dk, row, pan.new));
+    .child(numCell(dk, nw, row.old)).child(numCell(dk, nw, row.new)).child(signCell(dk, row.kind, row.cont))
+    .child(codeCell(dk, row));
 }
 
 // One side of a split row; a null cell is the filler of the side that has no line.
-function splitSide(k, dk, nw, cell, pan) {
+function splitSide(k, dk, nw, cell) {
   if (!cell) {
     return div().flex_1().min_w(0).h_full().relative().overflow_hidden()
       .child(svg(HATCH).w(2400).h(ROW_H).absolute().top(0).left(0).text_color(k.line));
   }
   if (cell.kind === "note") return h_flex().flex_1().min_w(0).h_full().items_center().child(div().w(nw + SIGN_W).flex_none()).child(div().truncate().text_color(dk.numText).child(cell.text));
   return h_flex().flex_1().min_w(0).h_full().items_center().when(Boolean(lineTint(dk, cell.kind)), (el) => el.bg(lineTint(dk, cell.kind)))
-    .child(numCell(dk, nw, cell.no)).child(signCell(dk, cell.kind))
-    .child(codeCell(dk, cell, pan));
+    .child(numCell(dk, nw, cell.no)).child(signCell(dk, cell.kind, cell.cont))
+    .child(codeCell(dk, cell));
 }
 
-function splitRow(k, dk, nw, row, pan) {
+function splitRow(k, dk, nw, row) {
   if (row.type === "hunk") return banner(dk, row.title, dk.hunk);
   return h_flex().w_full().h(ROW_H).flex_none()
-    .child(splitSide(k, dk, nw, row.left, pan.old))
+    .child(splitSide(k, dk, nw, row.left))
     .child(div().w(1).h_full().flex_none().bg(k.line))
-    .child(splitSide(k, dk, nw, row.right, pan.new));
+    .child(splitSide(k, dk, nw, row.right));
 }
 
 const renamed = (file) => `Renamed from ${file.from}`;
@@ -124,14 +125,13 @@ function listing(m) {
 function code(t, k, dk, m, on) {
   const list = listing(m);
   const nw = numWidth(m.body.rows);
-  const row = (r) => (r.type === "banner" ? banner(dk, r.text, null) : m.mode === "split" ? splitRow(k, dk, nw, r, m.pan) : unifiedRow(dk, nw, r, m.pan));
+  const row = (r) => (r.type === "banner" ? banner(dk, r.text, null) : m.mode === "split" ? splitRow(k, dk, nw, r) : unifiedRow(dk, nw, r));
   const lines = v_virtual_list("diff-lines", list.count, ROW_H, (i) => String(i),
     (range) => Array.from({ length: Math.max(0, range.end - range.start) }, (_, i) => row(list.at(range.start + i))))
     .w_full().when(Number.isFinite(m.height), (el) => el.h(m.height)).when(!Number.isFinite(m.height), (el) => el.size_full());
   return div().id("diff-code").flex_1().min_h(0).relative().overflow_hidden().font_family(m.font ?? MONO).text_size(CODE_SIZE).text_color(dk.text)
     .when(Boolean(m.wellOn && dk.well), (el) => el.bg(dk.well))
     .on_size_change((size, cx) => on.size(size, cx))
-    .on_scroll_wheel((e, cx) => on.wheel(e, cx))
     .child(lines)
     .child(Scrollbar.vertical("diff-lines").viewport_from_layout().absolute().inset_0());
 }
@@ -148,37 +148,34 @@ export const zoomOf = () => {
 };
 
 // The part of diffView's `m` and `on` that comes from a tab's DiffPane: the mode, the body (loading, rows or a notice),
-// the pan and sizes, the font, and the toggle, wheel and size callbacks. `open` is the diff named in the header, with
-// `reading` while another file is read; `current()` gives the diff drawn when an event comes.
-export function paneParts(t, pane, open, reading, current) {
+// the sizes, the font, and the toggle and size callbacks. `open` is the diff named in the header, with
+// `reading` while another file is read.
+export function paneParts(t, pane, open, reading) {
   const { mode, note } = pane.mode();
   const body = reading ? { loading: true } : open.body.hunks ? { rows: pane.rowsOf(open, mode), more: open.body.more } : open.body;
   const font = settings()?.font_family;
   return {
-    m: { mode, note, body, pan: pane.pan, height: pane.code?.height ?? null, wellOn: t.background === CLEAR,
+    m: { mode, note, body, height: pane.code?.height ?? null, wellOn: t.background === CLEAR,
       font: typeof font === "string" && font ? font : undefined },
     on: {
-      toggle: (mode, cx) => { pane.toggle(mode, current()); cx.notify(); },
-      wheel: (e, cx) => { if (pane.wheel(e, zoomOf(), current())) cx.notify(); },
+      toggle: (mode, cx) => { pane.toggle(mode); cx.notify(); },
       size: ({ width, height }, cx) => {
         const zoom = zoomOf();
-        if (!pane.sized({ width: width / zoom, height: height / zoom })) return;
-        pane.clamp(current());
-        cx.notify();
+        if (pane.sized({ width: width / zoom, height: height / zoom })) cx.notify();
       },
     },
   };
 }
 
-// -> Element. `m`: { file, files, index, prev, next, mode, note, body, pan, height, wellOn, handles, font?, hideOpenFiles?, backTip? }
+// -> Element. `m`: { file, files, index, prev, next, mode, note, body, height, wellOn, handles, font?, hideOpenFiles?, backTip? }
 //   file/files: list rows { path, from, status, add, del } · prev/next: a path or null · mode: "unified" | "split" as shown
-//   note: show the narrow-sidebar note · pan: { old, new } in px
+//   note: show the narrow-sidebar note
 //   hideOpenFiles: true leaves out the "Open in Files" button (then openFiles is not needed) · backTip: the tooltip of the
 //   back button (default "Back to the changes")
 //   body: { rows, more } (rows from unifiedRows or splitRows; `more` is the real line count when capped) or { notice } or { loading: true }
 //   height: the code area's height in css px, or null · handles: { focus, tabs } made in a spawn task, or undefined
 // `on`, each with the gpui `cx` last: back(cx) · openFiles(cx) · prev(cx) · next(cx) · pick(path, cx) · toggle(mode, cx)
-//   key(event, cx) · press(event, cx) · wheel(event, cx) · size({ width, height }, cx) (raw window px; the caller divides by the zoom)
+//   key(event, cx) · press(event, cx) · size({ width, height }, cx) (raw window px; the caller divides by the zoom)
 export function diffView(t, dk, m, on) {
   const k = tokens(t);
   return v_flex().id("diff-view").flex_1().min_h(0)

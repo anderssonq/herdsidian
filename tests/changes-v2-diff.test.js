@@ -3,6 +3,7 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import * as lib from "../lib/tokens.js";
+import * as diff from "../mods/herdsidian/diff.js";
 import { mount, fakeGit, fakeFiles, reset, world, state, during, findById, walk, rowsOf, texts, has, settle } from "./support/changes-kit.js";
 
 const ROOT = "/work/repo";
@@ -324,27 +325,63 @@ test("AC30 one virtual list with the row count; a render builds end - start rows
   assert.equal(texts(rowsOf(tree, [0, 1])[0]).join(""), "Line 1");
 });
 
-// AC31
-test("AC31 a code cell is clipped and does not wrap", async () => {
-  const s = await setup();
-  const tree = await open(s, "src/a.js");
-  const row = allRows(tree)[1];
-  assert.ok(chain(row, "keep").some((n) => hasCall(n, "overflow_hidden")), "a clipped code cell");
-  assert.equal(walk(row).some((n) => hasCall(n, "flex_wrap") || hasCall(n, "whitespace_normal")), false);
+// AC31 (2026-11-26, scope change by Andersson): a long line wraps onto more rows of ROW_H; no wheel pans the code.
+const longPatch = (a, b) => ({ stat: status(" M l.txt"), nums: numstat("1\t1\tl.txt"), patches: { "l.txt": patch("l.txt", "@@ -1 +1 @@", `-${a}`, `+${b}`) } });
+const codeOf = (row) => texts(row).slice(3).join("");
+
+test("AC31 unified: a long line wraps onto rows that fit the cell; the next rows have no numbers and no sign", async () => {
+  const b = `R${"b".repeat(199)}`;
+  const s = await setup({ ...longPatch("a", b), width: 400 });
+  const tree = await open(s, "l.txt");
+  const rows = allRows(tree);
+  assert.ok(rows.length > 4, `more rows than the 3 lines: ${rows.length}`);
+  const first = rows.findIndex((r) => texts(r)[2] === "+");
+  const pieces = rows.slice(first).map(codeOf);
+  assert.equal(pieces.join(""), b, "the pieces hold the whole line in order");
+  const cols = Math.max(...pieces.map((p) => p.length));
+  assert.ok(cols * diff.CHAR_W <= 400 - diff.gutter([], "unified"), "every piece fits the cell");
+  assert.deepEqual(texts(rows[first]).slice(0, 3), ["", "1", "+"]);
+  for (const r of rows.slice(first + 1)) assert.deepEqual(texts(r).slice(0, 3), ["", "", ""], "a next row has no number and no sign");
 });
 
-test("AC31 in split a horizontal wheel over the right half moves only the new side", async () => {
-  const oldLine = `L${"a".repeat(200)}`, newLine = `R${"b".repeat(200)}`;
-  const s = await setup({ stat: status(" M l.txt"), nums: numstat("1\t1\tl.txt"), patches: { "l.txt": patch("l.txt", "@@ -1 +1 @@", `-${oldLine}`, `+${newLine}`) }, width: 600 });
-  let tree = await open(s, "l.txt");
-  const side = (t, str) => JSON.stringify(chain(rowsOf(t, [1, 2])[0], str).slice(1).map((n) => n.calls.map(([k, a]) => [k, a.filter((x) => typeof x !== "function")])));
-  const base0 = { old: side(tree, oldLine), neu: side(tree, newLine) };
-  const event = (x) => ({ delta: { x, y: 0 }, local_position: { x: 500, y: 40 }, position: { x: 500, y: 40 }, modifiers: {}, touch_phase: "moved" });
-  s.m.wheel(tree, event(120));
-  tree = s.m.render();
-  if (side(tree, newLine) === base0.neu) { s.m.wheel(tree, event(-120)); tree = s.m.render(); }
-  assert.notEqual(side(tree, newLine), base0.neu, "the new side moved");
-  assert.equal(side(tree, oldLine), base0.old, "the old side stayed");
+test("AC31 split: the pair takes the rows of its longer side; the short side goes on with an empty cell, not the filler", async () => {
+  const a = `L${"a".repeat(149)}`;
+  const s = await setup({ ...longPatch(a, "Rz"), width: 800 });
+  const tree = await open(s, "l.txt");
+  const rows = allRows(tree).slice(1);
+  assert.ok(rows.length > 1, "the old side wraps");
+  assert.equal(rows.map((r) => texts(r).filter((x) => /^L?a+$/.test(x)).join("")).join(""), a);
+  assert.ok(rows.every((r) => svgs(r).length === 0), "no hatch filler: both sides have a line");
+  assert.ok(texts(rows[0]).includes("Rz"));
+  for (const r of rows.slice(1)) assert.equal(texts(r).includes("Rz"), false);
+});
+
+test("AC31 a narrower tab wraps the same line onto more rows", async () => {
+  const b = `R${"b".repeat(299)}`;
+  const s = await setup({ ...longPatch("a", b), width: 500 });
+  const wide = vlist(await open(s, "l.txt")).arg.count;
+  s.m.resize(s.m.render(), 300);
+  const narrow = vlist(s.m.render()).arg.count;
+  assert.ok(narrow > wide, `${narrow} rows at 300 px, ${wide} at 500 px`);
+});
+
+test("AC31 split to unified cuts the line again for the wider unified cell", async () => {
+  const b = `R${"b".repeat(149)}`;
+  const s = await setup({ ...longPatch("a", b), width: 800 });
+  const tree = await open(s, "l.txt");
+  const split = vlist(tree).arg.count;
+  s.m.click(findById(tree, "diff-mode-unified"));
+  const unified = allRows(s.m.render());
+  const first = unified.findIndex((r) => texts(r)[2] === "+");
+  assert.equal(unified.slice(first).map(codeOf).join(""), b, "the unified pieces hold the whole line");
+  assert.ok(unified.length - first < split - 1, `fewer rows for the line in unified (${unified.length - first}) than in split (${split - 1})`);
+});
+
+test("AC31 the code area has no wheel handler and no cell is moved sideways", async () => {
+  const s = await setup({ ...longPatch(`L${"a".repeat(200)}`, `R${"b".repeat(200)}`) });
+  const tree = await open(s, "l.txt");
+  assert.equal(hasCall(findById(tree, "diff-code"), "on_scroll_wheel"), false);
+  assert.equal(allRows(tree).some((r) => walk(r).some((n) => hasCall(n, "left") || hasCall(n, "flex_wrap") || hasCall(n, "whitespace_normal"))), false);
 });
 
 // AC35
@@ -609,67 +646,6 @@ test("AC37 a pending read is not restarted by a watch refresh; one re-read follo
   await until(() => { const t = s.m.render(); return findById(t, "diff-code") && !texts(t).includes("Loading diff…") && t; }, "the diff");
   for (let i = 0; i < 10; i++) await settle();
   assert.equal(hold.started.length, 2, "exactly one re-read");
-});
-
-// The pan offset is read as the change of the numbers on the cell's chain, so no pixel value is pinned.
-const mag = (tree, str, row = 1) => chain(rowsOf(tree, [row, row + 1])[0], str).slice(1)
-  .flatMap((n) => n.calls.flatMap(([, args]) => args)).filter((x) => typeof x === "number").reduce((sum, x) => sum + Math.abs(x), 0);
-function pan(s, str, dx, { x = 500, row = 1, withPosition = true } = {}) {
-  const base = mag(s.m.render(), str, row);
-  for (const sign of [1, -1]) {
-    const event = { delta: { x: sign * dx, y: 0 }, modifiers: {}, touch_phase: "moved", ...(withPosition ? { local_position: { x, y: 40 }, position: { x, y: 40 } } : {}) };
-    s.m.wheel(s.m.render(), event);
-    const moved = Math.abs(mag(s.m.render(), str, row) - base);
-    if (moved) return moved;
-  }
-  return 0;
-}
-const longPatch = (a, b) => ({ stat: status(" M l.txt"), nums: numstat("1\t1\tl.txt"), patches: { "l.txt": patch("l.txt", "@@ -1 +1 @@", `-${a}`, `+${b}`) } });
-
-test("AC31 the pan clamps when a re-read brings shorter lines", async () => {
-  const phase = { n: 0 };
-  const long = [`L${"a".repeat(200)}`, `R${"b".repeat(200)}`], short = ["Lq", "Rz"];
-  const text = () => patch("l.txt", "@@ -1 +1 @@", `-${phase.n ? short[0] : long[0]}`, `+${phase.n ? short[1] : long[1]}`);
-  const s = await setup({ ...longPatch(...long), patches: { "l.txt": text }, width: 600 });
-  await open(s, "l.txt");
-  assert.ok(pan(s, long[1], 100000) > 0, "the new side panned");
-  phase.n = 1;
-  world.watchers.filter((w) => w.root === ROOT).at(-1).resolve([`${ROOT}/l.txt`]);
-  const tree = await until(() => { const t = s.m.render(); return findById(t, "diff-code") && vlist(t) && rowsOf(t, [1, 2])[0].kids.length && chain(rowsOf(t, [1, 2])[0], short[1]) && t; }, "the short lines");
-  const panned = mag(tree, short[1]);
-  reset();
-  const fresh = await setup({ ...longPatch(...short), width: 600 });
-  assert.equal(panned, mag(await open(fresh, "l.txt"), short[1]), "no blank space: the offset is back at the new limit");
-});
-
-test("AC31 the pan clamps after split to unified", async () => {
-  const a = `L${"a".repeat(69)}`, b = `R${"b".repeat(69)}`;
-  const s = await setup({ ...longPatch(a, b), width: 800 });
-  let tree = await open(s, "l.txt");
-  assert.ok(pan(s, b, 100000) > 0, "the split cell is too narrow for the line");
-  s.m.click(findById(tree, "diff-mode-unified"));
-  const panned = mag(s.m.render(), b, 2);
-  reset();
-  const fresh = await setup({ ...longPatch(a, b), width: 800 });
-  tree = await open(fresh, "l.txt");
-  fresh.m.click(findById(tree, "diff-mode-unified"));
-  assert.equal(panned, mag(fresh.m.render(), b, 2), "the unified cell holds the line: no offset");
-});
-
-test("AC31 a wheel delta is divided by the zoom", async () => {
-  world.zoom = 1.5;
-  const s = await setup({ ...longPatch(`L${"a".repeat(200)}`, `R${"b".repeat(200)}`) });
-  await open(s, "l.txt");
-  const moved = pan(s, `R${"b".repeat(200)}`, 150, { x: 100, row: 2 });
-  assert.ok(Math.abs(moved - 100) < 1e-6, `moved ${moved}, expected 100`);
-});
-
-test("AC31 a wheel event with no local_position changes nothing", async () => {
-  const a = `L${"a".repeat(200)}`, b = `R${"b".repeat(200)}`;
-  const s = await setup({ ...longPatch(a, b), width: 600 });
-  await open(s, "l.txt");
-  assert.equal(pan(s, b, 120, { withPosition: false }), 0);
-  assert.ok(pan(s, b, 120) > 0, "the same wheel with a position moves it");
 });
 
 // AC15: nothing is read while the store says another tab; one re-read follows on return.
