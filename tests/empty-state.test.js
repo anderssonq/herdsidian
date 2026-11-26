@@ -181,10 +181,26 @@ test("AC41 Changes: the ready state, the loading text and an error keep today's 
   assert.ok(textsOf(findById(failed.tree, "changes-summary")).some((s) => s.includes("fake status failure")));
 });
 
-test("AC41 Changes: a repo with no changes is ready: no empty state, the summary row stays", async () => {
+test("AC41 Changes: a repo with no changes shows the empty state with the branch title, the folder and the hint", async () => {
   const { tree } = await changes({ folder: "/work/repo", git: { status: "## main\0", numstat: "" } });
-  assert.equal(findById(tree, "empty-state"), null);
+  assert.ok(findById(tree, "empty-state"));
+  assert.deepEqual(textsOf(findById(tree, "empty-state-title")), ["No changes on main"]);
+  assert.deepEqual(textsOf(findById(tree, "empty-state-detail")), ["/work/repo"]);
+  assert.deepEqual(textsOf(findById(tree, "empty-state-hint")), ["Edits in this repo show up here."]);
+  assert.equal(findById(tree, "changes-summary"), null, "no summary row");
+  assert.ok(walk(tree).some((n) => n.kind === "svg" && n.arg === ICON), "the branch icon");
+});
+
+test("AC41 Changes: a pane folder inside the repo names the repo root, since git status covers the whole repo", async () => {
+  const { tree } = await changes({ folder: "/work/repo/sub", git: { top: "/work/repo", status: "## main\0", numstat: "" } });
+  assert.deepEqual(textsOf(findById(tree, "empty-state-title")), ["No changes on main"]);
+  assert.deepEqual(textsOf(findById(tree, "empty-state-detail")), ["/work/repo"]);
+});
+
+test("AC41 Changes: a repo with one changed file keeps the summary row and shows no empty state", async () => {
+  const { tree } = await changes({ folder: "/work/repo", git: { status: "## main\0 M a.txt\0", numstat: "1\t0\ta.txt\0" } });
   assert.ok(findById(tree, "changes-summary"));
+  assert.equal(findById(tree, "empty-state"), null);
 });
 
 test("AC41 Changes: a pane switch between two non-repo folders shows the folder of the answer applied, never a stale one", async () => {

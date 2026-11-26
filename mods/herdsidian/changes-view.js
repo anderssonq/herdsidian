@@ -11,7 +11,7 @@ import { location } from "./files-view.js";
 import { SIDEBAR_STORE, SIDEBAR_LAYOUT_STORE, shownTabs } from "./sidebar.js";
 import { diffView, paneParts, zoomOf } from "./diff-view.js";
 import { DiffPane } from "./diff-pane.js";
-import { emptyFor } from "./empty-state-view.js";
+import { emptyFor, cleanState } from "./empty-state-view.js";
 import { badgeOf, splitPath, maxChange, sizeBar, neighbors, diffKey } from "./diff.js";
 import { topArgs, statusArgs, diffArgs, patchArgs, classifyTop, publishes, readRoots, parseStatus, parseNumstat, mergeRows, relevant, summary,
   sumStats, wholeFile, cappedBody, patchBody, execFailed, BINARY, DEBOUNCE_MS, MAX_WAIT_MS } from "./changes.js";
@@ -305,6 +305,7 @@ export class ChangesTab {
     if (this.shown || this.pending) return root.child(this.diff(t));
     const empty = emptyFor(t, k, d.state, watch.dir);
     if (empty) return root.child(empty);
+    if (d.state === "ready" && d.count === 0) return root.child(cleanState(t, k, summary(0, d.branch), d.root ?? watch.dir));
     const line = d.state === "ready" ? summary(d.count, d.branch) : d.state === "loading" ? "Loading changes…" : d.error;
     const more = d.count - d.files.length, max = maxChange(d.files);
     const { add, del } = d.total ?? { add: 0, del: 0 };

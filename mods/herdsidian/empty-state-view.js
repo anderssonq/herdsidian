@@ -21,6 +21,11 @@ export function emptyFor(t, k, state, dir) {
   return text ? emptyState(t, k, { icon: ICON, ...text, ...(state !== "nofolder" && dir ? { detail: dir } : {}) }) : null;
 }
 
+// The block Changes draws for a repo with no changes: `title` is the "No changes on <branch>" line, `dir` the repo root (or null).
+export function cleanState(t, k, title, dir) {
+  return emptyState(t, k, { icon: ICON, title, ...(dir ? { detail: dir } : {}), hint: "Edits in this repo show up here." });
+}
+
 // -> Element. `t`: the theme, `k`: tokens(t). `icon`: an svg path, `title`: text; `detail` (a folder) and `hint` are drawn only when given.
 export function emptyState(t, k, { icon, title, detail, hint }) {
   return v_flex().id("empty-state").flex_1().min_h(0).items_center().justify_center().gap(10).px(28).pb(24).text_center()
