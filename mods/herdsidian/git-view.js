@@ -285,9 +285,7 @@ export class GitTab {
     if (gen !== this.diffGen || !this.pending) return;
     const { commit, file } = this.pending;
     this.pending = null;
-    this.diff = { commit, file, body, rows: null, long: null };
-    this.pane.reset();
-    this.pane.clamp(this.diff);
+    this.diff = { commit, file, body, rows: null };
     const index = files.indexOf(file);
     if (index >= 0) this.handles.tabs?.scroll_to_item?.(index);
   }
@@ -315,7 +313,7 @@ export class GitTab {
     const act = diffKey(e.keystroke, {
       prev: () => n.prev && this.openFile(n.prev, cx),
       next: () => n.next && this.openFile(n.next, cx),
-      toggle: () => this.pane.toggle(this.pane.mode().mode === "split" ? "unified" : "split", this.diff),
+      toggle: () => this.pane.toggle(this.pane.mode().mode === "split" ? "unified" : "split"),
       close: () => this.closeDiff(),
     });
     if (!act) return;
@@ -328,8 +326,7 @@ export class GitTab {
     const zoom = zoomOf(), size = { width: width / zoom, height: height / zoom };
     const changed = size.width !== this.size?.width || size.height !== this.size?.height;
     this.size = size;
-    if (this.pane.resized(size.width)) this.pane.clamp(this.diff);
-    if (changed) cx.notify();
+    if (this.pane.resized(size.width) || changed) cx.notify();
   }
 
   // The detail height shown: the stored one, clamped to the tab once its height is known (AC37).
@@ -423,7 +420,7 @@ export class GitTab {
     const loading = this.pending && this.pending.file.path !== this.diff?.file.path;
     const open = loading ? this.pending : this.diff, files = this.diffFiles();
     const { index, prev, next } = neighbors(files, open.file.path);
-    const parts = paneParts(t, this.pane, open, loading, () => this.diff);
+    const parts = paneParts(t, this.pane, open, loading);
     // No "Open in Files" in a commit: the file may not be in the work tree any more, so diffView needs no openFiles.
     const m = { ...parts.m, file: open.file, files, index, prev, next, handles: this.handles, hideOpenFiles: true, backTip: "Back to the commit" };
     return diffView(t, diffTokens(t), m, {
