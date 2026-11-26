@@ -141,7 +141,7 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
      bar with every provider, the focused one first and tagged "focused pane", and opencode's
      7-day cost, Kiro's and Grok's monthly use. From 90 % the percent and the bar use
      `blocked`. The theme name is not here (it lives in Settings). `⇧⌘P` still opens commands.
-3. **Right sidebar** (the `herdsidian` block), 380 px (min 44, max 720), hidden until
+3. **Right sidebar** (the `herdsidian` block), 380 px (min 44, max 760), hidden until
    `⇧⌘O`, `⇧⌘E`, `⇧⌘G` or `⇧⌘H`. Same glass as the left sidebar. Header 52 px with a
    segmented control of four equal tabs, **Notes · Files · Changes · Git**, then the
    collapse button. Each tab's tooltip carries its key ("Notes  ⇧⌘O", none when Key hints
@@ -150,6 +150,12 @@ Root row: `titlebar: "none"`, macOS `traffic_lights` at [16, 19],
    The rail (44 px) shows one icon per tab.
    The key of the tab already shown hides the sidebar. The palette row "Right sidebar tab"
    cycles the tabs.
+   The edge drags up to 760 px. Switching tabs animates: the selected pill slides 180 ms
+   `ease-out` (`left` and `width`), and the new tab's body fades in and slides 8 px over
+   160 ms `ease-out`. The active pill of the pane tab bar slides 180 ms `ease-out`.
+   Drag a segment to reorder the four tabs; the keys follow the tab. Right-click a segment:
+   **Open below** shows a second tab under the top one, with a draggable divider; **Close
+   below** removes it.
    - **Files tab**: the file tree and preview, code moved from Herdr's `files` mod into
      `files-view.js` and `files-tree.js` (a mod cannot host another mod's view). The folder
      path is a 30 px `muted` line under the tabs.
@@ -349,8 +355,10 @@ Look (layout root):
   - Changes on disk (Obsidian, git) refresh the tree; the open note takes
     the new text when it has no unsaved edits. Writes under `.obsidian`,
     `.git`, `.trash` and `node_modules` are ignored.
-  - New note: `Untitled.md` (or `Untitled N.md`) at the vault root, opened
-    in Edit.
+  - New note: an inline name row at the top of Notes, with the target folder and the
+    placeholder `Untitled`. An empty name gives `Untitled.md` (or `Untitled N.md`) in that
+    folder, opened in Edit. A typed name is trimmed and gets `.md` unless it already ends in
+    `.md`. `:` is refused in names; the reason shows under the input and nothing is written.
   - Collapse: resizes the block to 44 px and remembers the width it had.
   - Graph: built from `[[wikilinks]]` (and note embeds) found by `awk`, with
     backlinks derived. The center is the open note, else the first context
@@ -411,13 +419,13 @@ Look (layout root):
   pane header → `herdsidian-pane`, `workspace-status` → `herdsidian-status`,
   and a last root child
   `{ "id": "herdsidian", "type": "block", "hidden": true, "size": { "px": 380 },
-  "min": 44, "max": 720, "content": { "mod": "herdsidian" } }`. The root also
+  "min": 44, "max": 760, "content": { "mod": "herdsidian" } }`. The root also
   sets `"toast": "herdsidian-toast"`.
 - The eight mods:
 
   | Mod | Role |
   |---|---|
-  | `herdsidian` | The right sidebar: Notes, Files and Changes tabs, and the ⌘K palette (with Settings). |
+  | `herdsidian` | The right sidebar: Notes, Files, Changes and Git tabs, and the ⌘K palette (with Settings). |
   | `herdsidian-chrome` | Sidebar header (hide button over the top sheen) and footer. Clone of `workspace-chrome`. |
   | `guide-spaces` | Spaces list with `⌃N` hints. Clone of `spaces`. |
   | `guide-agents` | Agents list with `⌥⌘N` hints. Clone of `agents`. |

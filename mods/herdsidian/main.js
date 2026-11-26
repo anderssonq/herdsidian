@@ -7,16 +7,22 @@ import { v_flex, h_flex, Editor, EditorState, InputState, Input, TextView } from
 import { HIDDEN, base, dirOf, hidden, render, linkTarget, resolve } from "./notes.js";
 import { changeMarks } from "./marks.js";
 import { exec, readTextFile, writeTextFile, watchFolder, pickFolder, theme, settings, nextCommand, run, layout, window,
-  agents, panes, spaces, focused, home, notify, props, shared, setShared, keys } from "herdr";
+  agents, panes, spaces, focused, home, notify, props, shared, setShared, keys, openOverlay } from "herdr";
 import { alpha, tokens, RADIUS } from "./tokens.js";
 import { find } from "./layout.js";
 import { headerDots, keycap } from "./ui.js";
 import { iconButton } from "./icon-button.js";
-import { SIDEBAR_STORE, readSidebar } from "./sidebar.js";
-import { tabControl, railTabs, changeCount, tabTips } from "./sidebar-view.js";
+import { SIDEBAR_STORE, SIDEBAR_LAYOUT_STORE, SIDEBAR_WIDTH, readSidebar, readSidebarLayout, moveTab, resolveSplit, splitMenu,
+  restoreWidth } from "./sidebar.js";
+import { tabControl, railTabs, changeCount, tabTips, tabsWidth, bodyFrame, splitFrame } from "./sidebar-view.js";
+import { TabMenu } from "./sidebar-menu-view.js";
+import { stepMotion } from "./sidebar-motion.js";
+import { dragStep, outside } from "./sidebar-drag.js";
+import { placeMenu } from "./actions.js";
 import { FilesTab } from "./files-view.js";
 import { ChangesTab, ChangesWatch } from "./changes-view.js";
 import { GitTab } from "./git-view.js";
+import { zoomOf } from "./diff-view.js";
 import { keyHint } from "./keys.js";
 import { settings as herdsidianSettings } from "./settings.js"; // herdr has its own settings()
 import { buildIndex, updateIndex, missingRaw, neighborhood, layout as ringLayout, toScreen, zoomAt, sectionMessage, placeLabels, AREA } from "./graph.js";
@@ -51,12 +57,20 @@ const width = () => find(layout(), "herdsidian")?.size?.px;
 // at this seam until the next render (measured; accepted, F2 tolerates a seam at Notes).
 // 0 when the width or Notes' own is unknown.
 export const blockX = () => {
-  const zoom = settings()?.zoom, total = globalThis.window?.viewport_size?.()?.width, own = width();
+  const total = globalThis.window?.viewport_size?.()?.width, own = width();
   if (typeof total !== "number" || typeof own !== "number") return 0;
-  const x = total / (typeof zoom === "number" && zoom > 0 ? zoom : 1) - own;
+  const x = total / zoomOf() - own;
   return x > 0 ? x : 0;
 };
-const narrow = () => (width() ?? Infinity) < 160;
+const narrow = () => (width() ?? Infinity) < SIDEBAR_WIDTH.narrow;
+
+// The layout store with some fields changed: always the whole normalized object, in one write (plan, Stores).
+const setLayout = (patch) => setShared(SIDEBAR_LAYOUT_STORE, { ...readSidebarLayout(shared(SIDEBAR_LAYOUT_STORE)), ...patch });
+// The pair that matches the stored tab (plan Decision 2), from fresh reads; nothing when it already matches.
+const fixSplit = () => {
+  const { fix } = resolveSplit(readSidebar(shared(SIDEBAR_STORE)).tab, readSidebarLayout(shared(SIDEBAR_LAYOUT_STORE)).split);
+  if (fix) setLayout({ split: fix });
+};
 
 // Folders and .md files of one folder, folders first.
 async function directory(path) {
@@ -71,13 +85,20 @@ async function directory(path) {
 export default class Notes extends View {
   init(_props, cx) {
     // The palette and the tree's menu and dialogs are copies of this mod: they start none of the Notes work below.
-    if (props()?.overlay) { this.overlay = props().vaultSurface ? new VaultSurface(cx) : new Palette(cx); return; }
+    if (props()?.overlay) {
+      this.overlay = props().vaultSurface ? new VaultSurface(cx) : props().sidebarMenu ? new TabMenu(cx) : new Palette(cx);
+      return;
+    }
     // No vault until one is chosen: the panel asks for it.
     this.vault = localStorage.getItem("vault");
     publish("herdsidian.vault", this.vault);
     this.pathEpoch = 0; this.moving = false; this.actions = new VaultActions(this);
     // What the Files and Changes tab objects (Files made in init, Changes on its first render) may call back.
-    this.host = { cx, selectTab: (tab) => setShared(SIDEBAR_STORE, { tab }), files: () => this.tabBody("files"), vault: () => this.vault, changes: () => this.changesWatch };
+    // A tab picked here also fixes the split pair at once, so a swap is never drawn from a stale pair.
+    const selectTab = (tab) => { setShared(SIDEBAR_STORE, { tab }); fixSplit(); };
+    this.host = { cx, selectTab, files: () => this.tabBody("files"), vault: () => this.vault, changes: () => this.changesWatch };
+    // The tab bar: the last motion step, the drag state, the measured control width and its pointer handlers.
+    this.motion = null; this.tabDrag = null; this.tabsPx = null; this.tabOn = this.tabHandlers();
     // The git watch starts with the mod, not with the tab: its count feeds the Changes tab badge.
     this.changesWatch = new ChangesWatch(this.host);
     // The Files tab object is made here too: its 10 s timer needs init's cx. It does no work while the tab is not shown.
@@ -312,6 +333,7 @@ export default class Notes extends View {
     // Unsaved changes ask first; the old note closes before the vault switches.
     if (this.dirty) return this.leave((cx) => { this.close(); this.setVault(path, cx); }, cx);
     this.close();
+    this.actions.cancelNoteName(cx); // the prompt belongs to the old vault (AC36)
     localStorage.setItem("vault", path);
     publish("herdsidian.vault", path);
     this.vault = path; this.entries = new Map(); this.folders = new Set(); this.all = []; this.selected = null; this.notice = null;
@@ -345,6 +367,7 @@ export default class Notes extends View {
   }
 
   open(path, cx, mode = "read") {
+    this.actions.cancelNoteName(cx); // an opened note closes the name prompt (AC36)
     // Also for the note already open: reading it again would drop the typed text.
     this.leave((cx) => this.read(path, cx, mode), cx);
   }
@@ -429,7 +452,7 @@ export default class Notes extends View {
 
   newNote(cx) {
     if (!this.vault) return this.chooseVault(cx);
-    this.actions.createNote("", cx);
+    this.actions.askNoteName("", cx);
   }
 
   // A link in the rendered note: another note, a web page, or a relative .md path.
@@ -479,11 +502,49 @@ export default class Notes extends View {
       : [div().p(8).text_size(12).text_color(t.muted).child("No note matches")];
   }
 
-  // To the rail, or back to the width it had.
+  // To the rail, or back to the width it had. layout.resize does not clamp what it stores, so restoreWidth does (AC9).
   collapse() {
     const rail = narrow();
-    if (!rail) localStorage.setItem("width", String(width() ?? 380));
-    run("layout.resize", { id: "herdsidian", px: rail ? Number(localStorage.getItem("width")) || 380 : 44 });
+    if (!rail) localStorage.setItem("width", String(width() ?? SIDEBAR_WIDTH.start));
+    run("layout.resize", { id: "herdsidian", px: rail ? restoreWidth(localStorage.getItem("width")) : SIDEBAR_WIDTH.rail });
+  }
+
+  // The tab control's pointer handlers (sidebar-view.js `on`): drag to reorder, the split menu, the measured width.
+  tabHandlers() {
+    return {
+      press: (id, _e, cx) => this.dragTabs({ type: "press", id }, cx),
+      move: (id, _e, cx) => this.dragTabs({ type: "move", id }, cx),
+      release: (id, _e, cx) => this.dragTabs({ type: "release", id }, cx),
+      up: (_e, cx) => this.dragTabs({ type: "up" }, cx),
+      // Fires on every pointer move in the window: only a drag in progress listens.
+      windowMove: (e, cx) => { if (this.tabDrag && outside(e)) this.dragTabs({ type: "leave" }, cx); },
+      menu: (id, e, cx) => this.tabMenu(id, e, cx),
+      size: (size, cx) => {
+        const px = size.width / zoomOf();
+        if (px === this.tabsPx) return;
+        this.tabsPx = px;
+        cx.notify();
+      },
+    };
+  }
+
+  // One step of the reorder machine (sidebar-drag.js). A reorder writes only the order, never { tab } (AC12, AC16).
+  dragTabs(event, cx) {
+    const before = this.tabDrag, { state, move } = dragStep(before, event);
+    this.tabDrag = state;
+    if (move) setLayout({ order: moveTab(readSidebarLayout(shared(SIDEBAR_LAYOUT_STORE)).order, move.from, move.to) });
+    // A move gives a new state object each time: draw again only when the feedback changed.
+    if (move || state?.from !== before?.from || state?.over !== before?.over) cx.notify();
+  }
+
+  // A right-click on a segment: Open below or Close below in a popup copy of this mod, nothing on the top tab (AC20).
+  tabMenu(id, e, cx) {
+    cx.stop_propagation();
+    const { top, bottom } = resolveSplit(readSidebar(shared(SIDEBAR_STORE)).tab, readSidebarLayout(shared(SIDEBAR_LAYOUT_STORE)).split);
+    const item = splitMenu(id, top, bottom);
+    if (!item) return;
+    const place = placeMenu(e.position, 1, globalThis.window?.viewport_size?.(), settings()?.zoom);
+    openOverlay({ mod: "herdsidian", kind: "popup", frame: "none", ...place, props: { sidebarMenu: { tab: id, op: item.op } } });
   }
 
   // The search box comes and goes; hiding it clears the search.
@@ -496,11 +557,11 @@ export default class Notes extends View {
     cx.notify();
   }
 
-  rail(t, tab) {
+  rail(t, tab, order) {
     const k = tokens(t);
     return v_flex().id("herdsidian").size_full().pt(8).gap(4).items_center().bg(k.glass)
       .child(iconButton("notes-expand", t, "panel-right", "Expand sidebar", () => this.collapse()))
-      .children(railTabs(t, k, { tab, onSelect: (id) => { this.host.selectTab(id); this.collapse(); } }))
+      .children(railTabs(t, k, { tab, order, onSelect: (id) => { this.host.selectTab(id); this.collapse(); } }))
       .when(Boolean(this.vault), (el) => el.child(iconButton("notes-search-rail", t, "search", "Find a note", (_e, cx) => this.toggleSearch(cx))))
       .when(!this.note, (el) => el.child(iconButton("notes-new-rail", t, "square-pen", "New note", (_e, cx) => { this.collapse(); this.newNote(cx); })));
   }
@@ -790,18 +851,41 @@ export default class Notes extends View {
     if (this.overlay) return this.overlay.render(cx);
     this.handleShared(cx);
     const t = theme();
-    const tab = readSidebar(shared(SIDEBAR_STORE)).tab;
-    // The Git tab not shown: its card goes and its next show reloads (AC17, AC45). No command runs.
-    if (tab !== "git" || narrow()) this.gitTab?.left();
-    if (narrow()) return this.rail(t, tab);
+    const tab = readSidebar(shared(SIDEBAR_STORE)).tab, stored = readSidebarLayout(shared(SIDEBAR_LAYOUT_STORE));
+    // The bottom tab is derived from the pair (plan Decision 2), so this render already draws a swap.
+    const { bottom, fix } = resolveSplit(tab, stored.split);
+    // Another mod wrote { tab }: the pair is written after this render, from fresh reads.
+    if (fix) cx.spawn(async (cx) => { await cx.sleep(0); fixSplit(); });
+    const rail = narrow(), shown = bottom ? [tab, bottom] : [tab];
+    // The Git tab in neither section: its card goes and its next show reloads (AC17, AC45, AC28). No command runs.
+    if (!shown.includes("git") || rail) this.gitTab?.left();
+    // The name prompt lives in the Notes tab: it closes when Notes is not shown (no cx here: render may not notify).
+    if (this.actions.naming && !shown.includes("notes")) this.actions.closeNoteName();
+    const step = stepMotion(this.motion, { top: tab, shown, order: stored.order, wide: !rail, width: rail ? null : this.tabsPx ?? tabsWidth(width()) });
+    this.motion = step.state;
+    // The first render of a switch draws the start values; one more render draws the end ones (plan Decision 4).
+    if (step.again) cx.spawn(async (cx) => { await cx.sleep(0); cx.notify(); });
+    if (rail) return this.rail(t, tab, stored.order);
     const k = tokens(t);
+    const frame = (id) => bodyFrame(id, id === "notes" ? this.notesTab(t, cx) : this.tabBody(id).render(t, cx), step.body);
+    const body = bottom
+      ? splitFrame(t, k, { top: { tab, frame: frame(tab) }, bottom: { tab: bottom, frame: frame(bottom) }, splitTop: stored.splitTop,
+        // on_resize sizes are window px (plan R5); only the top panel's height is stored.
+        onResize: (sizes) => {
+          const top = sizes?.[0] / zoomOf();
+          if (Number.isFinite(top) && top !== stored.splitTop) setLayout({ splitTop: top });
+        },
+        onClose: (_e, cx) => { setLayout({ split: null }); cx.notify(); } })
+      : frame(tab);
     return v_flex().id("herdsidian").size_full().min_h(0).bg(k.glass).text_color(t.foreground).text_size(13)
       .child(h_flex().h(52).flex_none().relative().overflow_hidden().pl(12).pr(8).gap(8).items_center()
         // The block's left edge is the window width minus Notes' own width, so the grid lines up with the toolbar's.
         .child(headerDots(k, "herdsidian", blockX()))
-        .child(tabControl(t, k, { tab, count: changeCount(shared("herdsidian.changes")), tips: tabTips(keys(), shared("layout"), herdsidianSettings().keyHints), onSelect: (id, cx) => { this.host.selectTab(id); cx.notify(); } }))
+        .child(tabControl(t, k, { tab, count: changeCount(shared("herdsidian.changes")), tips: tabTips(keys(), shared("layout"), herdsidianSettings().keyHints),
+          onSelect: (id, cx) => { this.host.selectTab(id); cx.notify(); },
+          order: stored.order, pillTab: step.pillTab, width: step.state.width, slide: step.slide, drag: this.tabDrag, on: this.tabOn }))
         .child(iconButton("notes-collapse", t, "panel-right", "Collapse to rail", () => this.collapse())))
-      .child(tab === "notes" ? this.notesTab(t, cx) : this.tabBody(tab).render(t, cx));
+      .child(body);
   }
 
   // The Files and Git tab objects are made in init (they need init's cx); the Changes one on the first render of that tab.
@@ -829,6 +913,8 @@ export default class Notes extends View {
           .when(Boolean(this.vault), (el) => el.child(iconButton("notes-search", t, "search", "Find a note", (_e, cx) => this.toggleSearch(cx))))
           .child(iconButton("notes-new", t, "square-pen", "New note", (_e, cx) => this.newNote(cx)))
           .child(iconButton("notes-vault", t, "folder", "Choose the vault", (_e, cx) => this.chooseVault(cx)))))
+      // The New note name prompt, above the tree (plan, Name prompt).
+      .when(Boolean(this.actions.naming), (el) => el.child(this.actions.nameRow(t, tokens(t))))
       .when(Boolean(this.error), (el) => el.child(div().px(12).pb(6).text_size(11.5).text_color(t.blocked).child(this.error)))
       .when(Boolean(this.notice), (el) => el.child(div().px(12).pb(6).text_size(11.5).text_color(t.muted).child(this.notice)))
       .child(this.note ? this.reader(t) : this.browser(t))

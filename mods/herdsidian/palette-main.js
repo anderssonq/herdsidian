@@ -20,7 +20,7 @@ import { find } from "./layout.js";
 import { isGlass, withGlass } from "./glass.js";
 import { settings, setSetting } from "./settings.js";
 import { themeCalls, selectedFamily, parseAppearance } from "./theme-pick.js";
-import { SIDEBAR_STORE, readSidebar } from "./sidebar.js";
+import { SIDEBAR_STORE, SIDEBAR_WIDTH, readSidebar } from "./sidebar.js";
 import { paletteCard, PLACEHOLDER, linkPlaceholder } from "./palette-view.js";
 import { ARCHIVE_KEY, readArchive, withArchived, withoutArchived, endIndex, restoreIndex } from "./archive.js";
 
@@ -355,8 +355,8 @@ export class Palette {
     const tree = layout();
     const hasList = hasMod(tree, "guide-agents");
     const sidebarHidden = !isShown(tree, "herdsidian"), sidebarTab = readSidebar(shared(SIDEBAR_STORE)).tab;
-    // The sidebar is a rail under 160 px, as Notes itself decides (main.js narrow()).
-    const sidebarRail = (find(tree, "herdsidian")?.size?.px ?? Infinity) < 160;
+    // The sidebar is a rail under the narrow width, as Notes itself decides (main.js narrow()).
+    const sidebarRail = (find(tree, "herdsidian")?.size?.px ?? Infinity) < SIDEBAR_WIDTH.narrow;
     const current = settings();
     const bindings = keys(), layoutName = shared("layout"), order = shared("guide-agents.order");
     const themeList = themes(), family = selectedFamily(herdrSettings()), appearance = this.appearance;

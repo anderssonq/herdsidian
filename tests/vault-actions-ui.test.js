@@ -9,6 +9,8 @@ import { during } from "./support/live-cx.js";
 let zoom = 1;
 globalThis.__herdsidianStubs.herdr.settings = () => ({ zoom });
 
+// The kit loads the mods, so it comes after the zoom stub too.
+const { submitName } = await import("./support/sidebar-kit.js");
 const { default: Notes } = await import("../mods/herdsidian/main.js");
 const { VaultSurface } = await import("../mods/herdsidian/actions-view.js");
 const { Palette } = await import("../mods/herdsidian/palette-main.js");
@@ -231,17 +233,19 @@ test("with no usable viewport the menu opens at the pointer (AC6)", async () => 
 });
 
 test("the rail, no vault, and No note matches have no right-click menu (AC7, AC8)", async () => {
+  // The sidebar tab segments have their own right-click menu (sidebar-motion-layout AC20); this test is about the rest.
+  const vaultRights = (tree) => rightHandlers(tree).filter((n) => !String(n.nodeId).startsWith("sidebar-tab-"));
   const s = await mount({ "a.md": "" });
   s.view.query = "zzz";
   const none = s.tree();
   assert.ok(texts(none).includes("No note matches"));
-  assert.deepEqual(rightHandlers(none), []);
+  assert.deepEqual(vaultRights(none), []);
   s.view.query = "";
   state.layout = { id: "root", children: [{ id: "herdsidian", size: { px: 44 } }] };
-  assert.deepEqual(rightHandlers(s.tree()), []);
+  assert.deepEqual(vaultRights(s.tree()), []);
   state.layout = { id: "root", children: [] };
   localStorage.removeItem("vault");
-  assert.deepEqual(rightHandlers((await mount()).tree()), []);
+  assert.deepEqual(vaultRights((await mount()).tree()), []);
 });
 
 // ---- The overlay branch ----
@@ -313,8 +317,21 @@ test("the header's New note button makes Untitled at the root in edit mode (AC15
   const button = findById(s.tree(), "notes-new");
   during(s.cx, (live) => button.onClick(null, live));
   await settle();
+  submitName(s.view, "", s.cx);
+  await settle();
   assert.equal(state.files[`${VAULT}/Untitled.md`], "");
   assert.deepEqual([s.view.note, s.view.mode], ["Untitled.md", "edit"]);
+});
+
+test("the header's New note button makes the typed name at the root in edit mode (AC15)", async () => {
+  const s = await mount({ "Docs/Untitled.md": "" });
+  const button = findById(s.tree(), "notes-new");
+  during(s.cx, (live) => button.onClick(null, live));
+  await settle();
+  submitName(s.view, "Idea", s.cx);
+  await settle();
+  assert.equal(state.files[`${VAULT}/Idea.md`], "");
+  assert.deepEqual([s.view.note, s.view.mode], ["Idea.md", "edit"]);
 });
 
 test("the rail's New note button makes the next free name at the root in edit mode (AC10, AC15)", async () => {
@@ -323,18 +340,45 @@ test("the rail's New note button makes the next free name at the root in edit mo
   const button = findById(s.tree(), "notes-new-rail");
   during(s.cx, (live) => button.onClick(null, live));
   await settle();
+  submitName(s.view, "", s.cx);
+  await settle();
   assert.equal(state.files[`${VAULT}/Untitled 2.md`], "");
   assert.deepEqual([s.view.note, s.view.mode], ["Untitled 2.md", "edit"]);
+});
+
+test("the rail's New note button makes the typed name at the root in edit mode (AC10, AC15)", async () => {
+  const s = await mount({ "UNTITLED.md": "" });
+  state.layout = { id: "root", children: [{ id: "herdsidian", size: { px: 44 } }] };
+  const button = findById(s.tree(), "notes-new-rail");
+  during(s.cx, (live) => button.onClick(null, live));
+  await settle();
+  submitName(s.view, "Idea", s.cx);
+  await settle();
+  assert.equal(state.files[`${VAULT}/Idea.md`], "");
+  assert.deepEqual([s.view.note, s.view.mode], ["Idea.md", "edit"]);
 });
 
 test("New note in a closed folder opens it and leaves the other folders, selected and in edit mode (AC9, AC11, AC14)", async () => {
   const s = await mount({ "Docs/a.md": "", "Other/b.md": "" }, { open: ["Other"] });
   await act(s, "new-note", "Docs", "dir");
+  submitName(s.view, "", s.cx);
+  await settle();
   assert.equal(state.files[`${VAULT}/Docs/Untitled.md`], "");
   assert.deepEqual([s.view.note, s.view.selected, s.view.mode], ["Docs/Untitled.md", "Docs/Untitled.md", "edit"]);
   assert.deepEqual([...s.view.folders].sort(), ["Docs", "Other"]);
   assert.ok(s.view.entries.get("Docs").some((e) => e.name === "Untitled.md"), "the tree shows it after Back");
   assert.ok(s.view.all.includes("Docs/Untitled.md"));
+});
+
+test("New note with a typed name in a closed folder opens it and leaves the other folders, selected and in edit mode (AC9, AC11, AC14)", async () => {
+  const s = await mount({ "Docs/a.md": "", "Other/b.md": "" }, { open: ["Other"] });
+  await act(s, "new-note", "Docs", "dir");
+  submitName(s.view, "Idea", s.cx);
+  await settle();
+  assert.equal(state.files[`${VAULT}/Docs/Idea.md`], "");
+  assert.deepEqual([s.view.note, s.view.selected, s.view.mode], ["Docs/Idea.md", "Docs/Idea.md", "edit"]);
+  assert.deepEqual([...s.view.folders].sort(), ["Docs", "Other"]);
+  assert.ok(s.view.all.includes("Docs/Idea.md"));
 });
 
 test("New folder makes it closed in the clicked folder, which opens (AC12, AC14)", async () => {
@@ -367,6 +411,8 @@ test("a create in a folder gone since the dialog says so, reloads and creates no
   disk.dirs.delete(`${VAULT}/Docs`);
   delete state.files[`${VAULT}/Docs/a.md`];
   await act(s, "new-note", "Docs", "dir");
+  submitName(s.view, "", s.cx);
+  await settle();
   await act(s, "new-folder", "Docs", "dir", "Sub");
   assert.deepEqual(titles(), ["Docs no longer exists", "Docs no longer exists"]);
   assert.deepEqual(notePaths(), []);
@@ -374,10 +420,36 @@ test("a create in a folder gone since the dialog says so, reloads and creates no
   assert.ok(!s.view.entries.get("").some((e) => e.name === "Docs"), "the tree reloaded");
 });
 
+test("a create with a typed name in a folder gone since the dialog says so and creates nothing (AC60)", async () => {
+  const s = await mount({ "Docs/a.md": "" });
+  disk.dirs.delete(`${VAULT}/Docs`);
+  delete state.files[`${VAULT}/Docs/a.md`];
+  await act(s, "new-note", "Docs", "dir");
+  submitName(s.view, "Idea", s.cx);
+  await settle();
+  assert.deepEqual(titles(), ["Docs no longer exists"]);
+  assert.deepEqual(notePaths(), []);
+  assert.deepEqual(disk.ops, []);
+});
+
 test("a failed create states the path and the reason, and the state stays (AC58)", async () => {
   const s = await mount({ "Docs/a.md": "" });
   state.writeTextFile = async () => { throw new Error("no permission"); };
   await act(s, "new-note", "Docs", "dir");
+  submitName(s.view, "", s.cx);
+  await settle();
+  assert.equal(state.toasts[0].title, "Cannot create a note in Docs");
+  assert.equal(state.toasts[0].body, "no permission");
+  assert.equal(s.view.note, null);
+  assert.deepEqual([...s.view.folders], []);
+});
+
+test("a failed create with a typed name states the path and the reason, and the state stays (AC58)", async () => {
+  const s = await mount({ "Docs/a.md": "" });
+  state.writeTextFile = async () => { throw new Error("no permission"); };
+  await act(s, "new-note", "Docs", "dir");
+  submitName(s.view, "Idea", s.cx);
+  await settle();
   assert.equal(state.toasts[0].title, "Cannot create a note in Docs");
   assert.equal(state.toasts[0].body, "no permission");
   assert.equal(s.view.note, null);
@@ -861,10 +933,22 @@ for (const bad of [".", "..", "/etc", "a/../.."]) {
   test(`a create in the path "${bad}" is refused and changes nothing (AC63)`, async () => {
     const s = await mount({ "a.md": "text" });
     await act(s, "new-note", bad, "dir");
+    submitName(s.view, "", s.cx);
+    await settle();
     await act(s, "new-folder", bad, "dir", "x");
     assert.deepEqual(disk.ops, []);
     assert.deepEqual(notePaths(), [`${VAULT}/a.md`]);
     assert.equal(state.toasts.length, 2);
+  });
+
+  test(`a create in the path "${bad}" with a typed name is refused and changes nothing (AC63)`, async () => {
+    const s = await mount({ "a.md": "text" });
+    await act(s, "new-note", bad, "dir");
+    submitName(s.view, "Idea", s.cx);
+    await settle();
+    assert.deepEqual(disk.ops, []);
+    assert.deepEqual(notePaths(), [`${VAULT}/a.md`]);
+    assert.equal(state.toasts.length, 1);
   });
 }
 
@@ -996,6 +1080,10 @@ for (const [op, path, kind, name] of [["delete", "x.md", "note"], ["rename", "x.
     state.files[`${NEXT}/x.md`] = "theirs";
     atNextTick(s, () => s.view.setVault(NEXT, s.cx));
     await act(s, op, path, kind, name);
+    if (op === "new-note") {
+      submitName(s.view, "", s.cx);
+      await settle();
+    }
     assert.deepEqual(disk.ops, []);
     assert.deepEqual(Object.keys(state.files).filter((p) => p.startsWith(`${NEXT}/`)), [`${NEXT}/x.md`]);
     assert.equal(state.files[`${NEXT}/x.md`], "theirs");

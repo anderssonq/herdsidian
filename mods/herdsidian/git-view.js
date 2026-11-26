@@ -6,9 +6,10 @@
 import { div } from "gpui-kit";
 import { v_flex, InputState, ScrollHandle, VirtualListScrollHandle } from "gpui-base";
 import { exec, readTextFile, shared, notify } from "herdr";
-import { diffTokens, gitTokens } from "./tokens.js";
+import { diffTokens, gitTokens, tokens } from "./tokens.js";
+import { emptyFor } from "./empty-state-view.js";
 import { location } from "./files-view.js";
-import { SIDEBAR_STORE, readSidebar } from "./sidebar.js";
+import { SIDEBAR_STORE, SIDEBAR_LAYOUT_STORE, shownTabs } from "./sidebar.js";
 import { DiffPane } from "./diff-pane.js";
 import { diffView, paneParts, zoomOf } from "./diff-view.js";
 import { neighbors, diffKey } from "./diff.js";
@@ -32,11 +33,10 @@ const FIXED = 118;
 const FILTER_NOTE = 19;
 const DETAIL_CACHE = 50;
 const YES = { pull: "Pull", push: "Push", branch: "Create branch", stash: "Stash", pop: "Pop" };
-const WATCH_MESSAGES = { loading: LOADING, ready: LOADING, nofolder: "No folder", norepo: "Not a git repository", unknown: "Cannot read the git folder" };
 
 const folderOf = (root) => String(root ?? "").split("/").filter(Boolean).pop() ?? "";
 
-const shownNow = () => readSidebar(shared(SIDEBAR_STORE)).tab === "git";
+const shownNow = () => shownTabs(shared(SIDEBAR_STORE), shared(SIDEBAR_LAYOUT_STORE)).includes("git");
 
 export class GitTab {
   constructor(host) {
@@ -437,13 +437,23 @@ export class GitTab {
     });
   }
 
+  // The shared empty state for norepo, nofolder and unknown, or null for any other state. It keeps the git-message id of
+  // the plain message it replaces.
+  empty(t, state, dir) {
+    const block = emptyFor(t, tokens(t), state, dir);
+    return block && v_flex().id("git-message").flex_1().min_h(0).child(block);
+  }
+
   // A message alone, the graph with a message (no commit yet), or the graph and the detail.
   body(t, gk) {
     const d = this.host.changes().data;
-    if (!this.repo) return gitMessage(t, d.state === "error" ? firstLine(d.error) || "Cannot read the git status" : WATCH_MESSAGES[d.state] ?? LOADING);
+    if (!this.repo) {
+      if (d.state === "error") return gitMessage(t, firstLine(d.error) || "Cannot read the git status");
+      return this.empty(t, d.state, this.host.changes().dir) ?? gitMessage(t, LOADING);
+    }
     const snap = this.snap;
     if (!snap) return gitMessage(t, LOADING);
-    if (snap.error) return gitMessage(t, snap.error === "Not a git repository" ? snap.error : "Cannot read the git folder");
+    if (snap.error) return this.empty(t, snap.error === "Not a git repository" ? "norepo" : "unknown", this.repo.root);
     if (!snap.head) return this.graph(t, gk, `No commits yet on ${snap.branch ?? "HEAD"}`);
     if (!this.history) return gitMessage(t, this.logError ?? LOADING);
     return v_flex().flex_1().min_h(0).child(this.graph(t, gk, null)).child(this.detail(t, gk));

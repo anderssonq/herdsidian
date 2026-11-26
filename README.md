@@ -94,10 +94,10 @@ herdsidian: ~/code/acme-api
 
 - **One right sidebar, four tabs.** **Notes · Files · Changes · Git**, 380 px, so the
   terminal keeps its room. `⇧⌘E` opens Files, `⇧⌘G` Changes, `⇧⌘H` Git and `⇧⌘O` Notes. The key of the
-  tab already shown hides the sidebar. Each tab's tooltip shows its key. The tab you chose is remembered. It collapses to a 44 px rail with one icon per tab.
+  tab already shown hides the sidebar. Each tab's tooltip shows its key. The tab you chose is remembered. It collapses to a 44 px rail with one icon per tab. Drag its edge to make it up to 760 px wide. Drag a tab to reorder the tabs. Right-click a tab: **Open below** shows a second tab under the first, with a draggable divider; **Close below** removes it.
 - **Notes tab.** Folders, notes and search. Read mode renders
   frontmatter, headings and links; `⌘E` switches to Edit and `⌘S` saves. A button copies the
-  note's full path. Any folder of Markdown files works; Obsidian is not needed.
+  note's full path. Any folder of Markdown files works; Obsidian is not needed. **New note** asks for a name; an empty name gives `Untitled.md`. `:` is refused in names.
 - **Files and Changes tabs.** Files browses and previews the files of the focused pane's
   folder. The preview wraps long lines and colors code, web files included. Changes lists
   the changed files of its repo (from `git status` and `git diff --numstat`) with +N / −N,
@@ -213,7 +213,7 @@ Herdr's own layouts are read-only, so clone one first:
 
 ```json
 { "id": "herdsidian", "type": "block", "hidden": true, "size": { "px": 380 },
-  "min": 44, "max": 720, "content": { "mod": "herdsidian" } }
+  "min": 44, "max": 760, "content": { "mod": "herdsidian" } }
 ```
 
 Then bind a key in `keys.json`, for example

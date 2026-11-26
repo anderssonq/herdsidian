@@ -9,6 +9,7 @@ import { state, fakeCx, findById, settle } from "./support/mod-stubs.js";
 import { during } from "./support/live-cx.js";
 import { realHost, FAKE_TRASH } from "./support/real-host.js";
 
+const { submitName } = await import("./support/sidebar-kit.js");
 const { default: Notes } = await import("../mods/herdsidian/main.js");
 const { ACTION_KEY } = await import("../mods/herdsidian/actions.js");
 
@@ -82,6 +83,18 @@ async function act(s, op, path, kind, name) {
   state.shared[ACTION_KEY] = { id: `fs${++requests}`, at: Date.now(), vault, op, path, kind, ...(name !== undefined && { name }) };
   s.tree();
   await until(() => state.toasts.length > count && !s.view.actions.busy, `the message of ${op} ${path}`);
+  await settle();
+  return state.toasts[state.toasts.length - 1];
+}
+
+// Posts a New note request for Docs, submits the name prompt with `name`, and waits for its one message.
+async function actNamed(s, name) {
+  const count = state.toasts.length;
+  state.shared[ACTION_KEY] = { id: `fs${++requests}`, at: Date.now(), vault, op: "new-note", path: "Docs", kind: "dir" };
+  s.tree();
+  await until(() => !!s.view.actions.naming, "the name prompt");
+  submitName(s.view, name, s.cx);
+  await until(() => state.toasts.length > count && !s.view.actions.busy, "the message of new-note Docs");
   await settle();
   return state.toasts[state.toasts.length - 1];
 }
@@ -376,7 +389,15 @@ test("names with dashes, quotes and shell characters are exact on disk, and noth
 test("New note in a folder gone since the dialog creates nothing, not even the parent (AC60)", async () => {
   const s = await mount({ "Docs/a.md": "x" });
   rmSync(`${vault}/Docs`, { recursive: true });
-  const message = await act(s, "new-note", "Docs", "dir");
+  const message = await actNamed(s, "");
+  assert.equal(message.title, "Docs no longer exists");
+  assert.ok(!on("Docs"));
+});
+
+test("New note with a typed name in a folder gone since the dialog creates nothing, not even the parent (AC60)", async () => {
+  const s = await mount({ "Docs/a.md": "x" });
+  rmSync(`${vault}/Docs`, { recursive: true });
+  const message = await actNamed(s, "Idea");
   assert.equal(message.title, "Docs no longer exists");
   assert.ok(!on("Docs"));
 });
@@ -391,6 +412,17 @@ test("New note and New folder land on disk in the clicked folder (AC9, AC12)", a
   s.tree();
   await until(() => on("Docs/Sub"), "the new folder");
   assert.deepEqual(readdirSync(`${vault}/Docs/Sub`), []);
+});
+
+test("New note with a typed name lands on disk in the clicked folder (AC9, AC32)", async () => {
+  const s = await mount({ "Docs/Idea.md": "x" });
+  state.shared[ACTION_KEY] = { id: `fs${++requests}`, at: Date.now(), vault, op: "new-note", path: "Docs", kind: "dir" };
+  s.tree();
+  await until(() => !!s.view.actions.naming, "the name prompt");
+  submitName(s.view, "Idea 2", s.cx);
+  await until(() => s.view.note === "Docs/Idea 2.md", "the new note");
+  assert.equal(text("Docs/Idea 2.md"), "");
+  assert.equal(text("Docs/Idea.md"), "x");
 });
 
 test("a note gone during the update is not reported, and nothing comes back at its path", async () => {

@@ -8,9 +8,10 @@ import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { exec, readTextFile, watchFolder, shared, setShared } from "herdr";
 import { RADIUS, tokens, diffTokens } from "./tokens.js";
 import { location } from "./files-view.js";
-import { SIDEBAR_STORE, readSidebar } from "./sidebar.js";
+import { SIDEBAR_STORE, SIDEBAR_LAYOUT_STORE, shownTabs } from "./sidebar.js";
 import { diffView, paneParts, zoomOf } from "./diff-view.js";
 import { DiffPane } from "./diff-pane.js";
+import { emptyFor, cleanState } from "./empty-state-view.js";
 import { badgeOf, splitPath, maxChange, sizeBar, neighbors, diffKey } from "./diff.js";
 import { topArgs, statusArgs, diffArgs, patchArgs, classifyTop, publishes, readRoots, parseStatus, parseNumstat, mergeRows, relevant, summary,
   sumStats, wholeFile, cappedBody, patchBody, execFailed, BINARY, DEBOUNCE_MS, MAX_WAIT_MS } from "./changes.js";
@@ -20,12 +21,13 @@ const CHANGES_KEY = "herdsidian.changes";
 const EMPTY = { state: "loading", root: null, branch: null, files: [], count: 0, error: null, total: { add: 0, del: 0 }, head: false, on: null };
 
 // What git says about the focused pane's repo: { state, root, branch, files, count, error, total, head, on }.
-// state: "loading", "ready", "nofolder", "norepo" or "error". `rev` counts the reads applied; `onApply` is the tab's hook.
+// state: "loading", "ready", "nofolder", "norepo", "unknown" or "error". `rev` counts the reads applied; `onApply` is the tab's hook.
 export class ChangesWatch {
   constructor(host) {
     this.host = host;
     this.data = EMPTY; this.key = null; this.busy = false; this.again = false; this.watched = null; this.generation = 0;
     this.attempt = null; this.readyRoot = null; this.rev = 0; this.onApply = null;
+    this.dir = null; // the folder the last applied read checked (the empty state names it)
     // The diff's focus and tabs scroll handles: made here because init is the one place both are known to work (P0-a, F1).
     this.handles = { focus: host.cx.focus_handle(), tabs: ScrollHandle.new() };
     this.refresh(host.cx);
@@ -51,7 +53,7 @@ export class ChangesWatch {
       catch (e) { next = { ...EMPTY, state: "error", error: String(e) }; }
       this.busy = false;
       // Focus moved to another folder while git ran: that answer is stale, and the rerun below reads the new one.
-      if (this.key === key) this.apply(next, where.on, cx);
+      if (this.key === key) { this.dir = where.cwd ?? null; this.apply(next, where.on, cx); }
       if (this.again) { this.again = false; this.refresh(cx); }
     });
   }
@@ -155,7 +157,7 @@ export class ChangesTab {
 
   // The watch applied a read: work only while this tab is the one shown; otherwise the next render catches up.
   applied(cx) {
-    if (readSidebar(shared(SIDEBAR_STORE)).tab === "changes") this.sync(cx);
+    if (shownTabs(shared(SIDEBAR_STORE), shared(SIDEBAR_LAYOUT_STORE)).includes("changes")) this.sync(cx);
   }
 
   // Three cheap compares against the watch; each read it starts runs in a task.
@@ -301,8 +303,10 @@ export class ChangesTab {
     const root = v_flex().id("tab-changes").flex_1().min_h(0).text_color(t.foreground).text_size(12.5)
       .on_size_change((size, cx) => this.resized(size, cx));
     if (this.shown || this.pending) return root.child(this.diff(t));
-    const messages = { loading: "Loading changes…", nofolder: "No folder", norepo: "Not a git repository", unknown: "Cannot read the git folder", error: d.error };
-    const line = d.state === "ready" ? summary(d.count, d.branch) : messages[d.state];
+    const empty = emptyFor(t, k, d.state, watch.dir);
+    if (empty) return root.child(empty);
+    if (d.state === "ready" && d.count === 0) return root.child(cleanState(t, k, summary(0, d.branch), d.root ?? watch.dir));
+    const line = d.state === "ready" ? summary(d.count, d.branch) : d.state === "loading" ? "Loading changes…" : d.error;
     const more = d.count - d.files.length, max = maxChange(d.files);
     const { add, del } = d.total ?? { add: 0, del: 0 };
     return root

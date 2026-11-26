@@ -13,6 +13,9 @@ import { find } from "./layout.js";
 import { SIDEBAR_TABS, keyHint, showKeyHint } from "./keys.js";
 import { SIDEBAR_STORE, readSidebar, routeTab } from "./sidebar.js";
 import { settings as herdsidianSettings } from "./settings.js"; // herdr has its own settings()
+import { pillBox, pillSnap } from "./pill.js";
+
+const SLIDE = { duration: 180, easing: "ease-out" };
 
 // The toolbar's left edge in the window: the sidebar's width plus the root divider after it,
 // so the dot grid lines up across the seam. 0 when the sidebar is hidden.
@@ -23,6 +26,8 @@ export default class Tabs extends View {
   init(_props, cx) {
     this.pressed = null;
     this.hovered = null; // the tab under the pointer: where the "modifier" key hint shows
+    this.sizes = new Map(); // tab id -> painted width in px, from on_size_change
+    this.pill = null; // the last frame drawn: { space, ids, active, box, sizesKey, switchedAt, snap }
     // keys.json "layout:herdsidian": cmd-shift-e / cmd-shift-g / cmd-shift-h / cmd-shift-o -> herdsidian-tabs.files | changes | git | notes.
     // The palette rows run the same commands.
     cx.spawn(async (cx) => {
@@ -66,6 +71,23 @@ export default class Tabs extends View {
       .text_color(t.muted).cursor_pointer().hover(hover)
       .when(tip, el => el.tooltip(tip))
       .on_mouse_down("left", stop).on_click(action).child(label);
+    // The sliding pill sits behind the active tab once every width up to it is known (see pill.js).
+    const ids = shown.map(c => c.id);
+    for (const id of this.sizes.keys()) if (!ids.includes(id)) this.sizes.delete(id);
+    const activeId = shown.find(c => c.active)?.id ?? null;
+    const box = pillBox(ids, this.sizes, activeId);
+    const frame = { space: space?.id ?? null, ids, active: activeId, box, sizesKey: ids.map(id => this.sizes.get(id)).join(",") };
+    const before = this.pill;
+    if (before && before.space === frame.space && before.active === frame.active && before.sizesKey === frame.sizesKey
+      && before.ids.length === ids.length && before.ids.every((id, n) => id === ids[n])) {
+      this.pill = before; // nothing moved: keep the last decision so a slide in flight is not cut
+    } else {
+      const now = Date.now();
+      frame.switchedAt = !before || before.active !== activeId ? now : before.switchedAt;
+      frame.snap = pillSnap(before, frame, now);
+      this.pill = frame;
+    }
+    const pill = this.pill;
     const item = (c, i) => {
       const mine = panes().filter(p => p.tab === c.id);
       const program = (mine.find(p => p.program?.agent) ?? mine[0])?.program;
@@ -74,8 +96,14 @@ export default class Tabs extends View {
       const key = c.index <= 9 && showKeyHint(hints, this.hovered, c.id)
         ? hint(`tab.select:${c.index}`) : null;
       return h_flex().id(`tab-${c.id}`).tooltip(tipFor(c.zoomed ? `${name} (zoomed)` : name, `tab.select:${c.index}`)).h(28).px(12).gap(8).rounded(RADIUS.control).items_center().flex_none().text_size(12.8)
-        .border_t(1).border_color(c.active ? k.highlight : alpha(t.foreground, 0))
-        .bg(c.active ? t.raised : alpha(t.foreground, 0)).text_color(c.active ? t.foreground : t.muted)
+        .border_t(1).border_color(c.active && !pill.box ? k.highlight : alpha(t.foreground, 0))
+        .bg(c.active && !pill.box ? t.raised : alpha(t.foreground, 0)).text_color(c.active ? t.foreground : t.muted)
+        .on_size_change((size, cx) => {
+          const width = size.width / (settings().zoom || 1);
+          if (this.sizes.get(c.id) === width) return;
+          this.sizes.set(c.id, width);
+          cx.notify();
+        })
         .when(c.active, el => el.font_medium())
         .when(!c.active, el => el.hover(s => s.bg(k.pill)))
         .on_hover((on, cx) => {
@@ -97,6 +125,10 @@ export default class Tabs extends View {
         .when(Boolean(key), el => el.child(div().flex_none().text_size(11).text_color(t.muted).child(key)))
         .when(c.active, el => el.child(div().id(`close-${c.id}`).text_color(t.muted).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/herdsidian-tabs/close.svg").size(12))));
     };
+    // The pill is the first child so the tabs paint over it; its px box comes from the measured widths.
+    const slider = () => div().id("tabs-active-pill").absolute().top(0).h(28).left(pill.box.left).w(pill.box.width)
+      .rounded(RADIUS.control).border_t(1).border_color(k.highlight).bg(t.raised)
+      .when(!pill.snap, el => el.transition("left", SLIDE).transition("width", SLIDE));
     const root = layout(), sidebar = find(root, "sidebar"), w = window();
     // Old saved rails and a dragged-narrow sidebar can be smaller than the window buttons.
     const lightsPadding = w?.platform === "macos" && w.titlebar === "none" && !w.fullscreen && root?.traffic_lights
@@ -124,7 +156,9 @@ export default class Tabs extends View {
       .child(glow(k))
       .child(headerDots(k, "herdsidian-tabs", blockX(root, sidebar)))
       .child(h_flex().id("tab-bar").min_w(0).p(3).gap(2).items_center().rounded(RADIUS.card).bg(k.pill)
-        .child(h_flex().id("tab-scroll").flex_1().min_w(0).items_center().gap(2).overflow_x_scrollbar().children(shown.map(item))))
+        .child(h_flex().id("tab-scroll").flex_1().min_w(0).items_center().gap(2).relative().overflow_x_scrollbar()
+          .when(Boolean(pill.box), el => el.child(slider()))
+          .children(shown.map(item))))
       .child(button("tab-new", keyed(svg("mods/workspace-chrome/plus.svg").size(16), "tab.new"), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }), tipFor("New tab", "tab.new")))
       .child(div().flex_1().h_full())
       .child(search)
