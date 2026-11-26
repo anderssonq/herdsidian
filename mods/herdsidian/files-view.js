@@ -1,6 +1,7 @@
 // The Files tab of the right sidebar (V1): the tree and bounded read-only preview of the focused pane's folder,
 // moved from mods/herdsidian-files (a clone of Herdr's `files` mod) into the sidebar. main.js makes it on the
-// init (its 10 s timer needs host.cx, valid only there) and calls render(); `host`: { cx, selectTab, files, vault, changes }.
+// init (its 10 s timer needs host.cx, valid only there) and calls render(); `host`: { cx, selectTab, files, vault, changes,
+// textMenu(event, cx, model) }.
 // The tab keeps no gpui Context: each call that needs one gets it as an argument.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState } from "gpui-base";
@@ -9,6 +10,7 @@ import { RADIUS } from "./tokens.js";
 import { iconButton } from "./icon-button.js";
 import { SIDEBAR_STORE, SIDEBAR_LAYOUT_STORE, shownTabs } from "./sidebar.js";
 import { PER_FOLDER, TOTAL, locate, parseListing, capEntries, languageOf, parseMarks, relativeTo, ancestors, tildePath } from "./files-tree.js";
+import { editorMenu, fenceOf, selectionOf } from "./text-menu.js";
 
 // The focused pane's folder; Changes looks at the same one.
 export const location = () => locate({ space: spaces().find((s) => s.active), focus: focused(), panes: panes() });
@@ -213,7 +215,7 @@ export class FilesTab {
           .child(div().truncate().font_semibold().child(this.file.split("/").pop()))
           .child(div().truncate().text_size(10.5).text_color(t.muted).child(this.file)))
         .child(iconButton("files-copy-path", t, "mods/herdsidian/copy.svg", "Copy the full path", (_e, cx) => {
-          cx.write_to_clipboard(this.full ?? `${this.root}/${this.file}`);
+          cx.write_to_clipboard(this.fullPath());
           notify({ title: "Path copied", level: "success" });
         }))
       : h_flex().id("files-path").h(30).flex_none().px(14).gap(6).items_center().text_size(12).text_color(t.muted)
@@ -223,6 +225,21 @@ export class FilesTab {
       .when(!this.file, (el) => el.child(v_flex().id("files-tree").flex_1().min_h(0).overflow_y_scrollbar().px(6).pb(8).children(this.rows("", 0, [], t))
         .when(Boolean(this.error) || !this.entries.get("")?.length, (el) => el.child(div().p(8).text_size(12).text_color(t.muted).child(this.error || (this.loading ? "Loading files…" : this.root ? "No files" : "No folder"))))
         .when(this.limited, (el) => el.child(div().p(8).text_size(11).text_color(t.muted).child(`File list limited to ${PER_FOLDER} entries per folder and ${TOTAL.toLocaleString("en-US")} total`)))))
-      .when(Boolean(this.file), (el) => el.child(this.code ? Editor.new(this.code).flex_1().min_h(0) : div().p(12).text_color(t.muted).child(this.fileError || "Loading file…")));
+      .when(Boolean(this.file), (el) => el.child(this.code
+        ? Editor.new(this.code).flex_1().min_h(0).on_mouse_down("right", (e, cx) => this.menu(e, cx))
+        : div().p(12).text_color(t.muted).child(this.fileError || "Loading file…")));
+  }
+
+  // Right-click on the preview: copy and send the selection, select all, copy the path, the relative path and path:line.
+  menu(event, cx) {
+    const code = this.code, path = this.file;
+    if (!code || !path) return;
+    const model = editorMenu({ surface: "file", value: code.value(), range: selectionOf(code), path: this.fullPath(), rel: this.full ? null : path, language: fenceOf(path) });
+    this.host.textMenu(event, cx, { ...model, target: { surface: "file", root: this.root, file: path, full: this.full } });
+  }
+
+  // The open file's absolute path: `full` for a file outside the root.
+  fullPath() {
+    return this.full ?? `${this.root}/${this.file}`;
   }
 }

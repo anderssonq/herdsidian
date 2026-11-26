@@ -9,6 +9,7 @@ import { settings } from "herdr";
 import { RADIUS, CLEAR, tokens } from "./tokens.js";
 import { iconButton } from "./icon-button.js";
 import { ROW_H, CODE_SIZE, MAX_LINES, SIGN_W, splitPath, numWidth } from "./diff.js";
+import { diffMenu } from "./text-menu.js";
 
 const MINUS = "−";
 const HATCH = "mods/herdsidian/diff-hatch.svg";
@@ -119,7 +120,17 @@ function listing(m) {
   const { rows, more } = m.body;
   const head = m.file.from ? [{ type: "banner", text: renamed(m.file) }] : [];
   const tail = more ? [{ type: "banner", text: `Showing the first ${MAX_LINES} of ${more} lines.` }] : [];
-  return { count: head.length + rows.length + tail.length, at: (i) => (i < head.length ? head[i] : i < head.length + rows.length ? rows[i - head.length] : tail[i - head.length - rows.length]) };
+  return { head: head.length, count: head.length + rows.length + tail.length, at: (i) => (i < head.length ? head[i] : i < head.length + rows.length ? rows[i - head.length] : tail[i - head.length - rows.length]) };
+}
+
+// A right-click on a row: the index in m.body.rows (the rename banner comes first) and, in split, the side under the
+// pointer. The banners have no menu.
+function menuAt(m, on, key, e, cx) {
+  const index = key - listing(m).head;
+  if (!Number.isInteger(index) || index < 0 || index >= m.body.rows.length) return;
+  const x = e?.local_position?.x, w = e?.bounds?.width;
+  const side = m.mode === "split" && Number.isFinite(x) && Number.isFinite(w) && x < w / 2 ? "left" : "right";
+  on.menu(index, side, e, cx);
 }
 
 function code(t, k, dk, m, on) {
@@ -128,7 +139,8 @@ function code(t, k, dk, m, on) {
   const row = (r) => (r.type === "banner" ? banner(dk, r.text, null) : m.mode === "split" ? splitRow(k, dk, nw, r) : unifiedRow(dk, nw, r));
   const lines = v_virtual_list("diff-lines", list.count, ROW_H, (i) => String(i),
     (range) => Array.from({ length: Math.max(0, range.end - range.start) }, (_, i) => row(list.at(range.start + i))))
-    .w_full().when(Number.isFinite(m.height), (el) => el.h(m.height)).when(!Number.isFinite(m.height), (el) => el.size_full());
+    .w_full().when(Number.isFinite(m.height), (el) => el.h(m.height)).when(!Number.isFinite(m.height), (el) => el.size_full())
+    .when(Boolean(on.menu), (el) => el.on_item_secondary_click((key, e, cx) => menuAt(m, on, Number(key), e, cx)));
   return div().id("diff-code").flex_1().min_h(0).relative().overflow_hidden().font_family(m.font ?? MONO).text_size(CODE_SIZE).text_color(dk.text)
     .when(Boolean(m.wellOn && dk.well), (el) => el.bg(dk.well))
     .on_size_change((size, cx) => on.size(size, cx))
@@ -146,6 +158,18 @@ export const zoomOf = () => {
   const zoom = settings()?.zoom;
   return typeof zoom === "number" && zoom > 0 ? zoom : 1;
 };
+
+// The right-click handler of a shown diff for diffView's `on.menu`, or null while it loads or shows a notice (Changes
+// and Git). `root`: the repo root, for the full path and Open in Files; `canOpen`: the Files tab can show the file.
+export function diffMenuOn(host, parts, open, loading, { root, canOpen }) {
+  if (loading || !open.body.hunks) return null;
+  const file = open.file;
+  return (index, side, e, cx) => host.textMenu(e, cx, {
+    ...diffMenu({ rows: parts.m.body.rows, hunks: open.body.hunks, index, side, path: file.path, full: root ? `${root}/${file.path}` : null,
+      from: file.from ?? null, status: file.status ?? null, canOpen }),
+    target: { surface: "diff", root, path: file.path },
+  });
+}
 
 // The part of diffView's `m` and `on` that comes from a tab's DiffPane: the mode, the body (loading, rows or a notice),
 // the sizes, the font, and the toggle and size callbacks. `open` is the diff named in the header, with
@@ -176,6 +200,7 @@ export function paneParts(t, pane, open, reading) {
 //   height: the code area's height in css px, or null · handles: { focus, tabs } made in a spawn task, or undefined
 // `on`, each with the gpui `cx` last: back(cx) · openFiles(cx) · prev(cx) · next(cx) · pick(path, cx) · toggle(mode, cx)
 //   key(event, cx) · press(event, cx) · size({ width, height }, cx) (raw window px; the caller divides by the zoom)
+//   menu(index, side, event, cx) (optional): a right-click on row `index` of m.body.rows, `side` "left" or "right"
 export function diffView(t, dk, m, on) {
   const k = tokens(t);
   return v_flex().id("diff-view").flex_1().min_h(0)

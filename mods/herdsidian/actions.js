@@ -32,8 +32,9 @@ export const menuSize = (kind) => ({ width: MENU.width, height: menuHeight(menuI
 
 // Where the popup opens. `at` is in window pixels at every zoom, but the surface grows with zoom,
 // so only the size is scaled. Returns the unscaled width and height, as openOverlay takes them.
-export function placeMenu(pointer, itemCount, viewport, zoom = 1) {
-  const width = MENU.width, height = menuHeight(itemCount);
+// `size` replaces the tree menu's size (the text menu has its own rows and separators).
+export function placeMenu(pointer, itemCount, viewport, zoom = 1, size = null) {
+  const width = size?.width ?? MENU.width, height = size?.height ?? menuHeight(itemCount);
   const vw = viewport?.width, vh = viewport?.height;
   if (!num(pointer?.x) || !num(pointer?.y) || !num(vw) || !num(vh)) return { at: "pointer", width, height };
   const z = num(zoom) && zoom > 0 ? zoom : 1;
