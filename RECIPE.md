@@ -244,34 +244,60 @@ Look (layout root):
   it off and on). On: root `background` `"#00000000"`, `"window_blur": true`
   and `"colors": { "background": "#00000000" }`. Herdr paints the theme
   `background` under the whole window, so without that override nothing
-  shows through. The terminals then draw on the pane frame: pane
-  `background` `surface` and `terminal_opacity` 0, so they stay solid (in
-  `surface`, a shade off the theme `background`). Off: the root gets the
-  theme gradient `{ "gradient": ["chrome", "canvas"], "angle": 160 }`, no
-  `colors.background`, pane `background` `background` and `terminal_opacity` 1
-  (`work-body` stays `chrome`; a custom `colors.background` or pane frame
-  `background` in a clone is replaced by the switch).
+  shows through. Off (the matte look): the root is plain `"chrome"`, with no
+  `colors.background`. Either way the terminals draw on the pane frame: pane
+  `background` `surface` and `terminal_opacity` 0, so they stay solid and
+  keep one color when the switch changes (a
+  custom `colors.background`, pane frame `background` or `terminal_opacity`
+  in a clone is replaced by the switch). A layout saved by the first switch
+  (theme gradient root, pane `background` `background`, `terminal_opacity` 1)
+  still works and moves to the new values on the next change.
   `window_blur` stays true when off: macOS sets the blur up when the window
   opens, and the opaque background hides it, so turning the glass back on
-  needs no restart. `mods/herdsidian/glass.js` (`isGlass`, `withGlass`)
+  needs no restart. `lib/glass.js` (`isGlass`, `withGlass`)
   makes the change; the palette writes the layout file (never `layout.set`,
   which resets the person's clicks: theme pick, sizes, hidden sidebars).
-- `work-body` (the row around the panes) has `background` `chrome`, so the
-  4-6 px gaps around the panes match the sidebar instead of showing the bare
-  desktop.
+- `work-body` (the row around the panes) is the gutter: the 4-6 px around
+  the panes. Glass off, and in the shipped file, its `background` is
+  `chrome`. Glass on, it is the sidebar's glass sheet for the theme, so the
+  gutter and the sidebar look like one sheet. A theme name in the layout
+  cannot carry alpha, so the sheet is written as a full hex (`#15191dd6` for
+  `hs_carbon`): the glass switch writes it, and `herdsidian-tabs` rewrites it
+  when the theme changes (`keepGutter`, 800 ms after the theme settles, and again when the gutter
+  that `layout()` shows changes; it
+  writes the layout file, compare-and-swap, never `layout.set`). The rules
+  live in `lib/glass.js` (`gutterColor`, `withGutter`, `gutterOf`,
+  `flipGlass`, `syncGutter`), copied to `mods/herdsidian` and `mods/herdsidian-tabs`. A
+  gutter is any node with its own `background` and a pane block as a direct
+  child; a clone that removes that `background` gets none.
 - Mods never read the theme `background` as a color while the glass is on
   (it is clear): the pane header, the "!" mark and the actions input use
   `surface`, and `isLight` falls back to `canvas` when `background` is clear.
 - The glass is painted by the mods: sidebars and Notes use `chrome`, the
-  toolbar and status bar use `canvas`, each with 5 % of `accent` mixed in and
-  at 85 % opacity, so they let 15 % of the desktop through. At 85 % the dark
-  themes keep text at 4.5:1 or more (Nord's `muted` 4.0:1) even over a pure
-  white or black desktop. The light themes over a pure black desktop drop to
-  3.2-3.7:1 for `muted` and down to 3.7:1 for `foreground` (Tokyo Night
-  Light). The avatar letter (`markLetter`) and the agent badge ring are tuned
+  toolbar and status bar use `canvas`, each with 5 % of `accent` mixed in
+  (`glass` and `mainGlass` in `lib/tokens.js`). Glass off, both sheets are
+  opaque. Glass on, each sheet takes the lowest opacity from 70 % up, in 1 %
+  steps, that keeps `foreground` and `muted` at 4.5:1 on the sheet over a
+  pure white and a pure black desktop, and stays opaque when no step does:
+
+  | Theme | Sidebars | Toolbar, status bar |
+  |---|---|---|
+  | `hs_carbon` | 84 % | 83 % |
+  | `hs_carbon_light` | 94 % | 98 % |
+  | `hs_catppuccin` | 79 % | 76 % |
+  | `hs_catppuccin_light` | 98 % | opaque |
+  | `hs_midnight` | 83 % | 83 % |
+  | `hs_midnight_light` | opaque | opaque |
+  | `hs_nord` | 89 % | 87 % |
+  | `hs_nord_light` | 89 % | 94 % |
+
+  So the light themes show little or no desktop: their `muted` is close to
+  4.5:1 on the bare theme color already. An opaque sheet does not raise the
+  contrast: `hs_midnight_light` keeps `muted` at 4.4:1 and
+  `hs_catppuccin_light` at 4.4:1 on the toolbar, glass on or off. The avatar letter (`markLetter`) and
+  the agent badge ring are tuned
   against an opaque `chrome`, so over a wallpaper far from the theme the
-  letter can drop to about 2.9:1 (Nord over white) and the ring shows as a
-  faint edge.
+  letter can drop below 4.5:1 and the ring shows as a faint edge.
 - Pane border and root divider: the theme's `border` color (a token name, so
   light themes get a visible edge). Pane focus: `accent`.
 - `ui_font`: `.AppleSystemUIFont` (the macOS system font).
@@ -525,8 +551,9 @@ Look (layout root):
   `dot` (`foreground` 11 %, 16 % on a light theme: the header dot texture),
   `accentTrack` (`accent` 12 %: the working bar track), `highlight` (`foreground`
   5 %, 8 % on a light theme: the inset top line),
-  `glass` (`chrome` + 5 % `accent`, 85 %), `mainGlass` (`canvas` + 5 %
-  `accent`, 85 %), `line` (`foreground` 7 %), `pill` (`foreground` 6 %, also hover), `accentSoft` (`accent` 18 %),
+  `glass` (`chrome` + 5 % `accent`) and `mainGlass` (`canvas` + 5 %
+  `accent`), opaque with the glass off and at a per-theme opacity with it on
+  (see Look), `line` (`foreground` 7 %), `pill` (`foreground` 6 %, also hover), `accentSoft` (`accent` 18 %),
   `glow` (`foreground` 5 %, the top sheen), `glowEnd` (`foreground` 0 %), `blockedSoft` (`blocked`
   15 %), `node` (`muted`), `nodeFar` (`muted` 80 %), `edge` (`foreground`
   22 %, decorative) and `edgeHot` (`foreground`). Constants: `PULSE` and `GLOW_ANGLE`
@@ -536,7 +563,7 @@ Look (layout root):
   (`#rrggbb` blend, w 0 gives a, 1 gives b) and `markLetter(mark, theme)`: the avatar letter
   color, the mark mixed toward white (dark theme) or black (light theme) with weight 0.25,
   raised in 0.05 steps up to 0.6 until it reaches 4.5:1 against the avatar (the mark at 20 % over
-  `chrome`; with `window_blur` the real avatar also carries 15 % of the desktop, so the ratio holds
+  `chrome`; with `window_blur` the real avatar also carries part of the desktop (100 % minus the theme's glass opacity, see Look), so the ratio holds
   only when the wallpaper is close to the theme).
   `statusDot(theme, status)` gives the dot recipe (fill or ring, pulse).
   Tests: `tests/tokens.test.js`.
@@ -583,7 +610,7 @@ Look (layout root):
   `.changes` / `.git`), the sidebar width (`herdsidian.expand` / `herdsidian.rail`, handled by
   Notes' `nextCommand()`) and Usage in the status bar. Imports `herdr`; in `herdsidian-tabs` it is imported as
   `herdsidianSettings`, because Herdr's own `settings()` is used there too.
-- Copy rule: `lib/tokens.js`, `lib/ui.js`, `lib/layout.js`, `lib/keys.js` and `lib/settings.js` are the
+- Copy rule: `lib/tokens.js`, `lib/ui.js`, `lib/layout.js`, `lib/keys.js`, `lib/settings.js` and `lib/glass.js` (in `herdsidian` and `herdsidian-tabs`) are the
   canonical files. Each mod that uses one carries a byte-identical
   `mods/<mod>/<name>.js`, because a mod folder is installed on its own. After
   you edit a canonical file, copy it into every mod that has it

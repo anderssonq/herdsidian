@@ -22,13 +22,13 @@ test("the shipped layout has the glass on: clear root and theme background, blur
   assert.deepEqual(frames(shipped).map((p) => p.background), ["surface"]);
 });
 
-test("withGlass off restores the theme gradient, solid terminals and no colors override", () => {
+test("withGlass off gives the matte look: a plain chrome root, terminals still on the pane frame, no colors override", () => {
   const off = withGlass(shipped, false);
   assert.equal(isGlass(off), false);
-  assert.deepEqual(off.background, { gradient: ["chrome", "canvas"], angle: 160 });
+  assert.equal(off.background, "chrome");
   assert.equal("colors" in off, false);
-  assert.equal(off.terminal_opacity, 1);
-  assert.deepEqual(frames(off).map((p) => p.background), ["background"]);
+  assert.equal(off.terminal_opacity, 0);
+  assert.deepEqual(frames(off).map((p) => p.background), ["surface"]);
   assert.equal(off.window_blur, true, "the blur stays set up, so turning it back on needs no restart");
 });
 
@@ -37,11 +37,7 @@ test("withGlass round-trips and never changes nodes, sizes or the input tree", (
   const back = withGlass(withGlass(shipped, false), true);
   assert.deepEqual(back, shipped);
   assert.equal(JSON.stringify(shipped), before);
-  assert.deepEqual(withGlass(shipped, false).children, shipped.children.map((c) => {
-    const copy = JSON.parse(JSON.stringify(c));
-    for (const p of frames(copy)) p.background = "background";
-    return copy;
-  }));
+  assert.deepEqual(withGlass(shipped, false).children, shipped.children);
 });
 
 test("withGlass keeps other color overrides", () => {

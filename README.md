@@ -467,6 +467,7 @@ cp lib/keys.js mods/<mod>/keys.js      # herdsidian, herdsidian-tabs, guide-agen
 cp lib/settings.js mods/<mod>/settings.js  # herdsidian, herdsidian-tabs, guide-agents, guide-spaces
 cp lib/agent-files.js mods/<mod>/agent-files.js  # herdsidian-status, guide-agents
 cp lib/archive.js mods/<mod>/archive.js  # guide-agents, guide-spaces, herdsidian
+cp lib/glass.js mods/<mod>/glass.js      # herdsidian, herdsidian-tabs
 ```
 
 Check mod changes in Herdr with `herdr-app check`. The "Needs you" pill is one shared

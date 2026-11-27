@@ -6,8 +6,9 @@
 
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme, window, shared, setShared, layout, settings, keys, nextCommand } from "herdr";
-import { RADIUS, alpha, tokens } from "./tokens.js";
+import { spaces, panes, run, openOverlay, theme, window, shared, setShared, layout, settings, keys, nextCommand, appHome, readTextFile, writeTextFile } from "herdr";
+import { CLEAR, RADIUS, alpha, tokens } from "./tokens.js";
+import { gutterColor, gutterOf, syncGutter } from "./glass.js";
 import { dot, glow, headerDots, icon } from "./ui.js";
 import { find } from "./layout.js";
 import { SIDEBAR_TABS, keyHint, showKeyHint } from "./keys.js";
@@ -16,6 +17,8 @@ import { settings as herdsidianSettings } from "./settings.js"; // herdr has its
 import { pillBox, pillSnap } from "./pill.js";
 
 const SLIDE = { duration: 180, easing: "ease-out" };
+// How long the theme must stay the same before the gutter is written: the theme menu previews on hover.
+const GUTTER_SETTLE = 800;
 
 // The toolbar's left edge in the window: the sidebar's width plus the root divider after it,
 // so the dot grid lines up across the seam. 0 when the sidebar is hidden.
@@ -28,6 +31,9 @@ export default class Tabs extends View {
     this.hovered = null; // the tab under the pointer: where the "modifier" key hint shows
     this.sizes = new Map(); // tab id -> painted width in px, from on_size_change
     this.pill = null; // the last frame drawn: { space, ids, active, box, sizesKey, switchedAt, snap }
+    this.gutter = null; // window glass on: "<layout>\n<gutter color>" the layout file should have, else null
+    this.gutterShown = null; // the gutter color layout() had on the last frame
+    this.gutterBusy = false;
     // keys.json "layout:herdsidian": cmd-shift-e / cmd-shift-g / cmd-shift-h / cmd-shift-o -> herdsidian-tabs.files | changes | git | notes.
     // The palette rows run the same commands.
     cx.spawn(async (cx) => {
@@ -48,9 +54,39 @@ export default class Tabs extends View {
     for (const [name, args] of r.commands) run(name, args);
   }
 
-  render() {
+  // Window glass on: the gutter around the panes is the sidebar's glass sheet, written in the layout file as
+  // a full hex (a theme name there cannot carry alpha), so it is rewritten when the theme changes. This mod
+  // does it because the toolbar is always shown. One task at a time; it waits until the theme settles.
+  // The gutter the layout shows now is part of what is watched, so a layout file replaced from outside
+  // (an update, an editor) or a write that lost to another one is put right on the next frame.
+  keepGutter(t, layoutName, cx) {
+    const want = t.background === CLEAR && layoutName ? `${layoutName}\n${gutterColor(t)}` : null;
+    const shown = want ? gutterOf(layout()) : null;
+    if (want === this.gutter && shown === this.gutterShown) return;
+    this.gutter = want;
+    this.gutterShown = shown;
+    if (!want || this.gutterBusy) return;
+    this.gutterBusy = true;
+    cx.spawn(async (cx) => {
+      try {
+        let done;
+        do {
+          done = this.gutter;
+          await cx.sleep(GUTTER_SETTLE);
+          if (!done || done !== this.gutter) continue;
+          const [name, color] = done.split("\n");
+          await syncGutter({ path: `${appHome()}/layouts/${name}.json`, color, read: readTextFile, write: writeTextFile });
+        } while (done !== this.gutter);
+      } finally {
+        this.gutterBusy = false;
+      }
+    });
+  }
+
+  render(cx) {
     const t = theme();
     const k = tokens(t);
+    this.keepGutter(t, shared("layout"), cx);
     const space = spaces().find(p => p.active);
     const shown = space?.tabs ?? [];
     const stop = (_e, cx) => cx.stop_propagation();
