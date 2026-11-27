@@ -17,7 +17,7 @@ import {
 } from "./palette.js";
 import { sendText } from "./send.js";
 import { find } from "./layout.js";
-import { isGlass, withGlass } from "./glass.js";
+import { flipGlass, isGlass } from "./glass.js";
 import { settings, setSetting } from "./settings.js";
 import { themeCalls, selectedFamily, parseAppearance } from "./theme-pick.js";
 import { SIDEBAR_STORE, SIDEBAR_WIDTH, readSidebar } from "./sidebar.js";
@@ -141,7 +141,9 @@ export class Palette {
         if (tree?.window_blur === undefined) this.glass = null;
         else {
           const on = !isGlass(tree);
-          await writeTextFile(path, JSON.stringify(withGlass(tree, on), null, 2) + "\n", text);
+          // On, the gutter around the panes takes the theme's glass sheet; the toolbar keeps it in step
+          // with the theme after that.
+          await writeTextFile(path, JSON.stringify(flipGlass(tree, theme()), null, 2) + "\n", text);
           this.glass = on;
         }
       } catch (e) {

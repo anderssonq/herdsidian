@@ -62,15 +62,38 @@ export function markLetter(mark, t) {
   return mix(mark, toward, w);
 }
 
+// The two desktops a glass sheet is checked against: the brightest and the darkest wallpaper.
+const DESKTOPS = ["#ffffff", "#000000"];
+const sheets = new Map();
+
+// A glass sheet: `base` with 5 % of accent. Glass off, it is opaque (the matte look). Glass on, the desktop
+// shows through (window_blur): the sheet takes the lowest opacity from 70 % up, in 1 % steps, that keeps
+// `foreground` and `muted` at 4.5:1 over both DESKTOPS, and stays opaque when no step does (a theme whose
+// `muted` is under 4.5:1 on the bare sheet stays under it).
+function glassSheet(t, base) {
+  const color = mix(base, t.accent, 0.05);
+  if (t.background !== CLEAR) return alpha(color, 1);
+  const texts = [t.foreground, t.muted];
+  const key = [color, ...texts].join();
+  if (!sheets.has(key)) {
+    let found = alpha(color, 1);
+    for (let percent = 70; percent < 100; percent++) {
+      const c = alpha(color, percent / 100);
+      if (DESKTOPS.every((d) => texts.every((text) => contrast(text, over(c, d)) >= 4.5))) { found = c; break; }
+    }
+    sheets.set(key, found);
+  }
+  return sheets.get(key);
+}
+
 // Derived tokens from theme(): full #rrggbbaa colors of the Graphite Glass look.
 export function tokens(t) {
   return {
     dot: alpha(t.foreground, isLight(t) ? 0.16 : 0.11), // header dot texture
     accentTrack: alpha(t.accent, 0.12), // working bar track
     highlight: alpha(t.foreground, isLight(t) ? 0.08 : 0.05), // inset top line
-    // Over the blurred desktop (window_blur): 85 % theme, 5 % accent tint, so text keeps its contrast on any wallpaper.
-    glass: alpha(mix(t.chrome, t.accent, 0.05), 0.85),
-    mainGlass: alpha(mix(t.canvas, t.accent, 0.05), 0.85),
+    glass: glassSheet(t, t.chrome), // sidebars
+    mainGlass: glassSheet(t, t.canvas), // toolbar, status bar
     line: alpha(t.foreground, 0.07),
     pill: alpha(t.foreground, 0.06), // hover too
     accentSoft: alpha(t.accent, 0.18), // selected rows, folder fill
@@ -94,7 +117,7 @@ function over(top, under) {
 
 // Diff colors (Changes V2). Tints and marks keep the AC42 values. The four text colors are the base
 // color pushed toward black (light theme) or white (dark theme) in 0.05 steps until each reaches 4.5:1
-// on every surface it sits on: glass off, the sidebar is the glass over chrome and the code area is the
+// on every surface it sits on: glass off, the sidebar is the opaque glass sheet and the code area is the
 // sidebar; glass on, the sidebar is the glass over white and over black, the code area is the well over each.
 export function diffTokens(t) {
   const light = isLight(t);
@@ -108,7 +131,7 @@ export function diffTokens(t) {
   const well = glass ? alpha(t.chrome, 0.6) : null;
 
   const sheet = tokens(t).glass;
-  const sidebars = glass ? ["#ffffff", "#000000"].map((b) => over(sheet, b)) : [over(sheet, t.chrome)];
+  const sidebars = glass ? DESKTOPS.map((b) => over(sheet, b)) : [over(sheet, t.chrome)];
   const surfaces = sidebars.map((sidebar) => {
     const code = glass ? over(well, sidebar) : sidebar;
     return {
@@ -139,12 +162,12 @@ export function diffTokens(t) {
 
 // Git tab colors (Decision 7). Six lanes in the order ansi4, ansi2, ansi5, ansi3, ansi6, ansi1. `line` and
 // `pillText` are the lane color pushed toward black (light theme) or white (dark theme) in 0.05 steps until
-// they reach 3:1 and 4.5:1 on every sidebar surface (glass off: the glass over chrome; glass on: the glass
+// they reach 3:1 and 4.5:1 on every sidebar surface (glass off: the opaque glass sheet; glass on: the glass
 // over white and over black). `errorText` is t.blocked pushed to 4.5:1. t.background is never read as a color.
 export function gitTokens(t) {
   const glass = t.background === CLEAR;
   const sheet = tokens(t).glass;
-  const sidebars = glass ? ["#ffffff", "#000000"].map((b) => over(sheet, b)) : [over(sheet, t.chrome)];
+  const sidebars = glass ? DESKTOPS.map((b) => over(sheet, b)) : [over(sheet, t.chrome)];
   const toward = isLight(t) ? "#000000" : "#ffffff";
   const push = (base, min, under = (s) => s) => {
     for (let i = 0; i <= 20; i++) {
